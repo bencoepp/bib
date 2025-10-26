@@ -1,0 +1,250 @@
+name: CI and Release
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate, build, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+
+      - name: Cache Go build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-
+
+      - name: Go mod download
+        run: go mod download
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build all packages
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -cover
+
+  prepare:
+    name: Prepare versions (main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      bib_version: ${{ steps.versions.outputs.bib_version }}
+      bibd_version: ${{ steps.versions.outputs.bibd_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: versions
+        name: Derive bib and bibd versions from version.go
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Extract a semver-like string literal from cmd/<app>/version.go
+          # Accepts: x.y.z, with optional pre-release (-...) and build (+...) metadata
+          get_version() {
+            local app="$1"
+            local file="cmd/${app}/version.go"
+            if [[ ! -f "${file}" ]]; then
+              echo "version.go not found for ${app} at ${file}" >&2
+              exit 1
+            fi
+            # find first quoted semver-like string in the file
+            local raw
+            raw="$(grep -Eo '"v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?(\+[0-9A-Za-z.-]+)?\"' "${file}" | head -n1 || true)"
+            raw="${raw%\"}"
+            raw="${raw#\"}"
+            if [[ -z "${raw}" ]]; then
+              echo "No semantic version string found in ${file}" >&2
+              exit 1
+            fi
+            raw="${raw#v}"          # strip leading v if present
+            raw="${raw//+/-}"       # sanitize '+' for tag names
+            echo "${raw}"
+          }
+
+          bib_v="$(get_version bib)"
+          bibd_v="$(get_version bibd)"
+
+          echo "bib_version=${bib_v}"   >> "$GITHUB_OUTPUT"
+          echo "bibd_version=${bibd_v}" >> "$GITHUB_OUTPUT"
+
+          echo "Detected versions:"
+          echo "  bib:  ${bib_v}"
+          echo "  bibd: ${bibd_v}"
+
+  build-matrix:
+    name: Build release artifacts (main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [validate, prepare]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+
+      - name: Build bib and bibd
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p build
+          ext=""
+          if [[ "${GOOS}" == "windows" ]]; then ext=".exe"; fi
+
+          oslabel="${GOOS}"
+          if [[ "${GOOS}" == "darwin" ]]; then oslabel="macos"; fi
+
+          build_one() {
+            local app="$1"
+            local outdir="build/${app}-${oslabel}-${GOARCH}"
+            mkdir -p "${outdir}"
+            echo "Building ${app} for ${GOOS}/${GOARCH}..."
+            GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 \
+              go build -trimpath -ldflags "-s -w" \
+              -o "${outdir}/${app}${ext}" "./cmd/${app}"
+
+            local pkg_base="${app}_${oslabel}_${GOARCH}"
+            local artifact=""
+            if [[ "${GOOS}" == "windows" ]]; then
+              ( cd "${outdir}" && zip -9 "../${pkg_base}.zip" "${app}${ext}" >/dev/null )
+              artifact="build/${pkg_base}.zip"
+            else
+              tar -C "${outdir}" -czf "build/${pkg_base}.tar.gz" "${app}${ext#/}"
+              artifact="build/${pkg_base}.tar.gz"
+            fi
+            echo "${artifact}"
+          }
+
+          bib_artifact="$(build_one bib)"
+          bibd_artifact="$(build_one bibd)"
+
+          echo "artifact_bib=${bib_artifact}"   >> "$GITHUB_OUTPUT"
+          echo "artifact_bibd=${bibd_artifact}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bib artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bib_${{ matrix.goos == 'darwin' && 'macos' || matrix.goos }}_${{ matrix.goarch }}
+          path: ${{ steps.build.outputs.artifact_bib }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload bibd artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bibd_${{ matrix.goos == 'darwin' && 'macos' || matrix.goos }}_${{ matrix.goarch }}
+          path: ${{ steps.build.outputs.artifact_bibd }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release-bib:
+    name: Create bib release (main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [prepare, build-matrix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release for bib
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="bib/v${{ needs.prepare.outputs.bib_version }}"
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists. Skipping."
+            exit 0
+          fi
+
+          mapfile -t files < <(find artifacts -type f \( -name "bib_*.tar.gz" -o -name "bib_*.zip" \) | sort)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No bib artifacts found!" >&2
+            exit 1
+          fi
+
+          gh release create "${tag}" "${files[@]}" \
+            --title "bib v${{ needs.prepare.outputs.bib_version }}" \
+            --notes "Automated release for bib v${{ needs.prepare.outputs.bib_version }}"
+
+  release-bibd:
+    name: Create bibd release (main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [prepare, build-matrix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release for bibd
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="bibd/v${{ needs.prepare.outputs.bibd_version }}"
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists. Skipping."
+            exit 0
+          fi
+
+          mapfile -t files < <(find artifacts -type f \( -name "bibd_*.tar.gz" -o -name "bibd_*.zip" \) | sort)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No bibd artifacts found!" >&2
+            exit 1
+          fi
+
+          gh release create "${tag}" "${files[@]}" \
+            --title "bibd v${{ needs.prepare.outputs.bibd_version }}" \
+            --notes "Automated release for bibd v${{ needs.prepare.outputs.bibd_version }}"

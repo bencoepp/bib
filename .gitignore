@@ -1,0 +1,72 @@
+# --- Go build artifacts ---
+/bin/
+/build/
+/dist/
+/out/
+
+# Executables and libraries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# Test binaries and coverage
+*.test
+*.out
+*.cover
+coverage*.out
+profile.out
+benchmark*.out
+coverage/
+reports/
+artifacts/
+
+# --- OS / Editor cruft ---
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+*.tmp
+
+# IDEs and editors
+.idea/
+.vscode/
+.vscode-test/
+.fleet/
+.vs/
+.history/
+
+# --- Logs and temp ---
+*.log
+logs/
+tmp/
+.temp/
+.tmp/
+
+# --- Environment & local config ---
+.env
+.env.*
+!.env.example
+!.env.sample
+configs/*.local.*
+configs/*.dev.*
+configs/*.secret.*
+configs/*.env
+
+# --- Website (optional frontend tooling) ---
+website/node_modules/
+website/.cache/
+website/.parcel-cache/
+website/build/
+website/dist/
+website/.vite/
+website/.next/
+website/out/
+website/.nuxt/
+
+# --- Protobuf generation ---
+# By default, we keep generated code tracked for reproducible builds.
+# If you prefer to exclude generated code, uncomment the next line:
+# /api/gen/
