@@ -9,11 +9,11 @@ import (
 )
 
 type BibConfig struct {
-	Theme string `mapstructure:"theme"` // auto|light|dark
+	General GeneralConfig `mapstructure:"general"`
 }
 
 func DefaultsBib(v *viper.Viper) {
-	v.SetDefault("theme", "auto")
+	DefaultsGeneral(v)
 }
 
 func LoadBib(v *viper.Viper) (*BibConfig, error) {
