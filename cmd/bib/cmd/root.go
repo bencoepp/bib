@@ -1,59 +1,28 @@
 package cmd
 
 import (
-	"bib/internal/capcheck"
-	"bib/internal/capcheck/checks"
-	"bib/internal/config"
 	"os"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
+
+var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "bib",
-	Short: "Scientific and historical bibliography manager",
-	Long: `bib is a command‑line toolkit designed for scientists, historians, and academic researchers 
-who work with large, complex, and distributed datasets—often across teams, institutions, and borders. 
+	Short: "A brief description of your application",
+	Long: `A longer description that spans multiple lines and likely contains
+examples and usage of using your application. For example:
 
-Its central ambition is to help you curate, link, verify, and analyze information at scale, 
-even when the network or the counterparties cannot be fully trusted. Think of bib as a portable 
-backbone for your research data: versioned, reproducible, provenance‑aware, and collaboration‑friendly.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if shouldSkipConfig(cmd) {
-
-		}
-
-		configPath, err := config.FindConfigPath(config.Options{AppName: "bib", FileNames: []string{"config.yaml", "config.yml"}})
-		cfg, err := config.LoadBibConfig(configPath)
-		if err != nil {
-			log.Error(err)
-			log.Info("You need to setup bib before using it. Please run 'bib setup' to create a configuration file.")
-			return
-		}
-
-		if cfg.General.CheckCapabilities {
-			checkers := []capcheck.Checker{
-				checks.ContainerRuntimeChecker{},
-				checks.KubernetesConfigChecker{},
-				checks.InternetAccessChecker{
-					// Use a target that works in your environment. Alternatives:
-					// "https://www.google.com/generate_204" or a company endpoint.
-					HTTPURL: "https://www.google.com/generate_204",
-				},
-				checks.ResourcesChecker{},
-			}
-
-			runner := capcheck.NewRunner(
-				checkers,
-				capcheck.WithGlobalTimeout(6*time.Second),
-				capcheck.WithPerCheckTimeout(1*time.Second),
-			)
-			_ = runner
-		}
-	},
+Cobra is a CLI library for Go that empowers applications.
+This application is a tool to generate the needed files
+to quickly create a Cobra application.`,
+	// Uncomment the following line if your bare application
+	// has an action associated with it:
+	// Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -66,23 +35,39 @@ func Execute() {
 }
 
 func init() {
+	cobra.OnInitialize(initConfig)
+
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bib.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bib.yaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func shouldSkipConfig(cmd *cobra.Command) bool {
-	skipCommands := []string{"help", "version", "setup"}
-	for _, c := range skipCommands {
-		if cmd.CalledAs() == c {
-			return true
-		}
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if cfgFile != "" {
+		// Use config file from the flag.
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Find home directory.
+		home, err := os.UserHomeDir()
+		cobra.CheckErr(err)
+
+		// Search config in home directory with name ".bib" (without extension).
+		viper.AddConfigPath(home)
+		viper.SetConfigType("yaml")
+		viper.SetConfigName(".bib")
 	}
-	return false
+
+	viper.AutomaticEnv() // read in environment variables that match
+
+	// If a config file is found, read it in.
+	if err := viper.ReadInConfig(); err == nil {
+		log.Info("Using config file:", viper.ConfigFileUsed())
+	}
 }
