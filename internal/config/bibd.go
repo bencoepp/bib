@@ -1,19 +1,25 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"github.com/spf13/viper"
+)
 
-type BibdConfig struct {
-	General GeneralConfig `mapstructure:"general"`
+type BibDaemonConfig struct {
+	General GeneralConfig `yaml:"general"`
 }
 
-func DefaultsBibd(v *viper.Viper) {
-	DefaultsGeneral(v)
-}
+func LoadBibDaemonConfig(path string) (*BibDaemonConfig, error) {
+	viper.SetConfigFile(path)
+	viper.SetConfigType("yaml")
 
-func LoadBibd(v *viper.Viper) (*BibdConfig, error) {
-	var cfg BibdConfig
-	if err := v.Unmarshal(&cfg); err != nil {
+	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
 	}
+
+	var cfg BibDaemonConfig
+	if err := viper.Unmarshal(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
 }
