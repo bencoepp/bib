@@ -17,6 +17,10 @@ jobs:
   validate:
     name: Validate, build, and test
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: ""          # ensure no repo-level GOFLAGS slip in
+      GOCOVERDIR: ""       # ensure runtime coverage not enabled implicitly
+      GOTOOLCHAIN: "local" # avoid auto toolchain switching
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,8 +28,17 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version: "1.25.x"
+          check-latest: true
           cache: true
+
+      - name: Toolchain diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version
+          echo "GOTOOLDIR=$(go env GOTOOLDIR)"
+          ls -1 "$(go env GOTOOLDIR)" | (grep -E '^covdata$' || true)
 
       - name: Cache Go build
         uses: actions/cache@v4
@@ -46,8 +59,8 @@ jobs:
       - name: Build all packages
         run: go build ./...
 
-      - name: Test
-        run: go test ./... -cover
+      - name: Test (no coverage)
+        run: go test ./...
 
   prepare:
     name: Prepare versions (main only)
@@ -68,8 +81,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Extract a semver-like string literal from cmd/<app>/version.go
-          # Accepts: x.y.z, with optional pre-release (-...) and build (+...) metadata
           get_version() {
             local app="$1"
             local file="cmd/${app}/version.go"
@@ -77,7 +88,6 @@ jobs:
               echo "version.go not found for ${app} at ${file}" >&2
               exit 1
             fi
-            # find first quoted semver-like string in the file
             local raw
             raw="$(grep -Eo '"v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?(\+[0-9A-Za-z.-]+)?\"' "${file}" | head -n1 || true)"
             raw="${raw%\"}"
@@ -86,8 +96,8 @@ jobs:
               echo "No semantic version string found in ${file}" >&2
               exit 1
             fi
-            raw="${raw#v}"          # strip leading v if present
-            raw="${raw//+/-}"       # sanitize '+' for tag names
+            raw="${raw#v}"
+            raw="${raw//+/-}"
             echo "${raw}"
           }
 
@@ -122,7 +132,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version: "1.25.x"
+          check-latest: true
           cache: true
 
       - name: Build bib and bibd
@@ -234,7 +245,7 @@ jobs:
           set -euo pipefail
           tag="bibd/v${{ needs.prepare.outputs.bibd_version }}"
 
-          if gh release view "${tag}" >/dev/null 2>&1; then
+          if gh release view "${tag}" >/devnull 2>&1; then
             echo "Release ${tag} already exists. Skipping."
             exit 0
           fi
