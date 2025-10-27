@@ -6,6 +6,7 @@ import (
 
 type BibDaemonConfig struct {
 	General GeneralConfig `yaml:"general"`
+	Update  UpdateConfig  `yaml:"update"`
 }
 
 func LoadBibDaemonConfig(path string) (*BibDaemonConfig, error) {

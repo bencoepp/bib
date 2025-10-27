@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	configPath, err := config.FindConfigPath(config.Options{AppName: "bib", FileNames: []string{"config.yaml", "config.yml"}})
+	configPath, err := config.FindConfigPath(config.Options{AppName: "bib-daemon", FileNames: []string{"bib-daemon.yaml", "bib-daemon.yml"}})
 	cfg, err := config.LoadBibDaemonConfig(configPath)
 	if err != nil {
 		log.Error(err)
