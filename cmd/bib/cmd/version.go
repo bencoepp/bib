@@ -4,6 +4,7 @@ import (
 	"bib/internal/selfupdate"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -35,7 +36,13 @@ breaking changes may be introduced in new versions.`,
 			if !Config.Update.Enabled {
 				log.Info("⛔  Auto-updates are disabled in the configuration. Enable them to use this feature.")
 			}
-			err := selfupdate.UpdateBib()
+			err := selfupdate.UpdateBib(appVersion, &selfupdate.Option{
+				Owner:           Config.Update.GitHubOwner,
+				Repo:            Config.Update.GitHubRepo,
+				BinaryName:      "bib",
+				AllowPrerelease: Config.Update.AllowPrerelease,
+				HTTPTimeout:     time.Duration(Config.Update.HTTPTimeoutInSec),
+			})
 			if err != nil {
 				log.Error(err)
 			}
