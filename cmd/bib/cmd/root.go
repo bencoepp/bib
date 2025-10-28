@@ -53,6 +53,8 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bib.yaml)")
 	rootCmd.PersistentFlags().StringP("theme", "t", "auto", "Color theme for output: auto, dark, light")
+	setupCmd.Flags().Bool("no-tui", true, "Open interactive setup (TUI)")
+
 }
 
 // initConfig reads in config file and ENV variables if set.
