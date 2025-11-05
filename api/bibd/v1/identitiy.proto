@@ -1,0 +1,25 @@
+syntax = "proto3";
+option go_package = "github.com/bencoepp/bib/internal/pb/bibd/v1;bibv1";
+
+package bibd.v1;
+
+message IdentityRequest {
+}
+
+message IdentityResponse {
+
+}
+
+message ListIdentitiesRequest {
+}
+
+message ListIdentitiesResponse {
+  repeated IdentityResponse identities = 1;
+}
+
+service IdentityService {
+  rpc RegisterIdentity(IdentityRequest) returns (IdentityResponse);
+  rpc RetrieveIdentity(IdentityRequest) returns (IdentityResponse);
+  rpc UpdateIdentity(IdentityRequest) returns (IdentityResponse);
+  rpc RetrieveIdentities(ListIdentitiesRequest) returns (ListIdentitiesResponse);
+}

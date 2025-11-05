@@ -1,0 +1,24 @@
+syntax = "proto3";
+option go_package = "github.com/bencoepp/bib/internal/pb/bibd/v1;bibv1";
+
+package bibd.v1;
+
+message TopicRequest {
+}
+
+message TopicResponse {
+}
+
+message ListTopicsRequest {
+}
+
+message ListTopicsResponse {
+  repeated TopicResponse topics = 1;
+}
+
+service TopicService {
+  rpc CreateTopic(TopicRequest) returns (TopicResponse);
+  rpc RetrieveTopic(TopicRequest) returns (TopicResponse);
+  rpc UpdateTopic(TopicRequest) returns (TopicResponse);
+  rpc RetrieveTopics(ListTopicsRequest) returns (ListTopicsResponse);
+}
