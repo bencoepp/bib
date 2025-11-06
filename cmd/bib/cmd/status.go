@@ -9,13 +9,12 @@ import (
 // statusCmd represents the status command
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Chek the status of your bib environment",
+	Long: `This command allows you to check the status of your bib environment.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+It will check if a local bib daemon is running and provide information about its status.
+As well as any close by, in your region or global bib nodes that are reachable. It will
+also give you general health information about your bib setup.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("status called")
 	},

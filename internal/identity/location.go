@@ -3,10 +3,13 @@ package identity
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 type Location struct {
@@ -29,8 +32,15 @@ func RetrieveLocationInfo(ip net.IP) (*Location, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://ip-api.com/json", nil)
+	url := "http://ip-api.com/json"
+	if ip != nil {
+		url += "/" + ip.String()
+	}
 
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -38,14 +48,17 @@ func RetrieveLocationInfo(ip net.IP) (*Location, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			return
+			log.Error(err)
 		}
 	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("failed to retrieve location info")
+	}
 
 	var data Location
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, err
 	}
-
 	return &data, nil
 }

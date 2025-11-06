@@ -2,6 +2,8 @@ package config
 
 import (
 	"bib/internal/config/util"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/viper"
 )
@@ -12,8 +14,18 @@ type BibConfig struct {
 }
 
 func ApplyBibDefaults(v *viper.Viper) {
+	path, err := os.UserHomeDir()
+	if err != nil {
+		path = "."
+	}
+
 	v.SetDefault("general", map[string]interface{}{
-		"theme": "auto",
+		"theme":              "auto",
+		"check_capabilities": true,
+		"identity_path":      filepath.Join(path, ".bib", "identity.json"),
+		"retrieve_location":  true,
+		"use_passphrase":     true,
+		"use_second_factor":  true,
 	})
 
 	v.SetDefault("update", map[string]interface{}{

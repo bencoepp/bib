@@ -21,6 +21,12 @@ func main() {
 	log.Info("Starting bib daemon...")
 	log.Info("It might take a while to index your library the first time. Please be patient.")
 
+	identity, err := daemon.RegisterDaemonIdentity(cfg, Version)
+	if err != nil {
+		log.Fatal("Failed to register daemon identity:", "error", err)
+	}
+	log.Info("Daemon identity registered", "id", identity.ID)
+
 	daemon.StartCapabilityChecks(cfg)
 	daemon.StartScheduler()
 	daemon.StartGRPCServer(cfg)
