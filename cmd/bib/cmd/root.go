@@ -129,7 +129,7 @@ func loadFromPath(path string) error {
 	}
 	Config = cfg
 	ConfigPath = path
-	log.Info("Using config file:", path)
+	log.Info("Using config file: " + path)
 	return nil
 }
 

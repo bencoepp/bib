@@ -9,6 +9,7 @@ import (
 type BibDaemonConfig struct {
 	General GeneralConfig `yaml:"general"`
 	Update  UpdateConfig  `yaml:"update"`
+	Port    int           `yaml:"port"`
 }
 
 func ApplyBibDaemonDefaults(v *viper.Viper) {
@@ -23,6 +24,8 @@ func ApplyBibDaemonDefaults(v *viper.Viper) {
 		"allow_prerelease":    false,
 		"http_timeout_in_sec": 30,
 	})
+
+	v.SetDefault("port", 50051)
 }
 
 // SaveBibDaemonConfig saves the configuration for the Bib Daemon using the extracted SaveConfig logic.

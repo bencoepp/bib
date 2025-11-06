@@ -30,13 +30,11 @@ type Options struct {
 //
 // The default search order (can be influenced by Options) is:
 // 1) Environment variable path (file or directory) via EnvVar
-// 2) Application directory (next to the running executable)
-// 3) Current working directory (optional, defaults to ON)
-// 4) User's home dot directory: ~/.<appname>/
-// 5) XDG config directory: $XDG_CONFIG_HOME/<appname>/ or ~/.config/<appname>/ (Unix-like)
-// 6) macOS: ~/Library/Application Support/<AppName>/
-// 7) Windows: %APPDATA%\<AppName>\ and then %PROGRAMDATA%\<AppName>\
-// 8) System directory (Unix-like): /etc/<appname>/
+// 2) User's home directory: ~/.<appname>/
+// 3) macOS: ~/Library/Application Support/<AppName>/
+// 4) Windows: %PROGRAMDATA%\<AppName>\
+// 5) System directory (Linux/Unix): /etc/<appname>/
+// 6) Current working directory (optional)
 //
 // You can override candidate file names and the environment variable via Options.
 func FindConfigPath(opts Options) (string, error) {
@@ -56,78 +54,54 @@ func FindConfigPath(opts Options) (string, error) {
 	}
 
 	// 1) ENV var
-	if p := strings.TrimSpace(os.Getenv(opts.EnvVar)); p != "" {
-		if path, ok := resolveEnvPath(p, opts.FileNames); ok {
-			return path, nil
+	if pathFromEnv := strings.TrimSpace(os.Getenv(opts.EnvVar)); pathFromEnv != "" {
+		if resolvedPath, ok := resolveEnvPath(pathFromEnv, opts.FileNames); ok {
+			return resolvedPath, nil
 		}
 	}
 
-	// 2) Application directory (directory of the running executable)
-	if exe, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exe)
-		if path, ok := probeDir(exeDir, opts.FileNames); ok {
-			return path, nil
-		}
-	}
-
-	// 3) Current working directory (optional)
-	if opts.AlsoCheckCWD {
-		if cwd, err := os.Getwd(); err == nil {
-			if path, ok := probeDir(cwd, opts.FileNames); ok {
-				return path, nil
-			}
-		}
-	}
-
-	// 4) Home dot directory: ~/.<appname>/
+	// 2) User's home directory: ~/.<appname>/
 	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
-		dotApp := "." + opts.AppName
-		if path, ok := probeDir(filepath.Join(homeDir, dotApp), opts.FileNames); ok {
-			return path, nil
+		homeAppDir := filepath.Join(homeDir, "."+opts.AppName)
+		if resolvedPath, ok := probeDir(homeAppDir, opts.FileNames); ok {
+			return resolvedPath, nil
 		}
 	}
 
-	// 5) XDG config (Unix-like)
-	if runtime.GOOS != "windows" {
-		xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
-		if xdg != "" {
-			if path, ok := probeDir(filepath.Join(xdg, opts.AppName), opts.FileNames); ok {
-				return path, nil
-			}
-		} else if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
-			if path, ok := probeDir(filepath.Join(homeDir, ".config", opts.AppName), opts.FileNames); ok {
-				return path, nil
-			}
-		}
-	}
-
-	// 6) macOS Application Support
+	// 3) macOS Application Support
 	if runtime.GOOS == "darwin" {
 		if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
-			if path, ok := probeDir(filepath.Join(homeDir, "Library", "Application Support", titleCase(opts.AppName)), opts.FileNames); ok {
-				return path, nil
+			macOSDir := filepath.Join(homeDir, "Library", "Application Support", titleCase(opts.AppName))
+			if resolvedPath, ok := probeDir(macOSDir, opts.FileNames); ok {
+				return resolvedPath, nil
 			}
 		}
 	}
 
-	// 7) Windows AppData and ProgramData
+	// 4) Windows AppData and ProgramData
 	if runtime.GOOS == "windows" {
-		if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
-			if path, ok := probeDir(filepath.Join(appData, titleCase(opts.AppName)), opts.FileNames); ok {
-				return path, nil
-			}
-		}
 		if programData := strings.TrimSpace(os.Getenv("PROGRAMDATA")); programData != "" {
-			if path, ok := probeDir(filepath.Join(programData, titleCase(opts.AppName)), opts.FileNames); ok {
-				return path, nil
+			winConfigDir := filepath.Join(programData, titleCase(opts.AppName))
+			if resolvedPath, ok := probeDir(winConfigDir, opts.FileNames); ok {
+				return resolvedPath, nil
 			}
 		}
 	}
 
-	// 8) System directory (Unix-like): /etc/<appname>/
+	// 5) System directory (Linux/Unix): /etc/<appname>/
 	if runtime.GOOS != "windows" {
-		if path, ok := probeDir(filepath.Join(string(filepath.Separator), "etc", opts.AppName), opts.FileNames); ok {
-			return path, nil
+		systemDir := filepath.Join(string(filepath.Separator), "etc", opts.AppName)
+		if resolvedPath, ok := probeDir(systemDir, opts.FileNames); ok {
+			return resolvedPath, nil
+		}
+	}
+
+	// 6) Current working directory (optional)
+	if opts.AlsoCheckCWD {
+		if cwd, err := os.Getwd(); err == nil {
+			if resolvedPath, ok := probeDir(cwd, opts.FileNames); ok {
+				return resolvedPath, nil
+			}
 		}
 	}
 
@@ -135,52 +109,55 @@ func FindConfigPath(opts Options) (string, error) {
 }
 
 // resolveEnvPath handles the ENV var pointing to either a file or a directory.
-func resolveEnvPath(p string, fileNames []string) (string, bool) {
-	info, err := os.Stat(p)
+func resolveEnvPath(path string, fileNames []string) (string, bool) {
+	info, err := os.Stat(path)
 	if err != nil {
 		return "", false
 	}
 	if info.Mode().IsRegular() {
-		// p is a file
-		return absPath(p), true
+		// Path points to a file
+		return absPath(path), true
 	}
 	if info.IsDir() {
-		// p is a directory; probe inside it
-		if path, ok := probeDir(p, fileNames); ok {
-			return path, true
+		// Path points to a directory; probe file candidates inside
+		if resolvedPath, ok := probeDir(path, fileNames); ok {
+			return resolvedPath, true
 		}
 	}
 	return "", false
 }
 
-// probeDir looks for the first existing file among candidates inside dir.
+// probeDir looks for the first existing file among candidates inside the specified directory.
 func probeDir(dir string, fileNames []string) (string, bool) {
 	for _, name := range fileNames {
-		p := filepath.Join(dir, name)
-		if isFile(p) {
-			return absPath(p), true
+		checkPath := filepath.Join(dir, name)
+		if isFile(checkPath) {
+			return absPath(checkPath), true
 		}
 	}
 	return "", false
 }
 
-func isFile(p string) bool {
-	info, err := os.Stat(p)
+// isFile checks if the given path is a regular file.
+func isFile(path string) bool {
+	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
 }
 
-func absPath(p string) string {
-	if ap, err := filepath.Abs(p); err == nil {
-		return ap
+// absPath resolves the absolute path for the given file/directory.
+func absPath(path string) string {
+	if resolvedPath, err := filepath.Abs(path); err == nil {
+		return resolvedPath
 	}
-	return p
+	return path
 }
 
+// titleCase converts the input string to Title Case (e.g., my-app -> MyApp).
 func titleCase(s string) string {
 	if s == "" {
 		return s
 	}
-	// Basic Title-Case: split on separators and capitalize first rune of each token.
+	// Split using separators and capitalize the first rune of each token
 	parts := strings.FieldsFunc(s, func(r rune) bool {
 		return r == '_' || r == '-' || r == ' ' || r == '.' || r == '/'
 	})
@@ -195,6 +172,7 @@ func titleCase(s string) string {
 	return strings.Join(parts, " ")
 }
 
+// toUpperRune converts a single rune to its uppercase representation.
 func toUpperRune(r rune) rune {
 	return []rune(strings.ToUpper(string(r)))[0]
 }
