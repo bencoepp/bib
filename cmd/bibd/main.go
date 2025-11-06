@@ -4,6 +4,7 @@ import (
 	"bib/internal/capcheck"
 	"bib/internal/capcheck/checks"
 	"bib/internal/config"
+	"bib/internal/config/util"
 	"context"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 )
 
 func main() {
-	configPath, err := config.FindConfigPath(config.Options{AppName: "bib-daemon", FileNames: []string{"bib-daemon.yaml", "bib-daemon.yml"}})
+	configPath, err := util.FindConfigPath(util.Options{AppName: "bib-daemon", FileNames: []string{"bib-daemon.yaml", "bib-daemon.yml"}})
 	cfg, err := config.LoadBibDaemonConfig(configPath)
 	if err != nil {
 		log.Error(err)

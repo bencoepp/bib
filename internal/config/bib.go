@@ -1,7 +1,7 @@
 package config
 
 import (
-	"time"
+	"bib/internal/config/util"
 
 	"github.com/spf13/viper"
 )
@@ -12,19 +12,29 @@ type BibConfig struct {
 }
 
 func ApplyBibDefaults(v *viper.Viper) {
-	v.SetDefault("general", map[string]any{
+	v.SetDefault("general", map[string]interface{}{
 		"theme": "auto",
 	})
 
-	v.SetDefault("update", map[string]any{
+	v.SetDefault("update", map[string]interface{}{
 		"enabled":             true,
 		"github_owner":        "bencoepp",
 		"github_repo":         "bib",
 		"allow_prerelease":    false,
-		"http_timeout_in_sec": 30 * time.Second,
+		"http_timeout_in_sec": 30,
 	})
 }
 
+// SaveBibConfig saves the configuration for the Bib application using the extracted SaveConfig logic.
+func SaveBibConfig() (string, error) {
+	viper.SetConfigType("yaml")
+	ApplyBibDefaults(viper.GetViper())
+
+	// Use SaveConfig from save_config.go
+	return util.SaveConfig("bib")
+}
+
+// LoadBibConfig loads the configuration for the Bib application.
 func LoadBibConfig(path string) (*BibConfig, error) {
 	viper.SetConfigFile(path)
 	viper.SetConfigType("yaml")

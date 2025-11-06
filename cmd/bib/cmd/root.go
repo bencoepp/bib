@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bib/internal/config"
+	"bib/internal/config/util"
 	"errors"
 	"fmt"
 	"os"
@@ -53,7 +54,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.bib.yaml)")
 	rootCmd.PersistentFlags().StringP("theme", "t", "auto", "Color theme for output: auto, dark, light")
-	setupCmd.Flags().Bool("no-tui", true, "Open interactive setup (TUI)")
+	rootCmd.PersistentFlags().Bool("no-tui", false, "Open interactive setup (TUI)")
 
 }
 
@@ -96,14 +97,14 @@ func ensureConfigLoaded() error {
 	}
 
 	// 3) Use loader search (supports BIB_CONFIG env, app dir, CWD, XDG, etc.)
-	path, err := config.FindConfigPath(config.Options{
+	path, err := util.FindConfigPath(util.Options{
 		AppName:      "bib",
 		FileNames:    []string{"config.yaml", "config.yml", "bib.yaml", "bib.yml"},
 		AlsoCheckCWD: true,
 	})
 	if err != nil {
 		// If no config file was found, proceed with defaults + env
-		if errors.Is(err, config.ErrConfigNotFound) {
+		if errors.Is(err, util.ErrConfigNotFound) {
 			var cfg config.BibConfig
 			if err := viper.Unmarshal(&cfg); err != nil {
 				return err

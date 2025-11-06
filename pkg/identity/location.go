@@ -29,7 +29,7 @@ func RetrieveLocationInfo(ip net.IP) (*Location, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://ip-api.com/json", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://ip-api.com/json", nil)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
