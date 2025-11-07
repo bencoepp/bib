@@ -21,26 +21,40 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type IdentityRequest struct {
+// Basic geographic/location snapshot (optional)
+type Location struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Country       string                 `protobuf:"bytes,1,opt,name=country,proto3" json:"country,omitempty"`
+	CountryCode   string                 `protobuf:"bytes,2,opt,name=country_code,json=countryCode,proto3" json:"country_code,omitempty"`
+	Region        string                 `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	RegionName    string                 `protobuf:"bytes,4,opt,name=region_name,json=regionName,proto3" json:"region_name,omitempty"`
+	City          string                 `protobuf:"bytes,5,opt,name=city,proto3" json:"city,omitempty"`
+	Zip           string                 `protobuf:"bytes,6,opt,name=zip,proto3" json:"zip,omitempty"`
+	Latitude      float64                `protobuf:"fixed64,7,opt,name=latitude,proto3" json:"latitude,omitempty"`
+	Longitude     float64                `protobuf:"fixed64,8,opt,name=longitude,proto3" json:"longitude,omitempty"`
+	Timezone      string                 `protobuf:"bytes,9,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	Isp           string                 `protobuf:"bytes,10,opt,name=isp,proto3" json:"isp,omitempty"`
+	Org           string                 `protobuf:"bytes,11,opt,name=org,proto3" json:"org,omitempty"`
+	Asn           string                 `protobuf:"bytes,12,opt,name=asn,proto3" json:"asn,omitempty"`
+	Ip            string                 `protobuf:"bytes,13,opt,name=ip,proto3" json:"ip,omitempty"` // textual representation
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *IdentityRequest) Reset() {
-	*x = IdentityRequest{}
+func (x *Location) Reset() {
+	*x = Location{}
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *IdentityRequest) String() string {
+func (x *Location) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*IdentityRequest) ProtoMessage() {}
+func (*Location) ProtoMessage() {}
 
-func (x *IdentityRequest) ProtoReflect() protoreflect.Message {
+func (x *Location) ProtoReflect() protoreflect.Message {
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -52,31 +66,133 @@ func (x *IdentityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IdentityRequest.ProtoReflect.Descriptor instead.
-func (*IdentityRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use Location.ProtoReflect.Descriptor instead.
+func (*Location) Descriptor() ([]byte, []int) {
 	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{0}
 }
 
-type IdentityResponse struct {
+func (x *Location) GetCountry() string {
+	if x != nil {
+		return x.Country
+	}
+	return ""
+}
+
+func (x *Location) GetCountryCode() string {
+	if x != nil {
+		return x.CountryCode
+	}
+	return ""
+}
+
+func (x *Location) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *Location) GetRegionName() string {
+	if x != nil {
+		return x.RegionName
+	}
+	return ""
+}
+
+func (x *Location) GetCity() string {
+	if x != nil {
+		return x.City
+	}
+	return ""
+}
+
+func (x *Location) GetZip() string {
+	if x != nil {
+		return x.Zip
+	}
+	return ""
+}
+
+func (x *Location) GetLatitude() float64 {
+	if x != nil {
+		return x.Latitude
+	}
+	return 0
+}
+
+func (x *Location) GetLongitude() float64 {
+	if x != nil {
+		return x.Longitude
+	}
+	return 0
+}
+
+func (x *Location) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *Location) GetIsp() string {
+	if x != nil {
+		return x.Isp
+	}
+	return ""
+}
+
+func (x *Location) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *Location) GetAsn() string {
+	if x != nil {
+		return x.Asn
+	}
+	return ""
+}
+
+func (x *Location) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+// Identity metadata payload (signed)
+type IdentityPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                            // "daemon" | "user"
+	PublicKey     []byte                 `protobuf:"bytes,3,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"` // Ed25519 public key (32 bytes)
+	Hostname      string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Version       string                 `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
+	FirstName     string                 `protobuf:"bytes,6,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"` // only for user identities
+	LastName      string                 `protobuf:"bytes,7,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
+	Email         string                 `protobuf:"bytes,8,opt,name=email,proto3" json:"email,omitempty"`
+	Location      *Location              `protobuf:"bytes,9,opt,name=location,proto3" json:"location,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // RFC3339Nano
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *IdentityResponse) Reset() {
-	*x = IdentityResponse{}
+func (x *IdentityPayload) Reset() {
+	*x = IdentityPayload{}
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *IdentityResponse) String() string {
+func (x *IdentityPayload) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*IdentityResponse) ProtoMessage() {}
+func (*IdentityPayload) ProtoMessage() {}
 
-func (x *IdentityResponse) ProtoReflect() protoreflect.Message {
+func (x *IdentityPayload) ProtoReflect() protoreflect.Message {
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -88,31 +204,109 @@ func (x *IdentityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IdentityResponse.ProtoReflect.Descriptor instead.
-func (*IdentityResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use IdentityPayload.ProtoReflect.Descriptor instead.
+func (*IdentityPayload) Descriptor() ([]byte, []int) {
 	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{1}
 }
 
-type ListIdentitiesRequest struct {
+func (x *IdentityPayload) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetPublicKey() []byte {
+	if x != nil {
+		return x.PublicKey
+	}
+	return nil
+}
+
+func (x *IdentityPayload) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetFirstName() string {
+	if x != nil {
+		return x.FirstName
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetLastName() string {
+	if x != nil {
+		return x.LastName
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *IdentityPayload) GetLocation() *Location {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (x *IdentityPayload) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+// SignedEnvelope equivalent
+type SignedEnvelope struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	PublicKey     []byte                 `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`          // optional; empty means resolve from registry
+	Alg           string                 `protobuf:"bytes,3,opt,name=alg,proto3" json:"alg,omitempty"`                                       // "Ed25519"
+	PayloadType   string                 `protobuf:"bytes,4,opt,name=payload_type,json=payloadType,proto3" json:"payload_type,omitempty"`    // e.g. "IdentityPayload" | "RotationLinkPayload"
+	PayloadBytes  []byte                 `protobuf:"bytes,5,opt,name=payload_bytes,json=payloadBytes,proto3" json:"payload_bytes,omitempty"` // canonical JSON bytes used for signing
+	Signature     []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`                           // raw signature
+	Timestamp     string                 `protobuf:"bytes,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                           // RFC3339Nano of envelope creation
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListIdentitiesRequest) Reset() {
-	*x = ListIdentitiesRequest{}
+func (x *SignedEnvelope) Reset() {
+	*x = SignedEnvelope{}
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListIdentitiesRequest) String() string {
+func (x *SignedEnvelope) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListIdentitiesRequest) ProtoMessage() {}
+func (*SignedEnvelope) ProtoMessage() {}
 
-func (x *ListIdentitiesRequest) ProtoReflect() protoreflect.Message {
+func (x *SignedEnvelope) ProtoReflect() protoreflect.Message {
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -124,32 +318,88 @@ func (x *ListIdentitiesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListIdentitiesRequest.ProtoReflect.Descriptor instead.
-func (*ListIdentitiesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SignedEnvelope.ProtoReflect.Descriptor instead.
+func (*SignedEnvelope) Descriptor() ([]byte, []int) {
 	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{2}
 }
 
-type ListIdentitiesResponse struct {
+func (x *SignedEnvelope) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SignedEnvelope) GetPublicKey() []byte {
+	if x != nil {
+		return x.PublicKey
+	}
+	return nil
+}
+
+func (x *SignedEnvelope) GetAlg() string {
+	if x != nil {
+		return x.Alg
+	}
+	return ""
+}
+
+func (x *SignedEnvelope) GetPayloadType() string {
+	if x != nil {
+		return x.PayloadType
+	}
+	return ""
+}
+
+func (x *SignedEnvelope) GetPayloadBytes() []byte {
+	if x != nil {
+		return x.PayloadBytes
+	}
+	return nil
+}
+
+func (x *SignedEnvelope) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *SignedEnvelope) GetTimestamp() string {
+	if x != nil {
+		return x.Timestamp
+	}
+	return ""
+}
+
+// Rotation link payload (signed by old and new keys separately)
+type RotationLinkPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Identities    []*IdentityResponse    `protobuf:"bytes,1,rep,name=identities,proto3" json:"identities,omitempty"`
+	OldId         string                 `protobuf:"bytes,1,opt,name=old_id,json=oldId,proto3" json:"old_id,omitempty"`
+	NewId         string                 `protobuf:"bytes,2,opt,name=new_id,json=newId,proto3" json:"new_id,omitempty"`
+	OldPublicKey  []byte                 `protobuf:"bytes,3,opt,name=old_public_key,json=oldPublicKey,proto3" json:"old_public_key,omitempty"`
+	NewPublicKey  []byte                 `protobuf:"bytes,4,opt,name=new_public_key,json=newPublicKey,proto3" json:"new_public_key,omitempty"`
+	Timestamp     string                 `protobuf:"bytes,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // RFC3339Nano
+	SigOld        []byte                 `protobuf:"bytes,6,opt,name=sig_old,json=sigOld,proto3" json:"sig_old,omitempty"`
+	SigNew        []byte                 `protobuf:"bytes,7,opt,name=sig_new,json=sigNew,proto3" json:"sig_new,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListIdentitiesResponse) Reset() {
-	*x = ListIdentitiesResponse{}
+func (x *RotationLinkPayload) Reset() {
+	*x = RotationLinkPayload{}
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListIdentitiesResponse) String() string {
+func (x *RotationLinkPayload) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListIdentitiesResponse) ProtoMessage() {}
+func (*RotationLinkPayload) ProtoMessage() {}
 
-func (x *ListIdentitiesResponse) ProtoReflect() protoreflect.Message {
+func (x *RotationLinkPayload) ProtoReflect() protoreflect.Message {
 	mi := &file_bibd_v1_identitiy_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -161,14 +411,892 @@ func (x *ListIdentitiesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListIdentitiesResponse.ProtoReflect.Descriptor instead.
-func (*ListIdentitiesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use RotationLinkPayload.ProtoReflect.Descriptor instead.
+func (*RotationLinkPayload) Descriptor() ([]byte, []int) {
 	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListIdentitiesResponse) GetIdentities() []*IdentityResponse {
+func (x *RotationLinkPayload) GetOldId() string {
+	if x != nil {
+		return x.OldId
+	}
+	return ""
+}
+
+func (x *RotationLinkPayload) GetNewId() string {
+	if x != nil {
+		return x.NewId
+	}
+	return ""
+}
+
+func (x *RotationLinkPayload) GetOldPublicKey() []byte {
+	if x != nil {
+		return x.OldPublicKey
+	}
+	return nil
+}
+
+func (x *RotationLinkPayload) GetNewPublicKey() []byte {
+	if x != nil {
+		return x.NewPublicKey
+	}
+	return nil
+}
+
+func (x *RotationLinkPayload) GetTimestamp() string {
+	if x != nil {
+		return x.Timestamp
+	}
+	return ""
+}
+
+func (x *RotationLinkPayload) GetSigOld() []byte {
+	if x != nil {
+		return x.SigOld
+	}
+	return nil
+}
+
+func (x *RotationLinkPayload) GetSigNew() []byte {
+	if x != nil {
+		return x.SigNew
+	}
+	return nil
+}
+
+// Signed transparency log root (commitment)
+type SignedLogRoot struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TreeSize      uint64                 `protobuf:"varint,1,opt,name=tree_size,json=treeSize,proto3" json:"tree_size,omitempty"`
+	RootHash      []byte                 `protobuf:"bytes,2,opt,name=root_hash,json=rootHash,proto3" json:"root_hash,omitempty"`
+	Timestamp     string                 `protobuf:"bytes,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // RFC3339Nano
+	Signature     []byte                 `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`
+	LogPublicKey  []byte                 `protobuf:"bytes,5,opt,name=log_public_key,json=logPublicKey,proto3" json:"log_public_key,omitempty"`
+	LogKeyId      string                 `protobuf:"bytes,6,opt,name=log_key_id,json=logKeyId,proto3" json:"log_key_id,omitempty"` // hex(hash(log_public_key))
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignedLogRoot) Reset() {
+	*x = SignedLogRoot{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignedLogRoot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignedLogRoot) ProtoMessage() {}
+
+func (x *SignedLogRoot) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignedLogRoot.ProtoReflect.Descriptor instead.
+func (*SignedLogRoot) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SignedLogRoot) GetTreeSize() uint64 {
+	if x != nil {
+		return x.TreeSize
+	}
+	return 0
+}
+
+func (x *SignedLogRoot) GetRootHash() []byte {
+	if x != nil {
+		return x.RootHash
+	}
+	return nil
+}
+
+func (x *SignedLogRoot) GetTimestamp() string {
+	if x != nil {
+		return x.Timestamp
+	}
+	return ""
+}
+
+func (x *SignedLogRoot) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *SignedLogRoot) GetLogPublicKey() []byte {
+	if x != nil {
+		return x.LogPublicKey
+	}
+	return nil
+}
+
+func (x *SignedLogRoot) GetLogKeyId() string {
+	if x != nil {
+		return x.LogKeyId
+	}
+	return ""
+}
+
+// Inclusion proof (Merkle sibling path)
+type InclusionProof struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LeafIndex     uint64                 `protobuf:"varint,1,opt,name=leaf_index,json=leafIndex,proto3" json:"leaf_index,omitempty"`
+	LeafHash      []byte                 `protobuf:"bytes,2,opt,name=leaf_hash,json=leafHash,proto3" json:"leaf_hash,omitempty"`
+	Siblings      [][]byte               `protobuf:"bytes,3,rep,name=siblings,proto3" json:"siblings,omitempty"`
+	SignedRoot    *SignedLogRoot         `protobuf:"bytes,4,opt,name=signed_root,json=signedRoot,proto3" json:"signed_root,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InclusionProof) Reset() {
+	*x = InclusionProof{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InclusionProof) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InclusionProof) ProtoMessage() {}
+
+func (x *InclusionProof) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InclusionProof.ProtoReflect.Descriptor instead.
+func (*InclusionProof) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *InclusionProof) GetLeafIndex() uint64 {
+	if x != nil {
+		return x.LeafIndex
+	}
+	return 0
+}
+
+func (x *InclusionProof) GetLeafHash() []byte {
+	if x != nil {
+		return x.LeafHash
+	}
+	return nil
+}
+
+func (x *InclusionProof) GetSiblings() [][]byte {
+	if x != nil {
+		return x.Siblings
+	}
+	return nil
+}
+
+func (x *InclusionProof) GetSignedRoot() *SignedLogRoot {
+	if x != nil {
+		return x.SignedRoot
+	}
+	return nil
+}
+
+// Registration proof bundles identity + inclusion
+type RegistrationProof struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      *IdentityPayload       `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Inclusion     *InclusionProof        `protobuf:"bytes,2,opt,name=inclusion,proto3" json:"inclusion,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegistrationProof) Reset() {
+	*x = RegistrationProof{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegistrationProof) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegistrationProof) ProtoMessage() {}
+
+func (x *RegistrationProof) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegistrationProof.ProtoReflect.Descriptor instead.
+func (*RegistrationProof) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RegistrationProof) GetIdentity() *IdentityPayload {
+	if x != nil {
+		return x.Identity
+	}
+	return nil
+}
+
+func (x *RegistrationProof) GetInclusion() *InclusionProof {
+	if x != nil {
+		return x.Inclusion
+	}
+	return nil
+}
+
+type PublishIdentityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Envelope      *SignedEnvelope        `protobuf:"bytes,1,opt,name=envelope,proto3" json:"envelope,omitempty"` // envelope whose payload_type == "IdentityPayload"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishIdentityRequest) Reset() {
+	*x = PublishIdentityRequest{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishIdentityRequest) ProtoMessage() {}
+
+func (x *PublishIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishIdentityRequest.ProtoReflect.Descriptor instead.
+func (*PublishIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *PublishIdentityRequest) GetEnvelope() *SignedEnvelope {
+	if x != nil {
+		return x.Envelope
+	}
+	return nil
+}
+
+type PublishIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Proof         *RegistrationProof     `protobuf:"bytes,1,opt,name=proof,proto3" json:"proof,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishIdentityResponse) Reset() {
+	*x = PublishIdentityResponse{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishIdentityResponse) ProtoMessage() {}
+
+func (x *PublishIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishIdentityResponse.ProtoReflect.Descriptor instead.
+func (*PublishIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PublishIdentityResponse) GetProof() *RegistrationProof {
+	if x != nil {
+		return x.Proof
+	}
+	return nil
+}
+
+type RetrieveIdentityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetrieveIdentityRequest) Reset() {
+	*x = RetrieveIdentityRequest{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetrieveIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetrieveIdentityRequest) ProtoMessage() {}
+
+func (x *RetrieveIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetrieveIdentityRequest.ProtoReflect.Descriptor instead.
+func (*RetrieveIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RetrieveIdentityRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type RetrieveIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      *IdentityPayload       `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	LatestProof   *RegistrationProof     `protobuf:"bytes,2,opt,name=latest_proof,json=latestProof,proto3" json:"latest_proof,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetrieveIdentityResponse) Reset() {
+	*x = RetrieveIdentityResponse{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetrieveIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetrieveIdentityResponse) ProtoMessage() {}
+
+func (x *RetrieveIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetrieveIdentityResponse.ProtoReflect.Descriptor instead.
+func (*RetrieveIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RetrieveIdentityResponse) GetIdentity() *IdentityPayload {
+	if x != nil {
+		return x.Identity
+	}
+	return nil
+}
+
+func (x *RetrieveIdentityResponse) GetLatestProof() *RegistrationProof {
+	if x != nil {
+		return x.LatestProof
+	}
+	return nil
+}
+
+type RetrieveIdentitiesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`    // optional filter
+	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"` // page size
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetrieveIdentitiesRequest) Reset() {
+	*x = RetrieveIdentitiesRequest{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetrieveIdentitiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetrieveIdentitiesRequest) ProtoMessage() {}
+
+func (x *RetrieveIdentitiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetrieveIdentitiesRequest.ProtoReflect.Descriptor instead.
+func (*RetrieveIdentitiesRequest) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RetrieveIdentitiesRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RetrieveIdentitiesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *RetrieveIdentitiesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type IdentitySummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Hostname      string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	Email         string                 `protobuf:"bytes,5,opt,name=email,proto3" json:"email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentitySummary) Reset() {
+	*x = IdentitySummary{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentitySummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentitySummary) ProtoMessage() {}
+
+func (x *IdentitySummary) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentitySummary.ProtoReflect.Descriptor instead.
+func (*IdentitySummary) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *IdentitySummary) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+type RetrieveIdentitiesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identities    []*IdentitySummary     `protobuf:"bytes,1,rep,name=identities,proto3" json:"identities,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetrieveIdentitiesResponse) Reset() {
+	*x = RetrieveIdentitiesResponse{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetrieveIdentitiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetrieveIdentitiesResponse) ProtoMessage() {}
+
+func (x *RetrieveIdentitiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetrieveIdentitiesResponse.ProtoReflect.Descriptor instead.
+func (*RetrieveIdentitiesResponse) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RetrieveIdentitiesResponse) GetIdentities() []*IdentitySummary {
 	if x != nil {
 		return x.Identities
+	}
+	return nil
+}
+
+func (x *RetrieveIdentitiesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type SubmitRotationLinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Envelope      *SignedEnvelope        `protobuf:"bytes,1,opt,name=envelope,proto3" json:"envelope,omitempty"` // payload_type == "RotationLinkPayload"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitRotationLinkRequest) Reset() {
+	*x = SubmitRotationLinkRequest{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRotationLinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRotationLinkRequest) ProtoMessage() {}
+
+func (x *SubmitRotationLinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRotationLinkRequest.ProtoReflect.Descriptor instead.
+func (*SubmitRotationLinkRequest) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SubmitRotationLinkRequest) GetEnvelope() *SignedEnvelope {
+	if x != nil {
+		return x.Envelope
+	}
+	return nil
+}
+
+type SubmitRotationLinkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Proof         *RegistrationProof     `protobuf:"bytes,1,opt,name=proof,proto3" json:"proof,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitRotationLinkResponse) Reset() {
+	*x = SubmitRotationLinkResponse{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRotationLinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRotationLinkResponse) ProtoMessage() {}
+
+func (x *SubmitRotationLinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRotationLinkResponse.ProtoReflect.Descriptor instead.
+func (*SubmitRotationLinkResponse) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SubmitRotationLinkResponse) GetProof() *RegistrationProof {
+	if x != nil {
+		return x.Proof
+	}
+	return nil
+}
+
+type GetLogRootRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLogRootRequest) Reset() {
+	*x = GetLogRootRequest{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLogRootRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLogRootRequest) ProtoMessage() {}
+
+func (x *GetLogRootRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLogRootRequest.ProtoReflect.Descriptor instead.
+func (*GetLogRootRequest) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{16}
+}
+
+type GetLogRootResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SignedRoot    *SignedLogRoot         `protobuf:"bytes,1,opt,name=signed_root,json=signedRoot,proto3" json:"signed_root,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLogRootResponse) Reset() {
+	*x = GetLogRootResponse{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLogRootResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLogRootResponse) ProtoMessage() {}
+
+func (x *GetLogRootResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLogRootResponse.ProtoReflect.Descriptor instead.
+func (*GetLogRootResponse) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetLogRootResponse) GetSignedRoot() *SignedLogRoot {
+	if x != nil {
+		return x.SignedRoot
+	}
+	return nil
+}
+
+// NEW: request/response for local daemon identity
+type GetSelfIdentityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSelfIdentityRequest) Reset() {
+	*x = GetSelfIdentityRequest{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSelfIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSelfIdentityRequest) ProtoMessage() {}
+
+func (x *GetSelfIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSelfIdentityRequest.ProtoReflect.Descriptor instead.
+func (*GetSelfIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{18}
+}
+
+type GetSelfIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      *IdentityPayload       `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	LatestProof   *RegistrationProof     `protobuf:"bytes,2,opt,name=latest_proof,json=latestProof,proto3" json:"latest_proof,omitempty"` // Optionally you could add: SignedEnvelope signed_envelope = 3;
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSelfIdentityResponse) Reset() {
+	*x = GetSelfIdentityResponse{}
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSelfIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSelfIdentityResponse) ProtoMessage() {}
+
+func (x *GetSelfIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bibd_v1_identitiy_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSelfIdentityResponse.ProtoReflect.Descriptor instead.
+func (*GetSelfIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_bibd_v1_identitiy_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetSelfIdentityResponse) GetIdentity() *IdentityPayload {
+	if x != nil {
+		return x.Identity
+	}
+	return nil
+}
+
+func (x *GetSelfIdentityResponse) GetLatestProof() *RegistrationProof {
+	if x != nil {
+		return x.LatestProof
 	}
 	return nil
 }
@@ -177,19 +1305,118 @@ var File_bibd_v1_identitiy_proto protoreflect.FileDescriptor
 
 const file_bibd_v1_identitiy_proto_rawDesc = "" +
 	"\n" +
-	"\x17bibd/v1/identitiy.proto\x12\abibd.v1\"\x11\n" +
-	"\x0fIdentityRequest\"\x12\n" +
-	"\x10IdentityResponse\"\x17\n" +
-	"\x15ListIdentitiesRequest\"S\n" +
-	"\x16ListIdentitiesResponse\x129\n" +
+	"\x17bibd/v1/identitiy.proto\x12\abibd.v1\"\xc2\x02\n" +
+	"\bLocation\x12\x18\n" +
+	"\acountry\x18\x01 \x01(\tR\acountry\x12!\n" +
+	"\fcountry_code\x18\x02 \x01(\tR\vcountryCode\x12\x16\n" +
+	"\x06region\x18\x03 \x01(\tR\x06region\x12\x1f\n" +
+	"\vregion_name\x18\x04 \x01(\tR\n" +
+	"regionName\x12\x12\n" +
+	"\x04city\x18\x05 \x01(\tR\x04city\x12\x10\n" +
+	"\x03zip\x18\x06 \x01(\tR\x03zip\x12\x1a\n" +
+	"\blatitude\x18\a \x01(\x01R\blatitude\x12\x1c\n" +
+	"\tlongitude\x18\b \x01(\x01R\tlongitude\x12\x1a\n" +
+	"\btimezone\x18\t \x01(\tR\btimezone\x12\x10\n" +
+	"\x03isp\x18\n" +
+	" \x01(\tR\x03isp\x12\x10\n" +
+	"\x03org\x18\v \x01(\tR\x03org\x12\x10\n" +
+	"\x03asn\x18\f \x01(\tR\x03asn\x12\x0e\n" +
+	"\x02ip\x18\r \x01(\tR\x02ip\"\xaa\x02\n" +
+	"\x0fIdentityPayload\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1d\n" +
 	"\n" +
-	"identities\x18\x01 \x03(\v2\x19.bibd.v1.IdentityResponseR\n" +
-	"identities2\xc1\x02\n" +
-	"\x0fIdentityService\x12G\n" +
-	"\x10RegisterIdentity\x12\x18.bibd.v1.IdentityRequest\x1a\x19.bibd.v1.IdentityResponse\x12G\n" +
-	"\x10RetrieveIdentity\x12\x18.bibd.v1.IdentityRequest\x1a\x19.bibd.v1.IdentityResponse\x12E\n" +
-	"\x0eUpdateIdentity\x12\x18.bibd.v1.IdentityRequest\x1a\x19.bibd.v1.IdentityResponse\x12U\n" +
-	"\x12RetrieveIdentities\x12\x1e.bibd.v1.ListIdentitiesRequest\x1a\x1f.bibd.v1.ListIdentitiesResponseB3Z1github.com/bencoepp/bib/internal/pb/bibd/v1;bibv1b\x06proto3"
+	"public_key\x18\x03 \x01(\fR\tpublicKey\x12\x1a\n" +
+	"\bhostname\x18\x04 \x01(\tR\bhostname\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"first_name\x18\x06 \x01(\tR\tfirstName\x12\x1b\n" +
+	"\tlast_name\x18\a \x01(\tR\blastName\x12\x14\n" +
+	"\x05email\x18\b \x01(\tR\x05email\x12-\n" +
+	"\blocation\x18\t \x01(\v2\x11.bibd.v1.LocationR\blocation\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\tR\tcreatedAt\"\xd5\x01\n" +
+	"\x0eSignedEnvelope\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x02 \x01(\fR\tpublicKey\x12\x10\n" +
+	"\x03alg\x18\x03 \x01(\tR\x03alg\x12!\n" +
+	"\fpayload_type\x18\x04 \x01(\tR\vpayloadType\x12#\n" +
+	"\rpayload_bytes\x18\x05 \x01(\fR\fpayloadBytes\x12\x1c\n" +
+	"\tsignature\x18\x06 \x01(\fR\tsignature\x12\x1c\n" +
+	"\ttimestamp\x18\a \x01(\tR\ttimestamp\"\xdf\x01\n" +
+	"\x13RotationLinkPayload\x12\x15\n" +
+	"\x06old_id\x18\x01 \x01(\tR\x05oldId\x12\x15\n" +
+	"\x06new_id\x18\x02 \x01(\tR\x05newId\x12$\n" +
+	"\x0eold_public_key\x18\x03 \x01(\fR\foldPublicKey\x12$\n" +
+	"\x0enew_public_key\x18\x04 \x01(\fR\fnewPublicKey\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\tR\ttimestamp\x12\x17\n" +
+	"\asig_old\x18\x06 \x01(\fR\x06sigOld\x12\x17\n" +
+	"\asig_new\x18\a \x01(\fR\x06sigNew\"\xc9\x01\n" +
+	"\rSignedLogRoot\x12\x1b\n" +
+	"\ttree_size\x18\x01 \x01(\x04R\btreeSize\x12\x1b\n" +
+	"\troot_hash\x18\x02 \x01(\fR\brootHash\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\tR\ttimestamp\x12\x1c\n" +
+	"\tsignature\x18\x04 \x01(\fR\tsignature\x12$\n" +
+	"\x0elog_public_key\x18\x05 \x01(\fR\flogPublicKey\x12\x1c\n" +
+	"\n" +
+	"log_key_id\x18\x06 \x01(\tR\blogKeyId\"\xa1\x01\n" +
+	"\x0eInclusionProof\x12\x1d\n" +
+	"\n" +
+	"leaf_index\x18\x01 \x01(\x04R\tleafIndex\x12\x1b\n" +
+	"\tleaf_hash\x18\x02 \x01(\fR\bleafHash\x12\x1a\n" +
+	"\bsiblings\x18\x03 \x03(\fR\bsiblings\x127\n" +
+	"\vsigned_root\x18\x04 \x01(\v2\x16.bibd.v1.SignedLogRootR\n" +
+	"signedRoot\"\x80\x01\n" +
+	"\x11RegistrationProof\x124\n" +
+	"\bidentity\x18\x01 \x01(\v2\x18.bibd.v1.IdentityPayloadR\bidentity\x125\n" +
+	"\tinclusion\x18\x02 \x01(\v2\x17.bibd.v1.InclusionProofR\tinclusion\"M\n" +
+	"\x16PublishIdentityRequest\x123\n" +
+	"\benvelope\x18\x01 \x01(\v2\x17.bibd.v1.SignedEnvelopeR\benvelope\"K\n" +
+	"\x17PublishIdentityResponse\x120\n" +
+	"\x05proof\x18\x01 \x01(\v2\x1a.bibd.v1.RegistrationProofR\x05proof\")\n" +
+	"\x17RetrieveIdentityRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x8f\x01\n" +
+	"\x18RetrieveIdentityResponse\x124\n" +
+	"\bidentity\x18\x01 \x01(\v2\x18.bibd.v1.IdentityPayloadR\bidentity\x12=\n" +
+	"\flatest_proof\x18\x02 \x01(\v2\x1a.bibd.v1.RegistrationProofR\vlatestProof\"d\n" +
+	"\x19RetrieveIdentitiesRequest\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x81\x01\n" +
+	"\x0fIdentitySummary\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1a\n" +
+	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\x12\x14\n" +
+	"\x05email\x18\x05 \x01(\tR\x05email\"~\n" +
+	"\x1aRetrieveIdentitiesResponse\x128\n" +
+	"\n" +
+	"identities\x18\x01 \x03(\v2\x18.bibd.v1.IdentitySummaryR\n" +
+	"identities\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"P\n" +
+	"\x19SubmitRotationLinkRequest\x123\n" +
+	"\benvelope\x18\x01 \x01(\v2\x17.bibd.v1.SignedEnvelopeR\benvelope\"N\n" +
+	"\x1aSubmitRotationLinkResponse\x120\n" +
+	"\x05proof\x18\x01 \x01(\v2\x1a.bibd.v1.RegistrationProofR\x05proof\"\x13\n" +
+	"\x11GetLogRootRequest\"M\n" +
+	"\x12GetLogRootResponse\x127\n" +
+	"\vsigned_root\x18\x01 \x01(\v2\x16.bibd.v1.SignedLogRootR\n" +
+	"signedRoot\"\x18\n" +
+	"\x16GetSelfIdentityRequest\"\x8e\x01\n" +
+	"\x17GetSelfIdentityResponse\x124\n" +
+	"\bidentity\x18\x01 \x01(\v2\x18.bibd.v1.IdentityPayloadR\bidentity\x12=\n" +
+	"\flatest_proof\x18\x02 \x01(\v2\x1a.bibd.v1.RegistrationProofR\vlatestProof2\x9b\x04\n" +
+	"\x0fIdentityService\x12T\n" +
+	"\x0fPublishIdentity\x12\x1f.bibd.v1.PublishIdentityRequest\x1a .bibd.v1.PublishIdentityResponse\x12W\n" +
+	"\x10RetrieveIdentity\x12 .bibd.v1.RetrieveIdentityRequest\x1a!.bibd.v1.RetrieveIdentityResponse\x12]\n" +
+	"\x12RetrieveIdentities\x12\".bibd.v1.RetrieveIdentitiesRequest\x1a#.bibd.v1.RetrieveIdentitiesResponse\x12]\n" +
+	"\x12SubmitRotationLink\x12\".bibd.v1.SubmitRotationLinkRequest\x1a#.bibd.v1.SubmitRotationLinkResponse\x12E\n" +
+	"\n" +
+	"GetLogRoot\x12\x1a.bibd.v1.GetLogRootRequest\x1a\x1b.bibd.v1.GetLogRootResponse\x12T\n" +
+	"\x0fGetSelfIdentity\x12\x1f.bibd.v1.GetSelfIdentityRequest\x1a .bibd.v1.GetSelfIdentityResponseB3Z1github.com/bencoepp/bib/internal/pb/bibd/v1;bibv1b\x06proto3"
 
 var (
 	file_bibd_v1_identitiy_proto_rawDescOnce sync.Once
@@ -203,28 +1430,61 @@ func file_bibd_v1_identitiy_proto_rawDescGZIP() []byte {
 	return file_bibd_v1_identitiy_proto_rawDescData
 }
 
-var file_bibd_v1_identitiy_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_bibd_v1_identitiy_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_bibd_v1_identitiy_proto_goTypes = []any{
-	(*IdentityRequest)(nil),        // 0: bibd.v1.IdentityRequest
-	(*IdentityResponse)(nil),       // 1: bibd.v1.IdentityResponse
-	(*ListIdentitiesRequest)(nil),  // 2: bibd.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil), // 3: bibd.v1.ListIdentitiesResponse
+	(*Location)(nil),                   // 0: bibd.v1.Location
+	(*IdentityPayload)(nil),            // 1: bibd.v1.IdentityPayload
+	(*SignedEnvelope)(nil),             // 2: bibd.v1.SignedEnvelope
+	(*RotationLinkPayload)(nil),        // 3: bibd.v1.RotationLinkPayload
+	(*SignedLogRoot)(nil),              // 4: bibd.v1.SignedLogRoot
+	(*InclusionProof)(nil),             // 5: bibd.v1.InclusionProof
+	(*RegistrationProof)(nil),          // 6: bibd.v1.RegistrationProof
+	(*PublishIdentityRequest)(nil),     // 7: bibd.v1.PublishIdentityRequest
+	(*PublishIdentityResponse)(nil),    // 8: bibd.v1.PublishIdentityResponse
+	(*RetrieveIdentityRequest)(nil),    // 9: bibd.v1.RetrieveIdentityRequest
+	(*RetrieveIdentityResponse)(nil),   // 10: bibd.v1.RetrieveIdentityResponse
+	(*RetrieveIdentitiesRequest)(nil),  // 11: bibd.v1.RetrieveIdentitiesRequest
+	(*IdentitySummary)(nil),            // 12: bibd.v1.IdentitySummary
+	(*RetrieveIdentitiesResponse)(nil), // 13: bibd.v1.RetrieveIdentitiesResponse
+	(*SubmitRotationLinkRequest)(nil),  // 14: bibd.v1.SubmitRotationLinkRequest
+	(*SubmitRotationLinkResponse)(nil), // 15: bibd.v1.SubmitRotationLinkResponse
+	(*GetLogRootRequest)(nil),          // 16: bibd.v1.GetLogRootRequest
+	(*GetLogRootResponse)(nil),         // 17: bibd.v1.GetLogRootResponse
+	(*GetSelfIdentityRequest)(nil),     // 18: bibd.v1.GetSelfIdentityRequest
+	(*GetSelfIdentityResponse)(nil),    // 19: bibd.v1.GetSelfIdentityResponse
 }
 var file_bibd_v1_identitiy_proto_depIdxs = []int32{
-	1, // 0: bibd.v1.ListIdentitiesResponse.identities:type_name -> bibd.v1.IdentityResponse
-	0, // 1: bibd.v1.IdentityService.RegisterIdentity:input_type -> bibd.v1.IdentityRequest
-	0, // 2: bibd.v1.IdentityService.RetrieveIdentity:input_type -> bibd.v1.IdentityRequest
-	0, // 3: bibd.v1.IdentityService.UpdateIdentity:input_type -> bibd.v1.IdentityRequest
-	2, // 4: bibd.v1.IdentityService.RetrieveIdentities:input_type -> bibd.v1.ListIdentitiesRequest
-	1, // 5: bibd.v1.IdentityService.RegisterIdentity:output_type -> bibd.v1.IdentityResponse
-	1, // 6: bibd.v1.IdentityService.RetrieveIdentity:output_type -> bibd.v1.IdentityResponse
-	1, // 7: bibd.v1.IdentityService.UpdateIdentity:output_type -> bibd.v1.IdentityResponse
-	3, // 8: bibd.v1.IdentityService.RetrieveIdentities:output_type -> bibd.v1.ListIdentitiesResponse
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0,  // 0: bibd.v1.IdentityPayload.location:type_name -> bibd.v1.Location
+	4,  // 1: bibd.v1.InclusionProof.signed_root:type_name -> bibd.v1.SignedLogRoot
+	1,  // 2: bibd.v1.RegistrationProof.identity:type_name -> bibd.v1.IdentityPayload
+	5,  // 3: bibd.v1.RegistrationProof.inclusion:type_name -> bibd.v1.InclusionProof
+	2,  // 4: bibd.v1.PublishIdentityRequest.envelope:type_name -> bibd.v1.SignedEnvelope
+	6,  // 5: bibd.v1.PublishIdentityResponse.proof:type_name -> bibd.v1.RegistrationProof
+	1,  // 6: bibd.v1.RetrieveIdentityResponse.identity:type_name -> bibd.v1.IdentityPayload
+	6,  // 7: bibd.v1.RetrieveIdentityResponse.latest_proof:type_name -> bibd.v1.RegistrationProof
+	12, // 8: bibd.v1.RetrieveIdentitiesResponse.identities:type_name -> bibd.v1.IdentitySummary
+	2,  // 9: bibd.v1.SubmitRotationLinkRequest.envelope:type_name -> bibd.v1.SignedEnvelope
+	6,  // 10: bibd.v1.SubmitRotationLinkResponse.proof:type_name -> bibd.v1.RegistrationProof
+	4,  // 11: bibd.v1.GetLogRootResponse.signed_root:type_name -> bibd.v1.SignedLogRoot
+	1,  // 12: bibd.v1.GetSelfIdentityResponse.identity:type_name -> bibd.v1.IdentityPayload
+	6,  // 13: bibd.v1.GetSelfIdentityResponse.latest_proof:type_name -> bibd.v1.RegistrationProof
+	7,  // 14: bibd.v1.IdentityService.PublishIdentity:input_type -> bibd.v1.PublishIdentityRequest
+	9,  // 15: bibd.v1.IdentityService.RetrieveIdentity:input_type -> bibd.v1.RetrieveIdentityRequest
+	11, // 16: bibd.v1.IdentityService.RetrieveIdentities:input_type -> bibd.v1.RetrieveIdentitiesRequest
+	14, // 17: bibd.v1.IdentityService.SubmitRotationLink:input_type -> bibd.v1.SubmitRotationLinkRequest
+	16, // 18: bibd.v1.IdentityService.GetLogRoot:input_type -> bibd.v1.GetLogRootRequest
+	18, // 19: bibd.v1.IdentityService.GetSelfIdentity:input_type -> bibd.v1.GetSelfIdentityRequest
+	8,  // 20: bibd.v1.IdentityService.PublishIdentity:output_type -> bibd.v1.PublishIdentityResponse
+	10, // 21: bibd.v1.IdentityService.RetrieveIdentity:output_type -> bibd.v1.RetrieveIdentityResponse
+	13, // 22: bibd.v1.IdentityService.RetrieveIdentities:output_type -> bibd.v1.RetrieveIdentitiesResponse
+	15, // 23: bibd.v1.IdentityService.SubmitRotationLink:output_type -> bibd.v1.SubmitRotationLinkResponse
+	17, // 24: bibd.v1.IdentityService.GetLogRoot:output_type -> bibd.v1.GetLogRootResponse
+	19, // 25: bibd.v1.IdentityService.GetSelfIdentity:output_type -> bibd.v1.GetSelfIdentityResponse
+	20, // [20:26] is the sub-list for method output_type
+	14, // [14:20] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_bibd_v1_identitiy_proto_init() }
@@ -238,7 +1498,7 @@ func file_bibd_v1_identitiy_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bibd_v1_identitiy_proto_rawDesc), len(file_bibd_v1_identitiy_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -29,5 +29,5 @@ func main() {
 
 	daemon.StartCapabilityChecks(cfg)
 	daemon.StartScheduler()
-	daemon.StartGRPCServer(cfg)
+	daemon.StartGRPCServer(cfg, identity)
 }

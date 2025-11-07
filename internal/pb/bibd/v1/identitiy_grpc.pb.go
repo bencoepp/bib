@@ -19,20 +19,26 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IdentityService_RegisterIdentity_FullMethodName   = "/bibd.v1.IdentityService/RegisterIdentity"
+	IdentityService_PublishIdentity_FullMethodName    = "/bibd.v1.IdentityService/PublishIdentity"
 	IdentityService_RetrieveIdentity_FullMethodName   = "/bibd.v1.IdentityService/RetrieveIdentity"
-	IdentityService_UpdateIdentity_FullMethodName     = "/bibd.v1.IdentityService/UpdateIdentity"
 	IdentityService_RetrieveIdentities_FullMethodName = "/bibd.v1.IdentityService/RetrieveIdentities"
+	IdentityService_SubmitRotationLink_FullMethodName = "/bibd.v1.IdentityService/SubmitRotationLink"
+	IdentityService_GetLogRoot_FullMethodName         = "/bibd.v1.IdentityService/GetLogRoot"
+	IdentityService_GetSelfIdentity_FullMethodName    = "/bibd.v1.IdentityService/GetSelfIdentity"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Service definition
 type IdentityServiceClient interface {
-	RegisterIdentity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error)
-	RetrieveIdentity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error)
-	UpdateIdentity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error)
-	RetrieveIdentities(ctx context.Context, in *ListIdentitiesRequest, opts ...grpc.CallOption) (*ListIdentitiesResponse, error)
+	PublishIdentity(ctx context.Context, in *PublishIdentityRequest, opts ...grpc.CallOption) (*PublishIdentityResponse, error)
+	RetrieveIdentity(ctx context.Context, in *RetrieveIdentityRequest, opts ...grpc.CallOption) (*RetrieveIdentityResponse, error)
+	RetrieveIdentities(ctx context.Context, in *RetrieveIdentitiesRequest, opts ...grpc.CallOption) (*RetrieveIdentitiesResponse, error)
+	SubmitRotationLink(ctx context.Context, in *SubmitRotationLinkRequest, opts ...grpc.CallOption) (*SubmitRotationLinkResponse, error)
+	GetLogRoot(ctx context.Context, in *GetLogRootRequest, opts ...grpc.CallOption) (*GetLogRootResponse, error)
+	GetSelfIdentity(ctx context.Context, in *GetSelfIdentityRequest, opts ...grpc.CallOption) (*GetSelfIdentityResponse, error)
 }
 
 type identityServiceClient struct {
@@ -43,19 +49,19 @@ func NewIdentityServiceClient(cc grpc.ClientConnInterface) IdentityServiceClient
 	return &identityServiceClient{cc}
 }
 
-func (c *identityServiceClient) RegisterIdentity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error) {
+func (c *identityServiceClient) PublishIdentity(ctx context.Context, in *PublishIdentityRequest, opts ...grpc.CallOption) (*PublishIdentityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IdentityResponse)
-	err := c.cc.Invoke(ctx, IdentityService_RegisterIdentity_FullMethodName, in, out, cOpts...)
+	out := new(PublishIdentityResponse)
+	err := c.cc.Invoke(ctx, IdentityService_PublishIdentity_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *identityServiceClient) RetrieveIdentity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error) {
+func (c *identityServiceClient) RetrieveIdentity(ctx context.Context, in *RetrieveIdentityRequest, opts ...grpc.CallOption) (*RetrieveIdentityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IdentityResponse)
+	out := new(RetrieveIdentityResponse)
 	err := c.cc.Invoke(ctx, IdentityService_RetrieveIdentity_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -63,20 +69,40 @@ func (c *identityServiceClient) RetrieveIdentity(ctx context.Context, in *Identi
 	return out, nil
 }
 
-func (c *identityServiceClient) UpdateIdentity(ctx context.Context, in *IdentityRequest, opts ...grpc.CallOption) (*IdentityResponse, error) {
+func (c *identityServiceClient) RetrieveIdentities(ctx context.Context, in *RetrieveIdentitiesRequest, opts ...grpc.CallOption) (*RetrieveIdentitiesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IdentityResponse)
-	err := c.cc.Invoke(ctx, IdentityService_UpdateIdentity_FullMethodName, in, out, cOpts...)
+	out := new(RetrieveIdentitiesResponse)
+	err := c.cc.Invoke(ctx, IdentityService_RetrieveIdentities_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *identityServiceClient) RetrieveIdentities(ctx context.Context, in *ListIdentitiesRequest, opts ...grpc.CallOption) (*ListIdentitiesResponse, error) {
+func (c *identityServiceClient) SubmitRotationLink(ctx context.Context, in *SubmitRotationLinkRequest, opts ...grpc.CallOption) (*SubmitRotationLinkResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListIdentitiesResponse)
-	err := c.cc.Invoke(ctx, IdentityService_RetrieveIdentities_FullMethodName, in, out, cOpts...)
+	out := new(SubmitRotationLinkResponse)
+	err := c.cc.Invoke(ctx, IdentityService_SubmitRotationLink_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) GetLogRoot(ctx context.Context, in *GetLogRootRequest, opts ...grpc.CallOption) (*GetLogRootResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLogRootResponse)
+	err := c.cc.Invoke(ctx, IdentityService_GetLogRoot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) GetSelfIdentity(ctx context.Context, in *GetSelfIdentityRequest, opts ...grpc.CallOption) (*GetSelfIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSelfIdentityResponse)
+	err := c.cc.Invoke(ctx, IdentityService_GetSelfIdentity_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -86,11 +112,15 @@ func (c *identityServiceClient) RetrieveIdentities(ctx context.Context, in *List
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations must embed UnimplementedIdentityServiceServer
 // for forward compatibility.
+//
+// Service definition
 type IdentityServiceServer interface {
-	RegisterIdentity(context.Context, *IdentityRequest) (*IdentityResponse, error)
-	RetrieveIdentity(context.Context, *IdentityRequest) (*IdentityResponse, error)
-	UpdateIdentity(context.Context, *IdentityRequest) (*IdentityResponse, error)
-	RetrieveIdentities(context.Context, *ListIdentitiesRequest) (*ListIdentitiesResponse, error)
+	PublishIdentity(context.Context, *PublishIdentityRequest) (*PublishIdentityResponse, error)
+	RetrieveIdentity(context.Context, *RetrieveIdentityRequest) (*RetrieveIdentityResponse, error)
+	RetrieveIdentities(context.Context, *RetrieveIdentitiesRequest) (*RetrieveIdentitiesResponse, error)
+	SubmitRotationLink(context.Context, *SubmitRotationLinkRequest) (*SubmitRotationLinkResponse, error)
+	GetLogRoot(context.Context, *GetLogRootRequest) (*GetLogRootResponse, error)
+	GetSelfIdentity(context.Context, *GetSelfIdentityRequest) (*GetSelfIdentityResponse, error)
 	mustEmbedUnimplementedIdentityServiceServer()
 }
 
@@ -101,17 +131,23 @@ type IdentityServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedIdentityServiceServer struct{}
 
-func (UnimplementedIdentityServiceServer) RegisterIdentity(context.Context, *IdentityRequest) (*IdentityResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RegisterIdentity not implemented")
+func (UnimplementedIdentityServiceServer) PublishIdentity(context.Context, *PublishIdentityRequest) (*PublishIdentityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublishIdentity not implemented")
 }
-func (UnimplementedIdentityServiceServer) RetrieveIdentity(context.Context, *IdentityRequest) (*IdentityResponse, error) {
+func (UnimplementedIdentityServiceServer) RetrieveIdentity(context.Context, *RetrieveIdentityRequest) (*RetrieveIdentityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetrieveIdentity not implemented")
 }
-func (UnimplementedIdentityServiceServer) UpdateIdentity(context.Context, *IdentityRequest) (*IdentityResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateIdentity not implemented")
-}
-func (UnimplementedIdentityServiceServer) RetrieveIdentities(context.Context, *ListIdentitiesRequest) (*ListIdentitiesResponse, error) {
+func (UnimplementedIdentityServiceServer) RetrieveIdentities(context.Context, *RetrieveIdentitiesRequest) (*RetrieveIdentitiesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetrieveIdentities not implemented")
+}
+func (UnimplementedIdentityServiceServer) SubmitRotationLink(context.Context, *SubmitRotationLinkRequest) (*SubmitRotationLinkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitRotationLink not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetLogRoot(context.Context, *GetLogRootRequest) (*GetLogRootResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLogRoot not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetSelfIdentity(context.Context, *GetSelfIdentityRequest) (*GetSelfIdentityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSelfIdentity not implemented")
 }
 func (UnimplementedIdentityServiceServer) mustEmbedUnimplementedIdentityServiceServer() {}
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue()                         {}
@@ -134,26 +170,26 @@ func RegisterIdentityServiceServer(s grpc.ServiceRegistrar, srv IdentityServiceS
 	s.RegisterService(&IdentityService_ServiceDesc, srv)
 }
 
-func _IdentityService_RegisterIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(IdentityRequest)
+func _IdentityService_PublishIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishIdentityRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(IdentityServiceServer).RegisterIdentity(ctx, in)
+		return srv.(IdentityServiceServer).PublishIdentity(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: IdentityService_RegisterIdentity_FullMethodName,
+		FullMethod: IdentityService_PublishIdentity_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).RegisterIdentity(ctx, req.(*IdentityRequest))
+		return srv.(IdentityServiceServer).PublishIdentity(ctx, req.(*PublishIdentityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _IdentityService_RetrieveIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(IdentityRequest)
+	in := new(RetrieveIdentityRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -165,31 +201,13 @@ func _IdentityService_RetrieveIdentity_Handler(srv interface{}, ctx context.Cont
 		FullMethod: IdentityService_RetrieveIdentity_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).RetrieveIdentity(ctx, req.(*IdentityRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _IdentityService_UpdateIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(IdentityRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IdentityServiceServer).UpdateIdentity(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IdentityService_UpdateIdentity_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).UpdateIdentity(ctx, req.(*IdentityRequest))
+		return srv.(IdentityServiceServer).RetrieveIdentity(ctx, req.(*RetrieveIdentityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _IdentityService_RetrieveIdentities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListIdentitiesRequest)
+	in := new(RetrieveIdentitiesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -201,7 +219,61 @@ func _IdentityService_RetrieveIdentities_Handler(srv interface{}, ctx context.Co
 		FullMethod: IdentityService_RetrieveIdentities_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).RetrieveIdentities(ctx, req.(*ListIdentitiesRequest))
+		return srv.(IdentityServiceServer).RetrieveIdentities(ctx, req.(*RetrieveIdentitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_SubmitRotationLink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitRotationLinkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).SubmitRotationLink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_SubmitRotationLink_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).SubmitRotationLink(ctx, req.(*SubmitRotationLinkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_GetLogRoot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLogRootRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetLogRoot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetLogRoot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetLogRoot(ctx, req.(*GetLogRootRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_GetSelfIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSelfIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetSelfIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetSelfIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetSelfIdentity(ctx, req.(*GetSelfIdentityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -214,20 +286,28 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*IdentityServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "RegisterIdentity",
-			Handler:    _IdentityService_RegisterIdentity_Handler,
+			MethodName: "PublishIdentity",
+			Handler:    _IdentityService_PublishIdentity_Handler,
 		},
 		{
 			MethodName: "RetrieveIdentity",
 			Handler:    _IdentityService_RetrieveIdentity_Handler,
 		},
 		{
-			MethodName: "UpdateIdentity",
-			Handler:    _IdentityService_UpdateIdentity_Handler,
-		},
-		{
 			MethodName: "RetrieveIdentities",
 			Handler:    _IdentityService_RetrieveIdentities_Handler,
+		},
+		{
+			MethodName: "SubmitRotationLink",
+			Handler:    _IdentityService_SubmitRotationLink_Handler,
+		},
+		{
+			MethodName: "GetLogRoot",
+			Handler:    _IdentityService_GetLogRoot_Handler,
+		},
+		{
+			MethodName: "GetSelfIdentity",
+			Handler:    _IdentityService_GetSelfIdentity_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

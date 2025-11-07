@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bib/internal/config"
+	"bib/internal/context"
 	"bib/internal/daemon/service"
 	pb "bib/internal/pb/bibd/v1"
 	"net"
@@ -11,16 +12,19 @@ import (
 	"google.golang.org/grpc"
 )
 
-func StartGRPCServer(config *config.BibDaemonConfig) {
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(config.Port))
+func StartGRPCServer(cfg *config.BibDaemonConfig, idCtx *context.IdentityContext) {
+	listener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.Port))
 	if err != nil {
 		log.Fatal(err)
 	}
 	grpcServer := grpc.NewServer()
 
-	identityService := &service.IdentityService{}
+	identityService := &service.IdentityService{
+		IDCtx: idCtx,
+		Store: service.NewIdentityStore(),
+	}
 	pb.RegisterIdentityServiceServer(grpcServer, identityService)
-	log.Info("The gRPC server is running on port", "port", config.Port)
+	log.Info("The gRPC server is running on port", "port", cfg.Port)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		log.Fatal(err)
