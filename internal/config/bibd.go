@@ -9,9 +9,12 @@ import (
 )
 
 type BibDaemonConfig struct {
-	General GeneralConfig `yaml:"general"`
-	Update  UpdateConfig  `yaml:"update"`
-	Port    int           `yaml:"port"`
+	General          GeneralConfig `yaml:"general"`
+	Update           UpdateConfig  `yaml:"update"`
+	P2P              P2PConfig     `yaml:"p2p"`
+	Port             int           `yaml:"port"`
+	EnableLocalGrpc  bool          `yaml:"enable_local_grpc"`
+	EnableReflection bool          `yaml:"enable_reflection"`
 }
 
 func ApplyBibDaemonDefaults(v *viper.Viper) {
@@ -37,7 +40,20 @@ func ApplyBibDaemonDefaults(v *viper.Viper) {
 		"http_timeout_in_sec": 30,
 	})
 
+	v.SetDefault("p2p", map[string]any{
+		"listenAddresses":    []string{"/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic-v1"},
+		"bootstrapPeers":     []string{},
+		"rendezvous":         "/bibd/peers/1.0",
+		"enableMDNS":         true,
+		"enableDHT":          true,
+		"enableHolePunching": true,
+		"enableRelay":        true,
+		"grpcProtocolID":     "/bib/grpc/1.0",
+	})
+
 	v.SetDefault("port", 50051)
+	v.SetDefault("enable_local_grpc", true)
+	v.SetDefault("enable_reflection", true)
 }
 
 // SaveBibDaemonConfig saves the configuration for the Bib Daemon using the extracted SaveConfig logic.

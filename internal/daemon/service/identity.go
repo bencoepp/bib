@@ -11,19 +11,17 @@ import (
 	"sync"
 	"time"
 
-	contexts "bib/internal/context"
+	"bib/internal/contexts"
 	"bib/internal/identity"
 	"bib/internal/identity/transparency"
 	bibv1 "bib/internal/pb/bibd/v1"
 )
 
-// StoredProof keeps the latest inclusion proof and signed root for an identity.
 type StoredProof struct {
 	Inclusion  *bibv1.InclusionProof
 	SignedRoot *bibv1.SignedLogRoot
 }
 
-// In-memory identity store (replace with persistent store later).
 type IdentityStore struct {
 	mu         sync.RWMutex
 	identities map[string]*bibv1.IdentityPayload

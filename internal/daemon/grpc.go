@@ -2,7 +2,7 @@ package daemon
 
 import (
 	"bib/internal/config"
-	"bib/internal/context"
+	"bib/internal/contexts"
 	"bib/internal/daemon/service"
 	pb "bib/internal/pb/bibd/v1"
 	"net"
@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func StartGRPCServer(cfg *config.BibDaemonConfig, idCtx *context.IdentityContext) {
+func StartGRPCServer(cfg *config.BibDaemonConfig, idCtx *contexts.IdentityContext) {
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.Port))
 	if err != nil {
 		log.Fatal(err)

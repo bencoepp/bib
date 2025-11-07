@@ -2,7 +2,7 @@ package daemon
 
 import (
 	"bib/internal/config"
-	"bib/internal/context"
+	"bib/internal/contexts"
 	"bib/internal/identity"
 	"bib/internal/identity/secure"
 	"bib/internal/identity/transparency"
@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/log"
 )
 
-func RegisterDaemonIdentity(config *config.BibDaemonConfig, version string) (*context.IdentityContext, error) {
+func RegisterDaemonIdentity(config *config.BibDaemonConfig, version string) (*contexts.IdentityContext, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func RegisterDaemonIdentity(config *config.BibDaemonConfig, version string) (*co
 		return nil, err
 	}
 
-	ctx := &context.IdentityContext{
+	ctx := &contexts.IdentityContext{
 		ID:          km.ID,
 		Kind:        kind,
 		Hostname:    hostname,
