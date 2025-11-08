@@ -11,12 +11,41 @@ import (
 
 var ErrNoDefaultConfigPath = errors.New("no default config path available")
 
-// SaveConfig saves the configuration to the user's home directory or system-wide directory, based on the OS.
+// GetDefaultConfigPath resolves the default configuration file path for the given
+// app name without writing anything to disk. It ensures the directory exists and
+// is writable, and returns the full path to config.yaml or an error if no
+// suitable location is available.
+//
+// Resolution order:
 // 1. User's home directory: ~/.<appname>/config.yaml
 // 2. System-wide directory:
 //   - /etc/<appname>/config.yaml (Linux/Unix)
-//   - /Library/Application\ Support/<AppName>/config.yaml (macOS)
+//   - ~/Library/Application Support/<AppName>/config.yaml (macOS)
 //   - %PROGRAMDATA%\<AppName>\config.yaml (Windows)
+func GetDefaultConfigPath(appName string) (string, error) {
+	if appName == "" {
+		return "", errors.New("app name must be provided")
+	}
+
+	// Try user's home directory under `.appName`
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		homeAppDir := filepath.Join(homeDir, "."+appName)
+		if ensureWritableDir(homeAppDir) {
+			return filepath.Join(homeAppDir, "config.yaml"), nil
+		}
+	}
+
+	// Fall back to system-wide directory
+	systemDir := getSystemConfigDir(appName)
+	if ensureWritableDir(systemDir) {
+		return filepath.Join(systemDir, "config.yaml"), nil
+	}
+
+	return "", ErrNoDefaultConfigPath
+}
+
+// SaveConfig saves the current viper configuration to the resolved default path.
+// It uses GetDefaultConfigPath to resolve the path and then writes via viper.
 func SaveConfig(appName string) (string, error) {
 	if appName == "" {
 		return "", errors.New("app name must be provided")
@@ -24,25 +53,13 @@ func SaveConfig(appName string) (string, error) {
 
 	viper.SetConfigType("yaml")
 
-	// Attempt to save to the user's home directory under `.appName`
-	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
-		homeAppDir := filepath.Join(homeDir, "."+appName)
-		if ensureWritableDir(homeAppDir) {
-			configPath := filepath.Join(homeAppDir, "config.yaml")
-			viper.SetConfigFile(configPath)
-			return writeConfig(configPath)
-		}
+	configPath, err := GetDefaultConfigPath(appName)
+	if err != nil {
+		return "", err
 	}
 
-	// If saving to the home directory fails, attempt to save to the system-wide directory
-	systemDir := getSystemConfigDir(appName)
-	if ensureWritableDir(systemDir) {
-		configPath := filepath.Join(systemDir, "config.yaml")
-		viper.SetConfigFile(configPath)
-		return writeConfig(configPath)
-	}
-
-	return "", ErrNoDefaultConfigPath
+	viper.SetConfigFile(configPath)
+	return writeConfig(configPath)
 }
 
 // writeConfig writes the configuration to the given path.

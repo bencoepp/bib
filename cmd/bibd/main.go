@@ -3,6 +3,7 @@ package main
 import (
 	"bib/internal/config"
 	"bib/internal/config/util"
+	"bib/internal/contexts"
 	"bib/internal/daemon"
 
 	"github.com/charmbracelet/log"
@@ -21,7 +22,7 @@ func main() {
 	log.Info("Starting bib daemon...")
 	log.Info("It might take a while to index your library the first time. Please be patient.")
 
-	identity, err := daemon.RegisterDaemonIdentity(cfg, Version)
+	identity, err := contexts.RegisterDaemonIdentity(cfg, Version)
 	if err != nil {
 		log.Fatal("Failed to register daemon identity:", "error", err)
 	}

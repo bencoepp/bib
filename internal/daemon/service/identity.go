@@ -1,6 +1,10 @@
 package service
 
 import (
+	"bib/internal/contexts"
+	"bib/internal/identity"
+	"bib/internal/identity/transparency"
+	bibv1 "bib/internal/pb/bibd/v1"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -9,12 +13,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
-
-	"bib/internal/contexts"
-	"bib/internal/identity"
-	"bib/internal/identity/transparency"
-	bibv1 "bib/internal/pb/bibd/v1"
 )
 
 type StoredProof struct {
@@ -91,66 +89,6 @@ type IdentityService struct {
 
 	IDCtx *contexts.IdentityContext
 	Store *IdentityStore
-}
-
-// GetSelfIdentity returns the daemon's own identity and latest proof if known.
-// Proof will be non-nil once you've published this identity (PublishIdentity)
-// and the service has stored the resulting inclusion proof.
-func (s *IdentityService) GetSelfIdentity(ctx context.Context, _ *bibv1.GetSelfIdentityRequest) (*bibv1.GetSelfIdentityResponse, error) {
-	// Prefer the published/stored version
-	published, ok := s.Store.GetIdentity(s.IDCtx.ID)
-
-	var identityPayload *bibv1.IdentityPayload
-	if ok {
-		identityPayload = published
-	} else {
-		// Synthesize from IdentityContext (not yet published)
-		identityPayload = &bibv1.IdentityPayload{
-			Id:        s.IDCtx.ID,
-			Kind:      s.IDCtx.Kind,
-			PublicKey: s.IDCtx.PublicKey,
-			Hostname:  s.IDCtx.Hostname,
-			Version:   s.IDCtx.Version,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-		}
-		if s.IDCtx.Location != nil {
-			identityPayload.Location = &bibv1.Location{
-				Country:     s.IDCtx.Location.Country,
-				CountryCode: s.IDCtx.Location.CountryCode,
-				Region:      s.IDCtx.Location.Region,
-				RegionName:  s.IDCtx.Location.RegionName,
-				City:        s.IDCtx.Location.City,
-				Zip:         s.IDCtx.Location.Zip,
-				Latitude:    s.IDCtx.Location.Latitude,
-				Longitude:   s.IDCtx.Location.Longitude,
-				Timezone:    s.IDCtx.Location.Timezone,
-				Isp:         s.IDCtx.Location.Isp,
-				Org:         s.IDCtx.Location.Org,
-				Asn:         s.IDCtx.Location.As,
-				Ip:          s.IDCtx.Location.Ip.String(),
-			}
-		}
-	}
-
-	// Try to fetch the latest proof from the store.
-	latestProof, signedRoot, err := s.getLatestProofForID(identityPayload.Id)
-	var regProof *bibv1.RegistrationProof
-	if err == nil && latestProof != nil && signedRoot != nil {
-		regProof = &bibv1.RegistrationProof{
-			Identity: identityPayload,
-			Inclusion: &bibv1.InclusionProof{
-				LeafIndex:  latestProof.LeafIndex,
-				LeafHash:   latestProof.LeafHash,
-				Siblings:   latestProof.Siblings,
-				SignedRoot: signedRoot,
-			},
-		}
-	}
-
-	return &bibv1.GetSelfIdentityResponse{
-		Identity:    identityPayload,
-		LatestProof: regProof,
-	}, nil
 }
 
 func (s *IdentityService) PublishIdentity(ctx context.Context, req *bibv1.PublishIdentityRequest) (*bibv1.PublishIdentityResponse, error) {

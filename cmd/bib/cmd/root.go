@@ -2,10 +2,15 @@ package cmd
 
 import (
 	"bib/internal/config"
+	"bib/internal/config/util"
+	"bib/internal/contexts"
+	"bib/internal/ui/models"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -13,6 +18,7 @@ import (
 var (
 	cfgFile    string
 	Config     *config.BibConfig
+	Identity   *contexts.IdentityContext
 	appVersion string
 )
 
@@ -26,9 +32,17 @@ and the original idea read our manifesto via:
 
 bib mission`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := ensureConfigAndIdentity(); err != nil {
+			var nfErr *notFoundConfigError
+			if !errors.As(err, &nfErr) {
+				return err
+			}
+		}
 
-		// Enforce allowed bootstrap commands before identity exists.
-		return enforcePreIdentityGate()
+		if Identity == nil {
+			return enforcePreIdentityGate()
+		}
+		return nil
 	},
 }
 
@@ -56,8 +70,89 @@ func initConfig() {
 	viper.AutomaticEnv()
 }
 
-// enforcePreIdentityGate returns an error if user tries any command other than:
-// version, mission, setup (until identity creation logic is implemented).
+func ensureConfigAndIdentity() error {
+	// Already loaded
+	if Config != nil && Identity != nil {
+		return nil
+	}
+
+	// 1. Load config if not present
+	if Config == nil {
+		path, cfgErr := resolveConfigPath()
+		if cfgErr != nil {
+			// propagate not-found sentinel so caller can decide gate
+			return cfgErr
+		}
+		loadedCfg, err := config.LoadBibConfig(path)
+		if err != nil {
+			return fmt.Errorf("failed to load config file %s: %w", path, err)
+		}
+		Config = loadedCfg
+	}
+
+	// 2. Load identity if not present
+	if Identity == nil && Config != nil {
+		pass := ""
+
+		if Config.General.UsePassphrase {
+			passphrase, err := models.PromptPassphrase("Enter your identity passphrase: ")
+			if err != nil {
+				log.Fatal(err)
+			}
+			pass = passphrase
+		} else {
+			pass = "example-passphrase"
+		}
+
+		ctx, err := contexts.LoadExistingUserIdentity(Config, pass)
+		if err != nil {
+			// Decide which errors allow fallback to gate vs. fatal
+			switch {
+			case errors.Is(err, contexts.ErrUserIdentityNotFound):
+				// Identity simply does not exist yet; return nil so gating will occur.
+				return nil
+			case errors.Is(err, contexts.ErrPassphraseRequired):
+				return fmt.Errorf("identity requires a passphrase; provide via --passphrase or BIB_PASSPHRASE: %w", err)
+			case errors.Is(err, contexts.ErrSecondFactorRequired):
+				return fmt.Errorf("second factor required but could not be acquired: %w", err)
+			default:
+				return fmt.Errorf("failed to load existing user identity: %w", err)
+			}
+		}
+		Identity = ctx
+	}
+
+	return nil
+}
+
+func resolveConfigPath() (string, error) {
+	// Explicit flag path
+	if cfgFile != "" {
+		if _, err := os.Stat(cfgFile); err == nil {
+			return cfgFile, nil
+		}
+		return "", fmt.Errorf("specified config file not found: %s", cfgFile)
+	}
+
+	// Autodiscover
+	path, err := util.FindConfigPath(util.Options{
+		AppName:      "bib",
+		FileNames:    []string{"config.yaml", "config.yml"},
+		AlsoCheckCWD: true,
+	})
+	if err != nil {
+		if errors.Is(err, util.ErrConfigNotFound) {
+			return "", &notFoundConfigError{}
+		}
+		return "", err
+	}
+	return path, nil
+}
+
+type notFoundConfigError struct{}
+
+func (e *notFoundConfigError) Error() string { return "config not found" }
+
 func enforcePreIdentityGate() error {
 	sub := firstNonFlagArg()
 	if sub == "" {
@@ -75,7 +170,6 @@ func enforcePreIdentityGate() error {
 	return fmt.Errorf("command %q disabled until identity is initialized. Run 'bib setup' first. Allowed: version, mission, setup", sub)
 }
 
-// firstNonFlagArg finds the first argument that is not a flag (starts without '-')
 func firstNonFlagArg() string {
 	for _, a := range os.Args[1:] {
 		if strings.HasPrefix(a, "-") {

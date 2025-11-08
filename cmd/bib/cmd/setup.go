@@ -48,7 +48,10 @@ The actual creation of a bibd configuration file is optional and can be triggere
 			}
 		} else {
 			p := tea.NewProgram(
-				models.SetupModel{},
+				models.SetupModel{
+					Cfg:     Config,
+					Version: appVersion,
+				},
 				tea.WithAltScreen(),
 				tea.WithMouseCellMotion(),
 			)

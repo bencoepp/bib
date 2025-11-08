@@ -1,6 +1,8 @@
 package models
 
 import (
+	"bib/internal/config"
+	"bib/internal/contexts"
 	"errors"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,23 +12,32 @@ import (
 )
 
 var (
-	firstName string
-	lastName  string
-	email     string
+	firstName   string
+	lastName    string
+	email       string
+	confirmUser bool
 
-	confirm bool
+	theme             string
+	checkCapabilities bool
+	checkLocation     bool
+	passphrase        string
+	useSecondFactor   bool
+	confirmConfig     bool
 )
 
 type SetupModel struct {
-	ready  bool
-	width  int
-	height int
-	form   *huh.Form
+	ready      bool
+	width      int
+	height     int
+	userForm   *huh.Form
+	configForm *huh.Form
+	daemonForm *huh.Form
+
+	Cfg     *config.BibConfig
+	Version string
 }
 
 func (m SetupModel) Init() tea.Cmd {
-	// We lazily build the form on the first WindowSizeMsg, so nothing to init yet.
-	// If you prefer to build it eagerly, create it here and return m.form.Init().
 	return nil
 }
 
@@ -37,41 +48,90 @@ func (m SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
-			// esc will also Abort the form; keeping it to quit is fine.
 			return m, tea.Quit
 		}
-
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
 
-		// Lazily build the form and INIT it exactly once so inputs are focused.
-		if m.form == nil {
-			m.form = buildForm()
-			cmds = append(cmds, m.form.Init())
+		if m.userForm == nil {
+			m.userForm = buildUserForm()
+			cmds = append(cmds, m.userForm.Init())
 		}
 
-		// Constrain form width
 		formWidth := min(60, max(20, m.width-6))
-		m.form = m.form.WithWidth(formWidth)
+		m.userForm = m.userForm.WithWidth(formWidth)
+		if m.configForm != nil {
+			m.configForm = m.configForm.WithWidth(formWidth)
+		}
 	}
 
-	// Forward messages to the form
-	if m.form != nil {
-		_, cmd := m.form.Update(msg)
+	activeConfig := m.configForm != nil
+
+	if activeConfig {
+		_, cmd := m.configForm.Update(msg)
 		cmds = append(cmds, cmd)
 
-		// State is a field in recent huh versions
-		switch m.form.State {
+		switch m.configForm.State {
 		case huh.StateCompleted:
+			// Only persist if user confirmed config
+			if confirmConfig {
+				// Apply updated values to the model's config
+				m.Cfg = config.DefaultBibConfig()
+				m.Cfg.General.Theme = theme
+				m.Cfg.General.CheckCapabilities = checkCapabilities
+				m.Cfg.General.CheckLocation = checkLocation
+				m.Cfg.General.UseSecondFactor = useSecondFactor
 
-			log.Printf("Saved user:\n- First: %s\n- Last:  %s\n- Email: %s\n", firstName, lastName, email)
+				// Save updated config
+				if _, err := config.SaveUpdatedBibConfig(m.Cfg); err != nil {
+					log.Fatal("Failed to save updated config:", "error", err)
+					return m, tea.Quit
+				}
+
+				// Register user identity (passphrase collected in this form)
+				userIdentity, err := contexts.RegisterUserIdentity(
+					m.Cfg,
+					m.Version,
+					firstName,
+					lastName,
+					email,
+					passphrase,
+				)
+				if err != nil {
+					log.Fatal("Failed to register user identity:", "error", err)
+					return m, tea.Quit
+				}
+
+				log.Info("User identity registered", "id", userIdentity.ID)
+			} else {
+				log.Info("Config not confirmed; exiting without saving changes.")
+			}
 			return m, tea.Quit
 		case huh.StateAborted:
 			return m, tea.Quit
-		default:
+		}
+	} else if m.userForm != nil {
+		_, cmd := m.userForm.Update(msg)
+		cmds = append(cmds, cmd)
 
+		switch m.userForm.State {
+		case huh.StateCompleted:
+			if confirmUser {
+				// Build config form exactly once
+				if m.configForm == nil {
+					formWidth := min(60, max(20, m.width-6))
+					m.configForm = buildConfigForm().WithWidth(formWidth)
+					cmds = append(cmds, m.configForm.Init())
+				}
+				// Do NOT quit yet; allow user to interact with config form
+			} else {
+				// User declined identity; exit early
+				return m, tea.Quit
+			}
+		case huh.StateAborted:
+			return m, tea.Quit
 		}
 	}
 
@@ -82,11 +142,16 @@ func (m SetupModel) View() string {
 	if !m.ready {
 		return "\n  Initializing..."
 	}
-	if m.form == nil {
+	if m.userForm == nil {
 		return "\n  Loading form..."
 	}
 
-	content := m.form.View()
+	var content string
+	if m.configForm != nil {
+		content = m.configForm.View()
+	} else {
+		content = m.userForm.View()
+	}
 
 	box := lipgloss.NewStyle().
 		Padding(1, 2).
@@ -101,7 +166,7 @@ func (m SetupModel) View() string {
 	)
 }
 
-func buildForm() *huh.Form {
+func buildUserForm() *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -135,7 +200,46 @@ func buildForm() *huh.Form {
 				Title("Confirm user identity").
 				Affirmative("Yes").
 				Negative("No!").
-				Value(&confirm),
+				Value(&confirmUser),
+		),
+	).WithShowHelp(true)
+}
+
+func buildConfigForm() *huh.Form {
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Theme:").
+				Options(
+					huh.NewOption("Auto", "auto"),
+					huh.NewOption("Dark", "dark"),
+					huh.NewOption("Light", "light"),
+				).
+				Value(&theme),
+			huh.NewConfirm().
+				Title("Check capabilities?").
+				Affirmative("Yes!").
+				Negative("No.").
+				Value(&checkCapabilities),
+			huh.NewConfirm().
+				Title("Check location?").
+				Affirmative("Yes!").
+				Negative("No.").
+				Value(&checkLocation),
+			huh.NewInput().
+				Title("Passphrase").
+				EchoMode(huh.EchoModePassword).
+				Value(&passphrase),
+			huh.NewConfirm().
+				Title("Use second factor auth?").
+				Affirmative("Yes!").
+				Negative("No.").
+				Value(&useSecondFactor),
+			huh.NewConfirm().
+				Title("Confirm config").
+				Affirmative("Yes").
+				Negative("No!").
+				Value(&confirmConfig),
 		),
 	).WithShowHelp(true)
 }

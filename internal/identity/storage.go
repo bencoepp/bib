@@ -11,17 +11,15 @@ import (
 )
 
 type PublicIdentityFile struct {
-	ID        string    `json:"id"`
-	PublicKey string    `json:"publicKey"` // hex
-	Kind      string    `json:"kind"`
-	Hostname  string    `json:"hostname,omitempty"`
-	Version   string    `json:"version,omitempty"`
-	Location  *Location `json:"location,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	// Consider future fields like UpdatedAt if you refresh metadata later.
+	ID        string         `json:"id"`
+	PublicKey string         `json:"publicKey"` // hex
+	Kind      string         `json:"kind"`
+	User      UserIdentity   `json:"user"`
+	Daemon    DaemonIdentity `json:"daemon"`
+	CreatedAt time.Time      `json:"createdAt"`
 }
 
-func SavePublicIdentity(path string, kind string, km *KeyMaterial, hostname, version string, loc *Location) error {
+func SavePublicIdentity(path string, kind string, km *KeyMaterial, user *UserIdentity, daemon *DaemonIdentity) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -29,9 +27,8 @@ func SavePublicIdentity(path string, kind string, km *KeyMaterial, hostname, ver
 		ID:        km.ID,
 		PublicKey: hex.EncodeToString(km.PublicKey),
 		Kind:      kind,
-		Hostname:  hostname,
-		Version:   version,
-		Location:  loc,
+		User:      *user,
+		Daemon:    *daemon,
 		CreatedAt: time.Now().UTC(),
 	}
 	b, err := json.MarshalIndent(data, "", "  ")
@@ -74,5 +71,14 @@ func UpdatePublicIdentityLocation(path string, loc *Location) error {
 	if err != nil {
 		return err
 	}
-	return SavePublicIdentity(path, kind, km, meta.Hostname, meta.Version, loc)
+
+	if kind == "user" {
+		meta.User.Location = *loc
+	} else if kind == "daemon" {
+		meta.Daemon.Location = *loc
+	} else {
+		return errors.New("unknown identity kind")
+	}
+
+	return SavePublicIdentity(path, kind, km, &meta.User, &meta.Daemon)
 }
