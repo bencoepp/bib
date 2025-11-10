@@ -5,8 +5,12 @@ import (
 	"bib/internal/config/util"
 	"bib/internal/contexts"
 	"bib/internal/daemon"
+	"bib/internal/daemon/service"
+	"bib/internal/p2p"
+	"context"
 
 	"github.com/charmbracelet/log"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -28,7 +32,35 @@ func main() {
 	}
 	log.Info("Daemon identity registered", "id", identity.ID)
 
+	ctx := context.Background()
+	peerStore := p2p.NewPeerStore()
+
+	host, err := p2p.BuildHost(ctx, p2p.Config{
+		Identity:   *identity,
+		EnableQUIC: true,
+		NATPortMap: true,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	p2p.RegisterSelf(peerStore, host)
+
+	identitySvc := &service.IdentityService{
+		IDCtx: identity,
+		Store: service.NewIdentityStore(),
+	}
+
+	discoverySvc := &service.DiscoveryService{
+		PeerStore: peerStore,
+		Host:      host,
+	}
+
+	daemon.StartP2P(ctx, *identity, host, peerStore, func(s *grpc.Server) {
+		daemon.RegisterBibServices(s, identitySvc, discoverySvc)
+	})
 	daemon.StartCapabilityChecks(cfg)
 	daemon.StartScheduler()
-	daemon.StartGRPCServer(cfg, identity)
+	daemon.StartGRPCServer(cfg, func(s *grpc.Server) {
+		daemon.RegisterBibServices(s, identitySvc, discoverySvc)
+	})
 }
