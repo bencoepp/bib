@@ -11,13 +11,14 @@ import (
 // meCmd represents the me command
 var meCmd = &cobra.Command{
 	Use:   "me",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Display information about yourself",
+	Long: `This command displays detailed information about your
+local identity. As well as the list of local bib deamon instances.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+You can use this command to verify your identity and check the status,
+you can also use it to troubleshoot any issues related to your identity.
+
+For more detailed status information run 'bib status'.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if _, err := tea.NewProgram(models.MeModel{
 			Theme:    Theme,
