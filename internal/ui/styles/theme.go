@@ -1,6 +1,8 @@
 package styles
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+)
 
 type Theme struct {
 	// Colors
@@ -21,6 +23,9 @@ type Theme struct {
 	Muted    lipgloss.Style
 	Border   lipgloss.Style
 	Panel    lipgloss.Style
+	Table    lipgloss.Style
+	Help     lipgloss.Style
+	Box      lipgloss.Style
 }
 
 func buildStyles(t Theme) Theme {
@@ -33,6 +38,13 @@ func buildStyles(t Theme) Theme {
 		Padding(0, 1).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.Faint)
+	t.Table = lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240"))
+	t.Help = lipgloss.NewStyle().Faint(true)
+	t.Box = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1, 3)
 	return t
 }
 

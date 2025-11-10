@@ -5,6 +5,7 @@ import (
 	"bib/internal/config/util"
 	"bib/internal/contexts"
 	"bib/internal/ui/models"
+	"bib/internal/ui/styles"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +20,7 @@ var (
 	cfgFile    string
 	Config     *config.BibConfig
 	Identity   *contexts.IdentityContext
+	Theme      styles.Theme
 	appVersion string
 )
 
@@ -32,6 +34,7 @@ and the original idea read our manifesto via:
 
 bib mission`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+
 		if err := ensureConfigAndIdentity(); err != nil {
 			var nfErr *notFoundConfigError
 			if !errors.As(err, &nfErr) {
@@ -39,6 +42,12 @@ bib mission`,
 			}
 		}
 
+		themeSelected, err := cmd.Flags().GetString("theme")
+		if err != nil {
+			return fmt.Errorf("failed to get theme flag: %w", err)
+		}
+		theme, _ := styles.FromMode(themeSelected)
+		Theme = theme
 		if Identity == nil {
 			return enforcePreIdentityGate()
 		}
