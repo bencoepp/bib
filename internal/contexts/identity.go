@@ -297,6 +297,9 @@ func loadExistingLogSigningKey(path string, passphrase, secondFactor []byte) (ed
 
 func RegisterDaemonIdentity(cfg *config.BibDaemonConfig, version string) (*IdentityContext, error) {
 	home, err := getHomeDir("daemon")
+	if cfg.General.IdentityPath != "" {
+		home = cfg.General.IdentityPath
+	}
 	if err != nil {
 		return nil, err
 	}

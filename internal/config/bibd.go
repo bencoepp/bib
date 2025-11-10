@@ -9,12 +9,10 @@ import (
 )
 
 type BibDaemonConfig struct {
-	General          GeneralConfig `yaml:"general"`
-	Update           UpdateConfig  `yaml:"update"`
-	P2P              P2PConfig     `yaml:"p2p"`
-	Port             int           `yaml:"port"`
-	EnableLocalGrpc  bool          `yaml:"enable_local_grpc"`
-	EnableReflection bool          `yaml:"enable_reflection"`
+	General GeneralConfig `yaml:"general"`
+	Update  UpdateConfig  `yaml:"update"`
+	P2P     P2PConfig     `yaml:"p2p"`
+	Port    int           `yaml:"port"`
 }
 
 func ApplyBibDaemonDefaults(v *viper.Viper) {
@@ -26,7 +24,7 @@ func ApplyBibDaemonDefaults(v *viper.Viper) {
 	v.SetDefault("general", map[string]interface{}{
 		"theme":              "auto",
 		"check_capabilities": true,
-		"identity_path":      filepath.Join(path, ".bib", "identity.json"),
+		"identity_path":      filepath.Join(path, ".bibd"),
 		"retrieve_location":  true,
 		"use_passphrase":     false,
 		"use_second_factor":  false,
@@ -41,14 +39,36 @@ func ApplyBibDaemonDefaults(v *viper.Viper) {
 	})
 
 	v.SetDefault("p2p", map[string]any{
-		"listenAddresses":    []string{"/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic-v1"},
-		"bootstrapPeers":     []string{},
-		"rendezvous":         "/bibd/peers/1.0",
-		"enableMDNS":         true,
-		"enableDHT":          true,
-		"enableHolePunching": true,
-		"enableRelay":        true,
-		"grpcProtocolID":     "/bib/grpc/1.0",
+		"discovery": map[string]any{
+			"rendezvous":       "bib-network",
+			"enable_mdns":      true,
+			"mdns_service_tag": "bib-mdns",
+			"dht_server":       false,
+			"bootstrap_peers": []string{
+				"/ip4/127.0.0.1/udp/60261/quic-v1",
+				"/ip4/192.168.2.53/udp/60261/quic-v1",
+			},
+			"advertise_interval":        300,
+			"skip_mdns_if_no_multicast": false,
+			"require_mdns":              false,
+		},
+		"rtt": map[string]any{
+			"enable_rtt_probing": true,
+			"interval":           300,
+			"concurrency":        3,
+			"pings_per_peer":     5,
+			"connect_timeout":    10,
+			"ping_timeout":       5,
+		},
+		"preferences": map[string]any{
+			"region":              "auto",
+			"tags":                []string{},
+			"weight_latency":      0.5,
+			"weight_load":         0.3,
+			"weight_region":       0.1,
+			"weight_tags":         0.1,
+			"min_samples_for_rtt": 5,
+		},
 	})
 
 	v.SetDefault("port", 50051)

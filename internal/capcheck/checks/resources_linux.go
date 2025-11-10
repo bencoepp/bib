@@ -2,6 +2,19 @@
 
 package checks
 
+import (
+	"bib/internal/capcheck"
+	"bufio"
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+)
+
 type ResourcesChecker struct{}
 
 func (r ResourcesChecker) ID() capcheck.CapabilityID { return "resources" }

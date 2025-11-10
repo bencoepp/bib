@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 type PeerEntry struct {
@@ -63,6 +65,7 @@ func (s *PeerStore) UpsertFromCandidate(c Candidate) {
 func (s *PeerStore) Sink() func(context.Context, Candidate) {
 	return func(_ context.Context, c Candidate) {
 		s.UpsertFromCandidate(c)
+		log.Info("peer ingested", "peerID", c.PeerID, "source", c.Source)
 	}
 }
 

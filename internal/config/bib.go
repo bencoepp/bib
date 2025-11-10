@@ -24,7 +24,7 @@ func ApplyBibDefaults(v *viper.Viper) {
 	v.SetDefault("general", map[string]interface{}{
 		"theme":              "auto",
 		"check_capabilities": true,
-		"identity_path":      filepath.Join(path, ".bib", "identity.json"),
+		"identity_path":      filepath.Join(path, ".bib"),
 		"retrieve_location":  true,
 		"use_passphrase":     true,
 		"use_second_factor":  true,

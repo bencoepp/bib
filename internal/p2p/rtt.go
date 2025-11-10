@@ -39,10 +39,10 @@ type RTTSamplerOptions struct {
 
 func (o *RTTSamplerOptions) normalize() {
 	if o.Interval <= 0 {
-		o.Interval = 1 * time.Minute
+		o.Interval = 1 * time.Second
 	}
 	if o.PerPeerMinInterval <= 0 {
-		o.PerPeerMinInterval = 2 * time.Minute
+		o.PerPeerMinInterval = 2 * time.Second
 	}
 	if o.Concurrency <= 0 {
 		o.Concurrency = 4

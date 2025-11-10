@@ -36,9 +36,10 @@ func main() {
 	peerStore := p2p.NewPeerStore()
 
 	host, err := p2p.BuildHost(ctx, p2p.Config{
-		Identity:   *identity,
-		EnableQUIC: true,
-		NATPortMap: true,
+		Identity:        *identity,
+		EnableQUIC:      true,
+		NATPortMap:      true,
+		ListenAddresses: cfg.P2P.Discovery.BootstrapPeers,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -55,7 +56,7 @@ func main() {
 		Host:      host,
 	}
 
-	daemon.StartP2P(ctx, *identity, host, peerStore, func(s *grpc.Server) {
+	daemon.StartP2P(ctx, host, cfg, peerStore, func(s *grpc.Server) {
 		daemon.RegisterBibServices(s, identitySvc, discoverySvc)
 	})
 	daemon.StartCapabilityChecks(cfg)
