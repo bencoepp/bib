@@ -1,0 +1,32 @@
+syntax = "proto3";
+option go_package = "github.com/bencoepp/bib/internal/pb/bibd/v1;bibv1";
+
+package bibd.v1;
+
+message PeerCandidate {
+  string peer_id = 1;
+  repeated string multiaddrs = 2;
+  double score = 3;
+  double last_rtt_ms = 4;
+  double load = 5;
+  string region = 6;
+  repeated string tags = 7;
+  string source = 8;
+}
+
+message FindCandidatesRequest {
+  uint32 limit = 1;              // Max candidates to return (default 10)
+  string prefer_region = 2;       // Optional region preference
+  repeated string prefer_tags = 3; // Optional tag preferences
+  bool include_self = 4; // optionally include the local daemon as a candidate
+}
+
+message FindCandidatesResponse {
+  repeated PeerCandidate candidates = 1;
+}
+
+// Extend existing Discovery service:
+service Discovery {
+  // ... existing RPCs ...
+  rpc FindCandidates(FindCandidatesRequest) returns (FindCandidatesResponse);
+}
