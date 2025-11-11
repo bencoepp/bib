@@ -10,14 +10,14 @@ func RegisterSelf(store *PeerStore, h host.Host) {
 	if store == nil || h == nil {
 		return
 	}
-	addrs := make([]string, 0, len(h.Addrs()))
+	addresses := make([]string, 0, len(h.Addrs()))
 	for _, ma := range h.Addrs() {
-		addrs = append(addrs, ma.String())
+		addresses = append(addresses, ma.String())
 	}
 	store.UpsertFromCandidate(Candidate{
-		PeerID:     h.ID().String(),
-		Multiaddrs: addrs,
-		Source:     "self",
-		Discovered: time.Now(),
+		PeerID:       h.ID().String(),
+		MultiAddress: addresses,
+		Source:       "self",
+		Discovered:   time.Now(),
 	})
 }

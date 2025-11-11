@@ -41,11 +41,11 @@ func ParseBootstrapPeers(addresses []string) ([]peer.AddrInfo, error) {
 }
 
 func SupportsMulticast() bool {
-	ifaces, err := net.Interfaces()
+	interfaces, err := net.Interfaces()
 	if err != nil {
 		return false
 	}
-	for _, ifc := range ifaces {
+	for _, ifc := range interfaces {
 		if (ifc.Flags&net.FlagUp) != 0 &&
 			(ifc.Flags&net.FlagMulticast) != 0 &&
 			(ifc.Flags&net.FlagLoopback) == 0 {

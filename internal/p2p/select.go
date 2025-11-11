@@ -4,14 +4,14 @@ import "sort"
 
 // CandidateView is the presentation struct used to build the RPC response.
 type CandidateView struct {
-	PeerID     string
-	Multiaddrs []string
-	Score      float64
-	LastRTTMs  float64
-	Load       float64
-	Region     string
-	Tags       []string
-	Source     string
+	PeerID         string
+	MultiAddresses []string
+	Score          float64
+	LastRTTMs      float64
+	Load           float64
+	Region         string
+	Tags           []string
+	Source         string
 }
 
 // TopCandidates returns up to 'limit' ranked peers using given Preferences.
@@ -46,14 +46,14 @@ func (s *PeerStore) TopCandidates(limit int, prefs Preferences, includeSelf bool
 		}
 		rankedList = append(rankedList, ranked{
 			view: CandidateView{
-				PeerID:     e.PeerID,
-				Multiaddrs: e.Multiaddrs,
-				Score:      score,
-				LastRTTMs:  e.LastRTTMs,
-				Load:       e.Load,
-				Region:     e.Region,
-				Tags:       e.Tags,
-				Source:     e.Source,
+				PeerID:         e.PeerID,
+				MultiAddresses: e.Multiaddrs,
+				Score:          score,
+				LastRTTMs:      e.LastRTTMs,
+				Load:           e.Load,
+				Region:         e.Region,
+				Tags:           e.Tags,
+				Source:         e.Source,
 			},
 		})
 	}

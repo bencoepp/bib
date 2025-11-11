@@ -39,7 +39,7 @@ func (s *DiscoveryService) FindCandidates(ctx context.Context, req *bibv1.FindCa
 	for _, v := range views {
 		resp.Candidates = append(resp.Candidates, &bibv1.PeerCandidate{
 			PeerId:     v.PeerID,
-			Multiaddrs: v.Multiaddrs,
+			Multiaddrs: v.MultiAddresses,
 			Score:      v.Score,
 			LastRttMs:  v.LastRTTMs,
 			Load:       v.Load,

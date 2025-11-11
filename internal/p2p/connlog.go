@@ -20,27 +20,25 @@ func AttachConnLoggerWithIngest(h host.Host, store *PeerStore) func() {
 				"dir", c.Stat().Direction.String(),
 			)
 
-			// Ingest into app store
 			if store != nil {
-				// Collect addresses: start with the connection's remote addr, then add known peerstore addrs.
 				seen := map[string]struct{}{
 					c.RemoteMultiaddr().String(): {},
 				}
-				var addrs []string
-				addrs = append(addrs, c.RemoteMultiaddr().String())
+				var addresses []string
+				addresses = append(addresses, c.RemoteMultiaddr().String())
 				for _, ma := range h.Peerstore().Addrs(peerID) {
 					s := ma.String()
 					if _, ok := seen[s]; ok {
 						continue
 					}
 					seen[s] = struct{}{}
-					addrs = append(addrs, s)
+					addresses = append(addresses, s)
 				}
 				store.UpsertFromCandidate(Candidate{
-					PeerID:     peerID.String(),
-					Multiaddrs: addrs,
-					Source:     "conn",
-					Discovered: time.Now(),
+					PeerID:       peerID.String(),
+					MultiAddress: addresses,
+					Source:       "conn",
+					Discovered:   time.Now(),
 				})
 			}
 		},

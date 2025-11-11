@@ -11,20 +11,16 @@ import (
 )
 
 type Candidate struct {
-	PeerID     string
-	Multiaddrs []string
-	Source     string // "dht" or "mdns" (or future sources)
-	Discovered time.Time
+	PeerID       string
+	MultiAddress []string
+	Source       string // "dht" or "mdns" (or future sources)
+	Discovered   time.Time
 }
 
 type IngestOptions struct {
-	// How long to keep discovered addresses in libp2p's Peerstore.
-	// If zero, defaults to 2 hours.
 	AddrTTL time.Duration
 }
 
-// NewPeerIngester returns a callback compatible with DiscoveryConfig.OnPeer.
-// It updates the libp2p Peerstore and forwards a Candidate to the provided sink.
 func NewPeerIngester(
 	ctx context.Context,
 	h host.Host,
@@ -38,7 +34,6 @@ func NewPeerIngester(
 		if ai.ID == "" || ai.ID == h.ID() {
 			return
 		}
-		// Dedup addrs and add to peerstore with TTL.
 		seen := make(map[string]struct{}, len(ai.Addrs))
 		var list []multiaddr.Multiaddr
 		for _, ma := range ai.Addrs {
@@ -57,15 +52,15 @@ func NewPeerIngester(
 		}
 
 		// Build candidate for the application store.
-		var sAddrs []string
+		var sAddresses []string
 		for _, ma := range list {
-			sAddrs = append(sAddrs, ma.String())
+			sAddresses = append(sAddresses, ma.String())
 		}
 		c := Candidate{
-			PeerID:     ai.ID.String(),
-			Multiaddrs: sAddrs,
-			Source:     source,
-			Discovered: time.Now(),
+			PeerID:       ai.ID.String(),
+			MultiAddress: sAddresses,
+			Source:       source,
+			Discovered:   time.Now(),
 		}
 
 		// Forward to sink in a goroutine so discovery loop never blocks.

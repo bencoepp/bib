@@ -49,13 +49,13 @@ func (s *PeerStore) UpsertFromCandidate(c Candidate) (created bool, addrDelta in
 		for _, a := range e.Multiaddrs {
 			existing[a] = struct{}{}
 		}
-		for _, a := range c.Multiaddrs {
+		for _, a := range c.MultiAddress {
 			if _, ok := existing[a]; !ok {
 				addrDelta++
 			}
 		}
 		// Merge addresses (dedupe) and update metadata.
-		e.Multiaddrs = DedupeStrings(c.Multiaddrs, e.Multiaddrs)
+		e.Multiaddrs = DedupeStrings(c.MultiAddress, e.Multiaddrs)
 		e.Source = c.Source
 		e.LastSeen = now
 		return false, addrDelta
@@ -64,12 +64,12 @@ func (s *PeerStore) UpsertFromCandidate(c Candidate) (created bool, addrDelta in
 	// New peer.
 	s.peers[c.PeerID] = &PeerEntry{
 		PeerID:     c.PeerID,
-		Multiaddrs: DedupeStrings(c.Multiaddrs, nil),
+		Multiaddrs: DedupeStrings(c.MultiAddress, nil),
 		Source:     c.Source,
 		FirstSeen:  now,
 		LastSeen:   now,
 	}
-	return true, len(c.Multiaddrs)
+	return true, len(c.MultiAddress)
 }
 
 func (s *PeerStore) Sink() func(context.Context, Candidate) {
@@ -77,7 +77,7 @@ func (s *PeerStore) Sink() func(context.Context, Candidate) {
 		created, addrDelta := s.UpsertFromCandidate(c)
 		switch {
 		case created:
-			log.Info("peer added", "peerID", c.PeerID, "source", c.Source, "addrs", len(c.Multiaddrs))
+			log.Info("peer added", "peerID", c.PeerID, "source", c.Source, "addrs", len(c.MultiAddress))
 		case addrDelta > 0:
 			log.Info("peer updated", "peerID", c.PeerID, "source", c.Source, "new_addrs", addrDelta)
 		default:

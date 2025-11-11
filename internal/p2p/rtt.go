@@ -20,7 +20,6 @@ type RTTSamplerOptions struct {
 	// Minimum interval per peer between samples to avoid hammering.
 	PerPeerMinInterval time.Duration
 
-	// Number of concurrent probes (libp2p + optional TCP).
 	Concurrency int
 
 	// Number of ping messages per peer for libp2p; average is used.
@@ -30,7 +29,6 @@ type RTTSamplerOptions struct {
 	ConnectTimeout time.Duration
 	PingTimeout    time.Duration
 
-	// Optional TCP ping function. If nil, only libp2p ping is used.
 	TCPPing TCPPingFunc
 
 	// Optional scoring preferences. If non-zero, sampler recomputes and stores score after updates.
@@ -147,12 +145,12 @@ func (s *RTTSampler) sampleOnce(ctx context.Context) {
 
 func (s *RTTSampler) samplePeer(ctx context.Context, e *PeerEntry) {
 	var best time.Duration
-	var any bool
+	var a bool
 
 	// 1) libp2p ping
 	if d, err := s.pingP2P(ctx, e.PeerID); err == nil {
 		best = d
-		any = true
+		a = true
 	} else {
 		// Not fatal, just log at debug level later; keep quiet for now to avoid spam.
 	}
@@ -160,14 +158,14 @@ func (s *RTTSampler) samplePeer(ctx context.Context, e *PeerEntry) {
 	// 2) Optional TCP ping
 	if s.opts.TCPPing != nil {
 		if d, err := s.opts.TCPPing(ctx, e.PeerID); err == nil {
-			if !any || d < best {
+			if !a || d < best {
 				best = d
-				any = true
+				a = true
 			}
 		}
 	}
 
-	if any {
+	if a {
 		s.store.AddRTTSample(e.PeerID, best)
 		// Optional score refresh.
 		if !s.opts.Preferences.IsEmpty() {

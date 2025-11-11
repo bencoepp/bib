@@ -2,14 +2,13 @@ package p2p
 
 import (
 	"bib/internal/contexts"
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
-	tcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 
 	"github.com/multiformats/go-multiaddr"
 )
@@ -21,7 +20,7 @@ type Config struct {
 	NATPortMap      bool
 }
 
-func BuildHost(ctx context.Context, cfg Config) (host.Host, error) {
+func BuildHost(cfg Config) (host.Host, error) {
 	if len(cfg.Identity.KeyMaterial.PrivateKey) == 0 {
 		return nil, ErrIdentityNoPrivateKey
 	}
@@ -31,7 +30,7 @@ func BuildHost(ctx context.Context, cfg Config) (host.Host, error) {
 		return nil, fmt.Errorf("p2p: convert ed25519 key: %w", err)
 	}
 
-	var listenAddrs []multiaddr.Multiaddr
+	var listenAddresses []multiaddr.Multiaddr
 
 	// Determine needed transports.
 	needTCP := false
@@ -40,12 +39,12 @@ func BuildHost(ctx context.Context, cfg Config) (host.Host, error) {
 	if len(cfg.ListenAddresses) == 0 {
 		// Defaults: always TCP, optionally QUIC.
 		tcpMa, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/0")
-		listenAddrs = append(listenAddrs, tcpMa)
+		listenAddresses = append(listenAddresses, tcpMa)
 		needTCP = true
 
 		if cfg.EnableQUIC {
 			quicMa, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/udp/0/quic-v1")
-			listenAddrs = append(listenAddrs, quicMa)
+			listenAddresses = append(listenAddresses, quicMa)
 			needQUIC = true
 		}
 	} else {
@@ -59,7 +58,7 @@ func BuildHost(ctx context.Context, cfg Config) (host.Host, error) {
 			if err != nil {
 				return nil, fmt.Errorf("p2p: invalid listen address %q: %w", addrStr, ErrInvalidListenAddress)
 			}
-			listenAddrs = append(listenAddrs, ma)
+			listenAddresses = append(listenAddresses, ma)
 
 			if strings.Contains(addrStr, "/tcp/") {
 				needTCP = true
@@ -72,7 +71,7 @@ func BuildHost(ctx context.Context, cfg Config) (host.Host, error) {
 
 	opts := []libp2p.Option{
 		libp2p.Identity(lpPrivateKey),
-		libp2p.ListenAddrs(listenAddrs...),
+		libp2p.ListenAddrs(listenAddresses...),
 	}
 
 	// IMPORTANT: Specifying Transport replaces defaults; list all needed.
