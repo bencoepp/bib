@@ -8,6 +8,10 @@ import (
 	"bib/internal/daemon/service"
 	"bib/internal/p2p"
 	"context"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/charmbracelet/log"
 	"google.golang.org/grpc"
@@ -32,36 +36,63 @@ func main() {
 	}
 	log.Info("Daemon identity registered", "id", identity.ID)
 
-	ctx := context.Background()
+	// Long-lived context that cancels on SIGINT/SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	peerStore := p2p.NewPeerStore()
 
 	host, err := p2p.BuildHost(ctx, p2p.Config{
 		Identity:        *identity,
 		EnableQUIC:      true,
 		NATPortMap:      true,
-		ListenAddresses: cfg.P2P.Discovery.BootstrapPeers,
+		ListenAddresses: cfg.P2P.ListenAddresses, // pinned ports if configured
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	cancelConnLog := p2p.AttachConnLoggerWithIngest(host, peerStore)
+	defer cancelConnLog()
+
 	p2p.RegisterSelf(peerStore, host)
 
 	identitySvc := &service.IdentityService{
 		IDCtx: identity,
 		Store: service.NewIdentityStore(),
 	}
-
 	discoverySvc := &service.DiscoveryService{
 		PeerStore: peerStore,
 		Host:      host,
 	}
 
-	daemon.StartP2P(ctx, host, cfg, peerStore, func(s *grpc.Server) {
-		daemon.RegisterBibServices(s, identitySvc, discoverySvc)
-	})
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		daemon.StartP2P(ctx, host, cfg, peerStore, func(s *grpc.Server) {
+			daemon.RegisterBibServices(s, identitySvc, discoverySvc)
+		})
+	}()
+
 	daemon.StartCapabilityChecks(cfg)
 	daemon.StartScheduler()
-	daemon.StartGRPCServer(cfg, func(s *grpc.Server) {
-		daemon.RegisterBibServices(s, identitySvc, discoverySvc)
-	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		daemon.StartGRPCServer(ctx, cfg, func(s *grpc.Server) {
+			daemon.RegisterBibServices(s, identitySvc, discoverySvc)
+		})
+	}()
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	log.Info("Shutting down...")
+
+	wg.Wait()
+
+	_ = host.Close()
+	log.Info("Shutdown complete")
 }

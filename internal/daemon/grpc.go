@@ -4,6 +4,7 @@ import (
 	"bib/internal/config"
 	"bib/internal/daemon/service"
 	pb "bib/internal/pb/bibd/v1"
+	"context"
 	"net"
 	"strconv"
 
@@ -11,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func StartGRPCServer(cfg *config.BibDaemonConfig, register func(*grpc.Server)) {
+func StartGRPCServer(ctx context.Context, cfg *config.BibDaemonConfig, register func(*grpc.Server)) {
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.Port))
 	if err != nil {
 		log.Fatal(err)
@@ -21,11 +22,18 @@ func StartGRPCServer(cfg *config.BibDaemonConfig, register func(*grpc.Server)) {
 		register(srv)
 	}
 
-	log.Info("The gRPC server is running on port", "port", cfg.Port)
+	go func() {
+		<-ctx.Done()
+		srv.GracefulStop()
+	}()
 
-	if err := srv.Serve(listener); err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+		log.Info("The gRPC server is running on port", "port", cfg.Port)
+
+		if err := srv.Serve(listener); err != nil {
+			log.Fatal(err)
+		}
+	}()
 }
 
 func RegisterBibServices(

@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -107,7 +108,19 @@ func StartDiscovery(parent context.Context, h host.Host, cfg DiscoveryConfig) (*
 	// Best-effort connect to bootstraps to seed the DHT.
 	for _, ai := range bootstrapInfos {
 		go func(ai peer.AddrInfo) {
-			_ = h.Connect(ctx, ai)
+			dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			err := h.Connect(dialCtx, ai)
+			if err != nil {
+				// Differentiate swarm closed
+				if strings.Contains(err.Error(), "swarm closed") {
+					log.Warn("p2p: bootstrap dial aborted (swarm closed)", "peer", ai.ID, "err", err)
+				} else {
+					log.Warn("p2p: bootstrap dial failed", "peer", ai.ID, "err", err)
+				}
+				return
+			}
+			log.Info("p2p: bootstrap connected", "peer", ai.ID)
 		}(ai)
 	}
 

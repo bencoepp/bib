@@ -34,7 +34,7 @@ func NewPeerStore() *PeerStore {
 	}
 }
 
-func (s *PeerStore) UpsertFromCandidate(c Candidate) {
+func (s *PeerStore) UpsertFromCandidate(c Candidate) (created bool, addrDelta int) {
 	now := c.Discovered
 	if now.IsZero() {
 		now = time.Now()
@@ -43,29 +43,46 @@ func (s *PeerStore) UpsertFromCandidate(c Candidate) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	e, ok := s.peers[c.PeerID]
-	if !ok {
-		s.peers[c.PeerID] = &PeerEntry{
-			PeerID:     c.PeerID,
-			Multiaddrs: DedupeStrings(c.Multiaddrs, nil),
-			Source:     c.Source,
-			FirstSeen:  now,
-			LastSeen:   now,
+	if e, ok := s.peers[c.PeerID]; ok {
+		// Existing peer: compute how many addresses are new before deduping.
+		existing := make(map[string]struct{}, len(e.Multiaddrs))
+		for _, a := range e.Multiaddrs {
+			existing[a] = struct{}{}
 		}
-		return
+		for _, a := range c.Multiaddrs {
+			if _, ok := existing[a]; !ok {
+				addrDelta++
+			}
+		}
+		// Merge addresses (dedupe) and update metadata.
+		e.Multiaddrs = DedupeStrings(c.Multiaddrs, e.Multiaddrs)
+		e.Source = c.Source
+		e.LastSeen = now
+		return false, addrDelta
 	}
 
-	// Merge addresses (dedupe).
-	e.Multiaddrs = DedupeStrings(c.Multiaddrs, e.Multiaddrs)
-	// Update provenance to latest source (optional policy).
-	e.Source = c.Source
-	e.LastSeen = now
+	// New peer.
+	s.peers[c.PeerID] = &PeerEntry{
+		PeerID:     c.PeerID,
+		Multiaddrs: DedupeStrings(c.Multiaddrs, nil),
+		Source:     c.Source,
+		FirstSeen:  now,
+		LastSeen:   now,
+	}
+	return true, len(c.Multiaddrs)
 }
 
 func (s *PeerStore) Sink() func(context.Context, Candidate) {
 	return func(_ context.Context, c Candidate) {
-		s.UpsertFromCandidate(c)
-		log.Info("peer ingested", "peerID", c.PeerID, "source", c.Source)
+		created, addrDelta := s.UpsertFromCandidate(c)
+		switch {
+		case created:
+			log.Info("peer added", "peerID", c.PeerID, "source", c.Source, "addrs", len(c.Multiaddrs))
+		case addrDelta > 0:
+			log.Info("peer updated", "peerID", c.PeerID, "source", c.Source, "new_addrs", addrDelta)
+		default:
+			log.Debug("peer seen", "peerID", c.PeerID, "source", c.Source)
+		}
 	}
 }
 
@@ -96,7 +113,6 @@ func (s *PeerStore) Snapshot() []PeerEntry {
 	return out
 }
 
-// Count returns the number of peers in the store.
 func (s *PeerStore) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

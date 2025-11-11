@@ -9,10 +9,10 @@ import (
 )
 
 type BibDaemonConfig struct {
-	General GeneralConfig `yaml:"general"`
-	Update  UpdateConfig  `yaml:"update"`
-	P2P     P2PConfig     `yaml:"p2p"`
-	Port    int           `yaml:"port"`
+	General GeneralConfig `mapstructure:"general" yaml:"general"`
+	Update  UpdateConfig  `mapstructure:"update" yaml:"update"`
+	P2P     P2PConfig     `mapstructure:"p2p" yaml:"p2p"`
+	Port    int           `mapstructure:"port" yaml:"port"`
 }
 
 func ApplyBibDaemonDefaults(v *viper.Viper) {
@@ -39,15 +39,16 @@ func ApplyBibDaemonDefaults(v *viper.Viper) {
 	})
 
 	v.SetDefault("p2p", map[string]any{
+		"listen_addresses": []string{
+			"/ip4/0.0.0.0/tcp/4001",
+			"/ip4/0.0.0.0/udp/4002/quic-v1",
+		},
+
 		"discovery": map[string]any{
-			"rendezvous":       "bib-network",
-			"enable_mdns":      true,
-			"mdns_service_tag": "bib-mdns",
-			"dht_server":       false,
-			"bootstrap_peers": []string{
-				"/ip4/127.0.0.1/udp/60261/quic-v1",
-				"/ip4/192.168.2.53/udp/60261/quic-v1",
-			},
+			"rendezvous":                "bib-network",
+			"enable_mdns":               true,
+			"mdns_service_tag":          "bib-mdns",
+			"dht_server":                false,
 			"advertise_interval":        300,
 			"skip_mdns_if_no_multicast": false,
 			"require_mdns":              false,
