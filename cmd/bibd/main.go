@@ -40,9 +40,16 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	db, err := daemon.OpenDatabase(cfg)
+	if err != nil {
+		log.Fatal("Failed to open database:", "error", err)
+	}
+
+	log.Info("Database connection established")
+
 	peerStore := p2p.NewPeerStore()
 
-	host, err := p2p.BuildHost(ctx, p2p.Config{
+	host, err := p2p.BuildHost(p2p.Config{
 		Identity:        *identity,
 		EnableQUIC:      true,
 		NATPortMap:      true,
@@ -94,5 +101,10 @@ func main() {
 	wg.Wait()
 
 	_ = host.Close()
+	if err := daemon.CloseDb(db); err != nil {
+		log.Error("Failed to close database:", "error", err)
+	} else {
+		log.Info("Database connection closed")
+	}
 	log.Info("Shutdown complete")
 }

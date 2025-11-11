@@ -9,10 +9,11 @@ import (
 )
 
 type BibDaemonConfig struct {
-	General GeneralConfig `mapstructure:"general" yaml:"general"`
-	Update  UpdateConfig  `mapstructure:"update" yaml:"update"`
-	P2P     P2PConfig     `mapstructure:"p2p" yaml:"p2p"`
-	Port    int           `mapstructure:"port" yaml:"port"`
+	General  GeneralConfig  `mapstructure:"general" yaml:"general"`
+	Update   UpdateConfig   `mapstructure:"update" yaml:"update"`
+	Database DatabaseConfig `mapstructure:"database" yaml:"database"`
+	P2P      P2PConfig      `mapstructure:"p2p" yaml:"p2p"`
+	Port     int            `mapstructure:"port" yaml:"port"`
 }
 
 func ApplyBibDaemonDefaults(v *viper.Viper) {
@@ -69,6 +70,16 @@ func ApplyBibDaemonDefaults(v *viper.Viper) {
 			"weight_region":       0.1,
 			"weight_tags":         0.1,
 			"min_samples_for_rtt": 5,
+		},
+		"database": map[string]any{
+			"host":                 "localhost",
+			"port":                 54320,
+			"user":                 "bibd",
+			"password":             "bibdpassword",
+			"dbname":               "bibd",
+			"sslmode":              "disable",
+			"max_open_connections": 25,
+			"max_idle_connections": 5,
 		},
 	})
 
