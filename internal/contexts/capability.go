@@ -2,41 +2,249 @@ package contexts
 
 import (
 	"bib/internal/capcheck"
-	"bib/internal/capcheck/checks"
-	"bib/internal/config"
-	"context"
-	"sync"
 	"time"
-
-	"github.com/charmbracelet/log"
 )
 
+// CapabilityContext aggregates consolidated, typed sections,
+// plus legacy core fields and a raw map of all CheckResults.
 type CapabilityContext struct {
+	// Consolidated sections
+	System      SystemSection      `json:"system"`
+	Network     NetworkSection     `json:"network"`
+	Storage     StorageSection     `json:"storage"`
+	Compute     ComputeSection     `json:"compute"`
+	Tooling     ToolingSection     `json:"tooling"`
+	Kubernetes  KubernetesSection  `json:"kubernetes"`
+	Cloud       CloudSection       `json:"cloud"`
+	Secrets     SecretsSection     `json:"secrets"`
+	Performance PerformanceSection `json:"performance"`
+
+	// Legacy core typed fields (kept for backward compatibility)
 	ContainerRuntime ContainerRuntimeCapability `json:"container_runtime"`
-	Kubernetes       KubernetesCapability       `json:"kubernetes"`
 	Internet         InternetCapability         `json:"internet"`
 	Resources        ResourcesCapability        `json:"resources"`
 
+	// Generic raw results for every check
+	GenericCapabilities map[string]capcheck.CheckResult `json:"generic_capabilities"`
+
 	LastUpdated time.Time `json:"last_updated"`
 }
+
+// ----------------- Consolidated Section Types -----------------
+
+// SystemSection groups OS/kernel, virtualization, compliance, security, locale, and time info.
+type SystemSection struct {
+	OS         string         `json:"os"`
+	Arch       string         `json:"arch"`
+	Kernel     KernelFeatures `json:"kernel"`
+	Virt       Virtualization `json:"virtualization"`
+	Compliance ComplianceInfo `json:"compliance"`
+	Security   SecurityInfo   `json:"security"`
+	Locale     LocaleInfo     `json:"locale"`
+	Time       TimeInfo       `json:"time"`
+}
+
+type KernelFeatures struct {
+	CgroupsPresent  bool   `json:"cgroups_present"`
+	SELinuxPresent  bool   `json:"selinux_present"`
+	AppArmorPresent bool   `json:"apparmor_present"`
+	CGroupVersion   string `json:"cgroup_version,omitempty"`
+}
+
+type Virtualization struct {
+	InContainer bool `json:"in_container"`
+	DockerEnv   bool `json:"docker_env"`
+}
+
+type ComplianceInfo struct {
+	FIPSEnabledRaw string `json:"fips_enabled_raw,omitempty"`
+}
+
+type SecurityInfo struct {
+	SELinuxPresent  bool `json:"selinux_present"`
+	AppArmorPresent bool `json:"apparmor_present"`
+}
+
+type LocaleInfo struct {
+	Vars map[string]string `json:"vars,omitempty"` // LANG, LC_ALL, LC_CTYPE, TZ
+}
+
+type TimeInfo struct {
+	WallTimeRFC3339 string `json:"wall_time_rfc3339,omitempty"`
+	MonotonicTestNS int64  `json:"monotonic_test_ns,omitempty"`
+}
+
+// NetworkSection consolidates internet/DNS/reachability/proxy/TLS/SCM/VPN.
+type NetworkSection struct {
+	Internet      InternetCapability `json:"internet"`
+	Reachability  ReachabilityInfo   `json:"reachability"`
+	DNS           DNSInfo            `json:"dns"`
+	Proxy         ProxyInfo          `json:"proxy"`
+	TLSPKI        TLSPKIInfo         `json:"tls_pki"`
+	SourceControl SCMConnectivity    `json:"source_control"`
+	VPN           VPNInfo            `json:"vpn"`
+}
+
+type ReachabilityInfo struct {
+	Attempts  []NetworkAttempt `json:"attempts,omitempty"`
+	IPv6      bool             `json:"ipv6"`
+	IPv6Error string           `json:"ipv6_error,omitempty"`
+}
+
+type NetworkAttempt struct {
+	Host     string `json:"host"`
+	Port     string `json:"port"`
+	Success  bool   `json:"success"`
+	LatencyM int64  `json:"latency_ms"`
+	Error    string `json:"error,omitempty"`
+}
+
+type DNSInfo struct {
+	Queries []DNSQueryResult `json:"queries,omitempty"`
+}
+
+type DNSQueryResult struct {
+	Host     string   `json:"host"`
+	Success  bool     `json:"success"`
+	IPs      []string `json:"ips,omitempty"`
+	LatencyM int64    `json:"latency_ms"`
+	Error    string   `json:"error,omitempty"`
+}
+
+type ProxyInfo struct {
+	DetectedURL string            `json:"detected_url,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
+}
+
+type TLSPKIInfo struct {
+	SystemRootsCount int    `json:"system_roots_count,omitempty"`
+	SSLCertFile      string `json:"ssl_cert_file,omitempty"`
+}
+
+type SCMConnectivity struct {
+	SSHOK        bool  `json:"ssh_ok"`
+	HTTPSOK      bool  `json:"https_ok"`
+	SSHLatencyMS int64 `json:"ssh_latency_ms,omitempty"`
+	HTTPSLatency int64 `json:"https_latency_ms,omitempty"`
+}
+
+type VPNInfo struct {
+	Present bool   `json:"present"`
+	Method  string `json:"method,omitempty"`
+}
+
+// StorageSection consolidates disk space, performance, and temp/cache writability.
+type StorageSection struct {
+	Paths       []DiskPathStat      `json:"paths,omitempty"`
+	Performance DiskPerformance     `json:"performance"`
+	TempCache   []DirWritableStatus `json:"temp_cache,omitempty"`
+}
+
+type DiskPathStat struct {
+	Path        string  `json:"path"`
+	BytesFree   uint64  `json:"bytes_free"`
+	BytesTotal  uint64  `json:"bytes_total"`
+	PercentFree float64 `json:"percent_free"`
+	Err         string  `json:"err,omitempty"`
+}
+
+type DiskPerformance struct {
+	WriteNS int64 `json:"write_ns,omitempty"`
+	ReadNS  int64 `json:"read_ns,omitempty"`
+}
+
+type DirWritableStatus struct {
+	Path     string `json:"path"`
+	Writable bool   `json:"writable"`
+	Error    string `json:"error,omitempty"`
+}
+
+// ComputeSection consolidates resources, CPU, GPU, memory, limits.
+type ComputeSection struct {
+	Resources ResourcesCapability `json:"resources"`
+	CPU       CPUInfo             `json:"cpu"`
+	GPU       GPUInfo             `json:"gpu"`
+	Memory    MemoryInfo          `json:"memory"`
+	Limits    LimitsInfo          `json:"limits"`
+}
+
+type CPUInfo struct {
+	Arch         string `json:"arch"`
+	CoresLogical int    `json:"cores_logical"`
+}
+
+type GPUInfo struct {
+	Present              bool     `json:"present"`
+	NVIDIADevices        []string `json:"nvidia_devices,omitempty"`
+	CUDAHome             string   `json:"cuda_home,omitempty"`
+	NvidiaVisibleDevices string   `json:"nvidia_visible_devices,omitempty"`
+}
+
+type MemoryInfo struct {
+	AllocBytes uint64 `json:"alloc_bytes,omitempty"`
+	SysBytes   uint64 `json:"sys_bytes,omitempty"`
+	HeapAlloc  uint64 `json:"heap_alloc,omitempty"`
+	HeapSys    uint64 `json:"heap_sys,omitempty"`
+	HeapIdle   uint64 `json:"heap_idle,omitempty"`
+	HeapInuse  uint64 `json:"heap_inuse,omitempty"`
+}
+
+type LimitsInfo struct {
+	Implemented bool   `json:"implemented"`
+	Note        string `json:"note,omitempty"`
+}
+
+// ToolingSection consolidates CLI, language runtimes, container tools.
+type ToolingSection struct {
+	CLI              CLIToolchain      `json:"cli"`
+	LanguageRuntimes map[string]string `json:"language_runtimes,omitempty"`
+	ContainerTools   []string          `json:"container_tools,omitempty"`
+}
+
+type CLIToolchain struct {
+	Found   []string `json:"found,omitempty"`
+	Missing []string `json:"missing,omitempty"`
+}
+
+// KubernetesSection consolidates kubeconfig and kubectl info.
+type KubernetesSection struct {
+	KubeconfigPaths       []string `json:"kubeconfig_paths,omitempty"`
+	KubeconfigExists      bool     `json:"kubeconfig_exists"`
+	InClusterTokenPath    string   `json:"in_cluster_token_path,omitempty"`
+	InClusterTokenExists  bool     `json:"in_cluster_token_exists"`
+	CurrentContext        string   `json:"current_context,omitempty"`
+	CurrentContextCluster string   `json:"current_context_cluster,omitempty"`
+	AvailableContexts     []string `json:"available_contexts,omitempty"`
+	KubectlPath           string   `json:"kubectl_path,omitempty"`
+	KubectlClientVersion  string   `json:"kubectl_client_version,omitempty"`
+	Supported             bool     `json:"supported"`
+}
+
+// CloudSection consolidates cloud metadata detection.
+type CloudSection struct {
+	Detected []string `json:"detected,omitempty"`
+}
+
+// SecretsSection consolidates discovered secrets/keystores.
+type SecretsSection struct {
+	Found []string `json:"found,omitempty"`
+}
+
+// PerformanceSection exposes quick runtime health signals.
+type PerformanceSection struct {
+	Goroutines   int    `json:"goroutines"`
+	LastGCUnix   uint64 `json:"last_gc_unix"`
+	PauseTotalNS uint64 `json:"pause_total_ns"`
+	NumGC        uint32 `json:"num_gc"`
+}
+
+// ----------------- Legacy Core Types (kept) -----------------
 
 type ContainerRuntimeCapability struct {
 	AvailableRuntimes []string             `json:"available_runtimes,omitempty"`
 	ErrorMap          map[string]string    `json:"errors,omitempty"`
 	Responsive        bool                 `json:"responsive"`
 	LastResult        capcheck.CheckResult `json:"last_result"`
-}
-
-type KubernetesCapability struct {
-	KubeconfigPaths       []string             `json:"kubeconfig_paths,omitempty"`
-	KubeconfigExists      bool                 `json:"kubeconfig_exists"`
-	InClusterTokenPath    string               `json:"in_cluster_token_path,omitempty"`
-	InClusterTokenExists  bool                 `json:"in_cluster_token_exists"`
-	CurrentContext        string               `json:"current_context,omitempty"`
-	CurrentContextCluster string               `json:"current_context_cluster,omitempty"`
-	AvailableContexts     []string             `json:"available_contexts,omitempty"`
-	Supported             bool                 `json:"supported"`
-	LastResult            capcheck.CheckResult `json:"last_result"`
 }
 
 type InternetCapability struct {
@@ -53,329 +261,14 @@ type InternetCapability struct {
 }
 
 type ResourcesCapability struct {
-	CPUCoresEffective       float64 `json:"cpu_cores_effective"`
-	CPUCoresDetectionMethod string  `json:"cpu_detection_method,omitempty"`
-
-	CPUQuota         float64 `json:"cpu_quota,omitempty"`
-	CPUPeriod        float64 `json:"cpu_period,omitempty"`
-	CPUSetsEffective int     `json:"cpusets_effective,omitempty"`
-	CGroupVersion    string  `json:"cgroup_version,omitempty"`
-
-	MemoryBytesEffective  uint64 `json:"memory_bytes_effective"`
-	MemoryDetectionMethod string `json:"memory_detection_method,omitempty"`
-
-	Supported  bool                 `json:"supported"`
-	LastResult capcheck.CheckResult `json:"last_result"`
-}
-
-type CapabilityWatcher struct {
-	mu        sync.RWMutex
-	current   *CapabilityContext
-	stopCh    chan struct{}
-	updatesCh chan *CapabilityContext
-	interval  time.Duration
-	runner    *capcheck.Runner
-	cfg       *config.BibDaemonConfig
-}
-
-func StartCapabilityChecks(cfg *config.BibDaemonConfig) *CapabilityWatcher {
-	interval := 5 * time.Minute
-	if cfg != nil && cfg.General.CapabilityRefreshInterval > 0 {
-		interval = time.Duration(cfg.General.CapabilityRefreshInterval) * time.Minute
-	}
-
-	checkers := []capcheck.Checker{
-		checks.ContainerRuntimeChecker{},
-		checks.KubernetesConfigChecker{},
-		checks.InternetAccessChecker{
-			HttpUrl: "https://www.google.com/generate_204",
-		},
-		checks.ResourcesChecker{},
-	}
-
-	runner := capcheck.NewRunner(
-		checkers,
-		capcheck.WithGlobalTimeout(10*time.Second),
-		capcheck.WithPerCheckTimeout(2*time.Second),
-	)
-
-	w := &CapabilityWatcher{
-		current:   &CapabilityContext{},
-		stopCh:    make(chan struct{}),
-		updatesCh: make(chan *CapabilityContext, 1),
-		interval:  interval,
-		runner:    runner,
-		cfg:       cfg,
-	}
-
-	// First run synchronous
-	w.runOnce(context.Background(), true)
-
-	// Periodic loop
-	go w.loop()
-
-	return w
-}
-
-func (w *CapabilityWatcher) loop() {
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			w.runOnce(context.Background(), false)
-		case <-w.stopCh:
-			return
-		}
-	}
-}
-
-// runOnce executes all checks and updates current context.
-func (w *CapabilityWatcher) runOnce(ctx context.Context, first bool) {
-	if w.cfg != nil && !w.cfg.General.CheckCapabilities {
-		if first {
-			log.Info("Capability checks disabled, providing empty context.")
-		}
-		return
-	}
-
-	results := w.runner.Run(ctx)
-	newCtx := BuildCapabilityContext(results)
-	newCtx.LastUpdated = time.Now()
-
-	w.mu.Lock()
-	prev := w.current
-	w.current = newCtx
-	w.mu.Unlock()
-
-	w.logDiff(prev, newCtx)
-	select {
-	case w.updatesCh <- newCtx:
-	default:
-		// drop if no listener
-	}
-}
-
-// logDiff logs changes in supported/error states to reduce noise.
-func (w *CapabilityWatcher) logDiff(old, cur *CapabilityContext) {
-	if old == nil {
-		log.Info("Initial capability check completed.")
-		w.logFull(cur)
-		return
-	}
-	type cmp struct {
-		name    string
-		prevOK  bool
-		curOK   bool
-		prevErr string
-		curErr  string
-	}
-	items := []cmp{
-		{"container_runtime", old.ContainerRuntime.Responsive, cur.ContainerRuntime.Responsive, old.ContainerRuntime.LastResult.Error, cur.ContainerRuntime.LastResult.Error},
-		{"kubernetes", old.Kubernetes.Supported, cur.Kubernetes.Supported, old.Kubernetes.LastResult.Error, cur.Kubernetes.LastResult.Error},
-		{"internet_access", old.Internet.Supported, cur.Internet.Supported, old.Internet.LastResult.Error, cur.Internet.LastResult.Error},
-		{"resources", old.Resources.Supported, cur.Resources.Supported, old.Resources.LastResult.Error, cur.Resources.LastResult.Error},
-	}
-	for _, it := range items {
-		if it.prevOK != it.curOK || it.prevErr != it.curErr {
-			if it.curOK {
-				log.Infof("✅ capability %s now supported", it.name)
-			} else {
-				log.Errorf("⛔ capability %s unsupported: %s", it.name, it.curErr)
-			}
-		}
-	}
-}
-
-// logFull can be used on first run.
-func (w *CapabilityWatcher) logFull(cur *CapabilityContext) {
-	log.Infof("Container runtimes: %v responsive=%v", cur.ContainerRuntime.AvailableRuntimes, cur.ContainerRuntime.Responsive)
-	log.Infof("Kubernetes: supported=%v current-context=%s cluster=%s kubeconfigExists=%v inClusterToken=%v",
-		cur.Kubernetes.Supported, cur.Kubernetes.CurrentContext, cur.Kubernetes.CurrentContextCluster,
-		cur.Kubernetes.KubeconfigExists, cur.Kubernetes.InClusterTokenExists)
-	log.Infof("Internet: dns=%v http=%v url=%s status=%d",
-		cur.Internet.DNSSuccess, cur.Internet.HTTPSuccess, cur.Internet.URL, cur.Internet.HTTPStatusCode)
-	log.Infof("Resources: cpu=%.2f mem=%d method(cpu=%s mem=%s)",
-		cur.Resources.CPUCoresEffective, cur.Resources.MemoryBytesEffective,
-		cur.Resources.CPUCoresDetectionMethod, cur.Resources.MemoryDetectionMethod)
-}
-
-// Current returns a snapshot copy.
-func (w *CapabilityWatcher) Current() *CapabilityContext {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	// Return pointer (read-only by convention)
-	return w.current
-}
-
-// Updates returns a channel of context updates.
-func (w *CapabilityWatcher) Updates() <-chan *CapabilityContext {
-	return w.updatesCh
-}
-
-// Stop terminates periodic checks.
-func (w *CapabilityWatcher) Stop() {
-	close(w.stopCh)
-}
-
-// BuildCapabilityContext builds a CapabilityContext from raw results.
-func BuildCapabilityContext(results []capcheck.CheckResult) *CapabilityContext {
-	ctx := &CapabilityContext{}
-	for _, r := range results {
-		switch r.ID {
-		case "container_runtime":
-			cr := ContainerRuntimeCapability{
-				Responsive: r.Supported,
-				LastResult: r,
-			}
-			if avail, ok := r.Details["available"].([]string); ok {
-				cr.AvailableRuntimes = avail
-			} else if rawIface, ok := r.Details["available"]; ok {
-				cr.AvailableRuntimes = anyStringSlice(rawIface)
-			}
-			if errs, ok := r.Details["errors"].(map[string]string); ok {
-				cr.ErrorMap = errs
-			} else if rawErrs, ok := r.Details["errors"]; ok {
-				cr.ErrorMap = anyStringMap(rawErrs)
-			}
-			ctx.ContainerRuntime = cr
-
-		case "kubernetes_config":
-			kc := KubernetesCapability{
-				Supported:  r.Supported,
-				LastResult: r,
-			}
-			kc.KubeconfigPaths = anyStringSlice(r.Details["kubeconfig_paths"])
-			if p, ok := r.Details["in_cluster_token_path"].(string); ok {
-				kc.InClusterTokenPath = p
-			}
-			if b, ok := r.Details["kubeconfig_exists"].(bool); ok {
-				kc.KubeconfigExists = b
-			}
-			if b, ok := r.Details["in_cluster_token_exists"].(bool); ok {
-				kc.InClusterTokenExists = b
-			}
-			if cc, ok := r.Details["current_context"].(string); ok {
-				kc.CurrentContext = cc
-			}
-			if cl, ok := r.Details["current_context_cluster"].(string); ok {
-				kc.CurrentContextCluster = cl
-			}
-			kc.AvailableContexts = anyStringSlice(r.Details["available_contexts"])
-			ctx.Kubernetes = kc
-
-		case "internet_access":
-			netc := InternetCapability{
-				URL:            asString(r.Details["url"]),
-				DNSSuccess:     asBool(r.Details["dns_success"]),
-				DNSLatencyMS:   asInt64(r.Details["dns_latency_ms"]),
-				ResolvedIPs:    anyStringSlice(r.Details["resolved_ips"]),
-				HTTPSuccess:    asBool(r.Details["http_success"]),
-				HTTPStatusCode: int(asInt64(r.Details["http_status_code"])),
-				HTTPLatencyMS:  asInt64(r.Details["http_latency_ms"]),
-				TLSVersion:     asString(r.Details["tls_version"]),
-				Supported:      r.Supported,
-				LastResult:     r,
-			}
-			ctx.Internet = netc
-
-		case "resources":
-			res := ResourcesCapability{
-				CPUCoresEffective:       asFloat64(r.Details["cpu_cores_effective"]),
-				CPUCoresDetectionMethod: asString(r.Details["cpu_detection_method"]),
-				CPUQuota:                asFloat64(r.Details["cpu_quota"]),
-				CPUPeriod:               asFloat64(r.Details["cpu_period"]),
-				CPUSetsEffective:        int(asInt64(r.Details["cpusets_effective"])),
-				CGroupVersion:           asString(r.Details["cgroup_version"]),
-				MemoryBytesEffective:    uint64(asInt64(r.Details["memory_bytes_effective"])),
-				MemoryDetectionMethod:   asString(r.Details["memory_detection_method"]),
-				Supported:               r.Supported,
-				LastResult:              r,
-			}
-			ctx.Resources = res
-		}
-	}
-	return ctx
-}
-
-// --- helper conversion functions ---
-
-func asString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-func asBool(v any) bool {
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	return false
-}
-func asInt64(v any) int64 {
-	switch n := v.(type) {
-	case int64:
-		return n
-	case int:
-		return int64(n)
-	case float64:
-		return int64(n)
-	case uint64:
-		return int64(n)
-	case int32:
-		return int64(n)
-	case float32:
-		return int64(n)
-	default:
-		return 0
-	}
-}
-func asFloat64(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case float32:
-		return float64(n)
-	case int:
-		return float64(n)
-	case int64:
-		return float64(n)
-	case uint64:
-		return float64(n)
-	default:
-		return 0
-	}
-}
-func anyStringSlice(v any) []string {
-	switch s := v.(type) {
-	case []string:
-		return s
-	case []any:
-		out := make([]string, 0, len(s))
-		for _, e := range s {
-			if str, ok := e.(string); ok {
-				out = append(out, str)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-func anyStringMap(v any) map[string]string {
-	out := map[string]string{}
-	switch m := v.(type) {
-	case map[string]string:
-		return m
-	case map[string]any:
-		for k, val := range m {
-			if str, ok := val.(string); ok {
-				out[k] = str
-			}
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	CPUCoresEffective       float64              `json:"cpu_cores_effective"`
+	CPUCoresDetectionMethod string               `json:"cpu_detection_method,omitempty"`
+	CPUQuota                float64              `json:"cpu_quota,omitempty"`
+	CPUPeriod               float64              `json:"cpu_period,omitempty"`
+	CPUSetsEffective        int                  `json:"cpusets_effective,omitempty"`
+	CGroupVersion           string               `json:"cgroup_version,omitempty"`
+	MemoryBytesEffective    uint64               `json:"memory_bytes_effective"`
+	MemoryDetectionMethod   string               `json:"memory_detection_method,omitempty"`
+	Supported               bool                 `json:"supported"`
+	LastResult              capcheck.CheckResult `json:"last_result"`
 }

@@ -1,7 +1,9 @@
 package daemon
 
-import "bib/internal/contexts"
+import (
+	"bib/internal/watcher"
+)
 
-func StartScheduler(*contexts.CapabilityWatcher) {
+func StartScheduler(*watcher.CapabilityWatcher) {
 	// Placeholder for scheduler start logic
 }
