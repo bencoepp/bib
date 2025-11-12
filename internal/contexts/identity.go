@@ -25,14 +25,13 @@ type IdentityContext struct {
 }
 
 var (
-	ErrUserIdentityNotFound    = errors.New("no existing user identity found")
-	ErrLogSigningKeyNotFound   = errors.New("no existing log signing key found")
-	ErrPassphraseRequired      = errors.New("passphrase required by config but empty")
-	ErrSecondFactorRequired    = errors.New("second factor required but acquisition failed")
-	ErrUnexpectedIdentityKind  = errors.New("loaded identity kind mismatch")
-	ErrNilConfigProvided       = errors.New("nil config provided")
-	ErrPrivateKeyFileNotFound  = errors.New("private key encryption file missing")
-	ErrPublicIdentityFileError = errors.New("public identity file missing or unreadable")
+	ErrUserIdentityNotFound   = errors.New("no existing user identity found")
+	ErrLogSigningKeyNotFound  = errors.New("no existing log signing key found")
+	ErrPassphraseRequired     = errors.New("passphrase required by config but empty")
+	ErrSecondFactorRequired   = errors.New("second factor required but acquisition failed")
+	ErrUnexpectedIdentityKind = errors.New("loaded identity kind mismatch")
+	ErrNilConfigProvided      = errors.New("nil config provided")
+	ErrPrivateKeyFileNotFound = errors.New("private key encryption file missing")
 )
 
 func (ctx *IdentityContext) SignPayload(payload any, includePub bool) (*identity.SignedEnvelope, error) {
@@ -121,7 +120,7 @@ func acquireUserSecrets(cfg *config.BibConfig, providedPassphrase string) ([]byt
 
 // Core routine to load existing identity and private key, or create and persist a new one.
 func loadOrCreateKeyMaterial(
-	pubIdentityPath, privEncPath, kind string,
+	pubIdentityPath, privateEncPath, kind string,
 	passphrase, secondFactor []byte,
 	user *identity.UserIdentity,
 	daemon *identity.DaemonIdentity,
@@ -139,7 +138,7 @@ func loadOrCreateKeyMaterial(
 			return nil, nil, err
 		}
 		encBytes, _ := secure.MarshalBlob(encBlob)
-		if err := os.WriteFile(privEncPath, encBytes, 0600); err != nil {
+		if err := os.WriteFile(privateEncPath, encBytes, 0600); err != nil {
 			return nil, nil, err
 		}
 		// Persist a new public identity record
@@ -160,7 +159,7 @@ func loadOrCreateKeyMaterial(
 		log.Warnf("loaded identity kind (%s) differs from expected (%s)", loadedKind, kind)
 	}
 
-	encData, err := os.ReadFile(privEncPath)
+	encData, err := os.ReadFile(privateEncPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -227,17 +226,17 @@ func ensureAndPersistLocation(pubIdentityPath, kind string, user *identity.UserI
 }
 
 func loadOrCreateLogSigningKey(path string, passphrase, secondFactor []byte) (ed25519.PrivateKey, ed25519.PublicKey, error) {
-	var priv ed25519.PrivateKey
+	var privateKey ed25519.PrivateKey
 	var pub ed25519.PublicKey
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		pubGen, privGen, err := ed25519.GenerateKey(nil)
+		pubGen, privateGen, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			return nil, nil, err
 		}
-		priv = privGen
+		privateKey = privateGen
 		pub = pubGen
-		enc, err := secure.EncryptPrivateKey(passphrase, secondFactor, priv)
+		enc, err := secure.EncryptPrivateKey(passphrase, secondFactor, privateKey)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -259,13 +258,13 @@ func loadOrCreateLogSigningKey(path string, passphrase, secondFactor []byte) (ed
 		if err != nil {
 			return nil, nil, err
 		}
-		priv = pt
-		pub = priv.Public().(ed25519.PublicKey)
+		privateKey = pt
+		pub = privateKey.Public().(ed25519.PublicKey)
 	}
-	if pub == nil && priv != nil {
-		pub = priv.Public().(ed25519.PublicKey)
+	if pub == nil && privateKey != nil {
+		pub = privateKey.Public().(ed25519.PublicKey)
 	}
-	return priv, pub, nil
+	return privateKey, pub, nil
 }
 
 /*
@@ -290,9 +289,9 @@ func loadExistingLogSigningKey(path string, passphrase, secondFactor []byte) (ed
 	if err != nil {
 		return nil, nil, err
 	}
-	priv := ed25519.PrivateKey(pt)
-	pub := priv.Public().(ed25519.PublicKey)
-	return priv, pub, nil
+	private := ed25519.PrivateKey(pt)
+	pub := private.Public().(ed25519.PublicKey)
+	return private, pub, nil
 }
 
 func RegisterDaemonIdentity(cfg *config.BibDaemonConfig, version string) (*IdentityContext, error) {
@@ -345,11 +344,11 @@ func RegisterDaemonIdentity(cfg *config.BibDaemonConfig, version string) (*Ident
 
 	ensureAndPersistLocation(pubIdentityPath, "daemon", nil, daemon)
 
-	logPriv, logPub, err := loadOrCreateLogSigningKey(logKeyEncPath, passphrase, secondFactor)
+	logPrivate, logPub, err := loadOrCreateLogSigningKey(logKeyEncPath, passphrase, secondFactor)
 	if err != nil {
 		return nil, err
 	}
-	mgr := transparency.NewManager(logPath, rootsPath, logPriv, logPub)
+	mgr := transparency.NewManager(logPath, rootsPath, logPrivate, logPub)
 	if err := mgr.Load(); err != nil {
 		return nil, err
 	}
@@ -418,11 +417,11 @@ func RegisterUserIdentity(cfg *config.BibConfig, version, firstName, lastName, e
 
 	ensureAndPersistLocation(pubIdentityPath, "user", user, nil)
 
-	logPriv, logPub, err := loadOrCreateLogSigningKey(logKeyEncPath, passphrase, secondFactor)
+	logPrivate, logPub, err := loadOrCreateLogSigningKey(logKeyEncPath, passphrase, secondFactor)
 	if err != nil {
 		return nil, err
 	}
-	mgr := transparency.NewManager(logPath, rootsPath, logPriv, logPub)
+	mgr := transparency.NewManager(logPath, rootsPath, logPrivate, logPub)
 	if err := mgr.Load(); err != nil {
 		return nil, err
 	}
@@ -460,7 +459,7 @@ func LoadExistingUserIdentity(cfg *config.BibConfig, passphraseStr string) (*Ide
 	}
 
 	pubIdentityPath := filepath.Join(home, "identity_public.json")
-	privEncPath := filepath.Join(home, "private_key.enc")
+	privateEncPath := filepath.Join(home, "private_key.enc")
 	logPath := filepath.Join(home, "transparency.log")
 	rootsPath := filepath.Join(home, "roots.log")
 	logKeyEncPath := filepath.Join(home, "log_signing_key.enc")
@@ -469,7 +468,7 @@ func LoadExistingUserIdentity(cfg *config.BibConfig, passphraseStr string) (*Ide
 	if _, err := os.Stat(pubIdentityPath); os.IsNotExist(err) {
 		return nil, ErrUserIdentityNotFound
 	}
-	if _, err := os.Stat(privEncPath); os.IsNotExist(err) {
+	if _, err := os.Stat(privateEncPath); os.IsNotExist(err) {
 		return nil, ErrPrivateKeyFileNotFound
 	}
 	if cfg.General.UsePassphrase && passphraseStr == "" {
@@ -497,7 +496,7 @@ func LoadExistingUserIdentity(cfg *config.BibConfig, passphraseStr string) (*Ide
 	}
 
 	// Decrypt private key
-	encData, err := os.ReadFile(privEncPath)
+	encData, err := os.ReadFile(privateEncPath)
 	if err != nil {
 		return nil, err
 	}
@@ -512,11 +511,11 @@ func LoadExistingUserIdentity(cfg *config.BibConfig, passphraseStr string) (*Ide
 	km.PrivateKey = pt
 
 	// Load existing log signing key (must exist)
-	logPriv, logPub, err := loadExistingLogSigningKey(logKeyEncPath, passphrase, secondFactor)
+	logPrivate, logPub, err := loadExistingLogSigningKey(logKeyEncPath, passphrase, secondFactor)
 	if err != nil {
 		return nil, err
 	}
-	mgr := transparency.NewManager(logPath, rootsPath, logPriv, logPub)
+	mgr := transparency.NewManager(logPath, rootsPath, logPrivate, logPub)
 	if err := mgr.Load(); err != nil {
 		return nil, err
 	}

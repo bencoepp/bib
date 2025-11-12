@@ -28,11 +28,12 @@ func (c ContainerRuntimeChecker) Check(ctx context.Context) capcheck.CheckResult
 	}
 
 	found := false
-	available := []string{}
+	var available []string
 	errorsMap := map[string]string{}
+	pipeMap := map[string]string{}
 
 	for _, cand := range candidates {
-		d := 300 * time.Millisecond
+		d := 400 * time.Millisecond
 		if deadline, ok := ctx.Deadline(); ok {
 			if rem := time.Until(deadline); rem < d {
 				d = rem
@@ -46,6 +47,7 @@ func (c ContainerRuntimeChecker) Check(ctx context.Context) capcheck.CheckResult
 		_ = conn.Close()
 		found = true
 		available = append(available, cand.Name)
+		pipeMap[cand.Name] = cand.Pipe
 	}
 
 	res.Supported = found
@@ -55,6 +57,9 @@ func (c ContainerRuntimeChecker) Check(ctx context.Context) capcheck.CheckResult
 	res.Details["available"] = available
 	if len(errorsMap) > 0 {
 		res.Details["errors"] = errorsMap
+	}
+	if len(pipeMap) > 0 {
+		res.Details["pipes"] = pipeMap
 	}
 	return res
 }

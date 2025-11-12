@@ -30,11 +30,23 @@ func (r ResourcesChecker) Check(ctx context.Context) capcheck.CheckResult {
 		Details: map[string]any{},
 	}
 
-	cpuLimit, cpuMethod := detectCPULimit()
+	cpuLimit, cpuMethod, quota, period, cpusets, cgVersion := detectCPULimit()
 	memLimit, memMethod := detectMemLimit()
 
 	res.Details["cpu_cores_effective"] = cpuLimit
 	res.Details["cpu_detection_method"] = cpuMethod
+	if quota > 0 {
+		res.Details["cpu_quota"] = quota
+	}
+	if period > 0 {
+		res.Details["cpu_period"] = period
+	}
+	if cpusets > 0 {
+		res.Details["cpusets_effective"] = cpusets
+	}
+	if cgVersion != "" {
+		res.Details["cgroup_version"] = cgVersion
+	}
 
 	res.Details["memory_bytes_effective"] = memLimit
 	res.Details["memory_detection_method"] = memMethod
@@ -52,45 +64,50 @@ func (r ResourcesChecker) Check(ctx context.Context) capcheck.CheckResult {
 
 // CPU detection
 
-func detectCPULimit() (float64, string) {
+func detectCPULimit() (cores float64, method string, quota float64, period float64, cpusets int, cgVersion string) {
 	if isCgroupV2() {
-		if cores, ok := readCPUv2(); ok {
-			return cores, "cgroupv2"
+		if c, q, p, cs, ok := readCPUv2(); ok {
+			return c, "cgroupv2", q, p, cs, "v2"
 		}
 	}
-	if cores, ok := readCPUv1(); ok {
-		return cores, "cgroupv1"
+	if c, q, p, cs, ok := readCPUv1(); ok {
+		return c, "cgroupv1", q, p, cs, "v1"
 	}
-	return float64(runtime.NumCPU()), "host_numcpu"
+	return float64(runtime.NumCPU()), "host_numcpu", 0, 0, 0, ""
 }
 
-func readCPUv2() (float64, bool) {
+func readCPUv2() (cores float64, quota float64, period float64, cpusets int, ok bool) {
 	cpuMax := "/sys/fs/cgroup/cpu.max"
 	data, err := os.ReadFile(cpuMax)
 	if err != nil {
-		return 0, false
+		return 0, 0, 0, 0, false
 	}
 	fields := strings.Fields(string(bytes.TrimSpace(data)))
 	if len(fields) != 2 {
-		return 0, false
+		return 0, 0, 0, 0, false
 	}
 	if fields[0] == "max" {
-		return float64(runtime.NumCPU()), true
+		cores = float64(runtime.NumCPU())
+	} else {
+		q, err1 := strconv.ParseFloat(fields[0], 64)
+		p, err2 := strconv.ParseFloat(fields[1], 64)
+		if err1 != nil || err2 != nil || p == 0 {
+			return 0, 0, 0, 0, false
+		}
+		quota = q
+		period = p
+		cores = q / p
+		if cores <= 0 {
+			return 0, 0, 0, 0, false
+		}
 	}
-	quota, err1 := strconv.ParseFloat(fields[0], 64)
-	period, err2 := strconv.ParseFloat(fields[1], 64)
-	if err1 != nil || err2 != nil || period == 0 {
-		return 0, false
-	}
-	cores := quota / period
-	if cores <= 0 {
-		return 0, false
-	}
-	// Respect cpuset if available (min of quota-derived cores and cpuset count)
-	if cs, ok := readCPUSetCountV2(); ok && cs > 0 && float64(cs) < cores {
+	if cs, ok2 := readCPUSetCountV2(); ok2 && cs > 0 && float64(cs) < cores {
 		cores = float64(cs)
+		cpusets = cs
+	} else {
+		cpusets = int(cores)
 	}
-	return cores, true
+	return cores, quota, period, cpusets, true
 }
 
 func readCPUSetCountV2() (int, bool) {
@@ -98,31 +115,33 @@ func readCPUSetCountV2() (int, bool) {
 	return parseCPUSetList(path)
 }
 
-func readCPUv1() (float64, bool) {
+func readCPUv1() (cores float64, quota float64, period float64, cpusets int, ok bool) {
 	base := "/sys/fs/cgroup"
 	quotaFile := filepath.Join(base, "cpu", "cpu.cfs_quota_us")
 	periodFile := filepath.Join(base, "cpu", "cpu.cfs_period_us")
 
-	quota, ok1 := readInt(quotaFile)
-	period, ok2 := readInt(periodFile)
-	if !ok1 || !ok2 || period <= 0 {
-		return 0, false
+	q, ok1 := readInt(quotaFile)
+	p, ok2 := readInt(periodFile)
+	if !ok1 || !ok2 || p <= 0 {
+		return 0, 0, 0, 0, false
 	}
-	if quota == -1 {
-		cores := float64(runtime.NumCPU())
-		if cs, ok := readCPUSetCountV1(); ok && cs > 0 && float64(cs) < cores {
-			cores = float64(cs)
-		}
-		return cores, true
+	if q == -1 {
+		cores = float64(runtime.NumCPU())
+	} else {
+		quota = float64(q)
+		period = float64(p)
+		cores = quota / period
 	}
-	cores := float64(quota) / float64(period)
 	if cores <= 0 {
-		return 0, false
+		return 0, 0, 0, 0, false
 	}
-	if cs, ok := readCPUSetCountV1(); ok && cs > 0 && float64(cs) < cores {
+	if cs, ok3 := readCPUSetCountV1(); ok3 && cs > 0 && float64(cs) < cores {
 		cores = float64(cs)
+		cpusets = cs
+	} else {
+		cpusets = int(cores)
 	}
-	return cores, true
+	return cores, quota, period, cpusets, true
 }
 
 func readCPUSetCountV1() (int, bool) {
@@ -135,7 +154,6 @@ func parseCPUSetList(path string) (int, bool) {
 	if err != nil {
 		return 0, false
 	}
-	// Format examples: "0-3", "0,2,4-6"
 	val := strings.TrimSpace(string(data))
 	count := 0
 	for _, part := range strings.Split(val, ",") {

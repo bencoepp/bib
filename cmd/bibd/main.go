@@ -83,8 +83,8 @@ func main() {
 		})
 	}()
 
-	daemon.StartCapabilityChecks(cfg)
-	daemon.StartScheduler()
+	watcher := daemon.StartCapabilityChecks(cfg)
+	daemon.StartScheduler(watcher)
 
 	wg.Add(1)
 	go func() {
@@ -106,5 +106,6 @@ func main() {
 	} else {
 		log.Info("Database connection closed")
 	}
+	watcher.Stop()
 	log.Info("Shutdown complete")
 }

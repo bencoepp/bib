@@ -45,21 +45,23 @@ func (c ContainerRuntimeChecker) Check(ctx context.Context) capcheck.CheckResult
 	found := false
 	available := []string{}
 	errorsMap := map[string]string{}
+	socketMap := map[string]string{}
 
 	for _, cand := range candidates {
 		if _, err := os.Stat(cand.Socket); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			errorsMap[cand.Name] = err.Error()
+			errorsMap[cand.Name] = "stat: " + err.Error()
 			continue
 		}
-		if err := dialUnix(ctx, cand.Socket, 300*time.Millisecond); err != nil {
+		if err := dialUnix(ctx, cand.Socket, 400*time.Millisecond); err != nil {
 			errorsMap[cand.Name] = "socket present but not responsive: " + err.Error()
 			continue
 		}
 		found = true
 		available = append(available, cand.Name)
+		socketMap[cand.Name] = cand.Socket
 	}
 
 	res.Supported = found
@@ -69,6 +71,9 @@ func (c ContainerRuntimeChecker) Check(ctx context.Context) capcheck.CheckResult
 	res.Details["available"] = available
 	if len(errorsMap) > 0 {
 		res.Details["errors"] = errorsMap
+	}
+	if len(socketMap) > 0 {
+		res.Details["sockets"] = socketMap
 	}
 	return res
 }
