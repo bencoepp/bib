@@ -64,10 +64,6 @@ func main() {
 
 	p2p.RegisterSelf(peerStore, host)
 
-	identitySvc := &service.IdentityService{
-		IDCtx: identity,
-		Store: service.NewIdentityStore(),
-	}
 	discoverySvc := &service.DiscoveryService{
 		PeerStore: peerStore,
 		Host:      host,
@@ -79,7 +75,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		daemon.StartP2P(ctx, host, cfg, peerStore, func(s *grpc.Server) {
-			daemon.RegisterBibServices(s, identitySvc, discoverySvc)
+			daemon.RegisterBibServices(s, discoverySvc)
 		})
 	}()
 
@@ -90,7 +86,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		daemon.StartGRPCServer(ctx, cfg, func(s *grpc.Server) {
-			daemon.RegisterBibServices(s, identitySvc, discoverySvc)
+			daemon.RegisterBibServices(s, discoverySvc)
 		})
 	}()
 

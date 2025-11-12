@@ -38,12 +38,8 @@ func StartGRPCServer(ctx context.Context, cfg *config.BibDaemonConfig, register 
 
 func RegisterBibServices(
 	s *grpc.Server,
-	identitySvc *service.IdentityService,
 	discoverySvc *service.DiscoveryService,
 ) {
-	if identitySvc != nil {
-		pb.RegisterIdentityServiceServer(s, identitySvc)
-	}
 
 	if discoverySvc != nil {
 		pb.RegisterDiscoveryServer(s, discoverySvc)

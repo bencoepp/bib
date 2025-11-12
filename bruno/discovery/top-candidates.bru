@@ -1,0 +1,26 @@
+meta {
+  name: top-candidates
+  type: grpc
+  seq: 1
+}
+
+grpc {
+  url: {{url}}
+  method: /bibd.v1.Discovery/FindCandidates
+  body: grpc
+  protoPath: ../api/bibd/v1/discovery.proto
+  auth: inherit
+  methodType: unary
+}
+
+body:grpc {
+  name: message 1
+  content: '''
+    {
+      "limit": 10,
+      "prefer_region": "",
+      "prefer_tags": "",
+      "include_self": true
+    }
+  '''
+}

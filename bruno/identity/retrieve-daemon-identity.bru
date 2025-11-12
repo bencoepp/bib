@@ -1,0 +1,21 @@
+meta {
+  name: retrieve-daemon-identity
+  type: grpc
+  seq: 1
+}
+
+grpc {
+  url: {{url}}
+  method: /bibd.v1.IdentityService/GetSelfIdentity
+  body: grpc
+  protoPath: ../api/bibd/v1/identitiy.proto
+  auth: none
+  methodType: unary
+}
+
+body:grpc {
+  name: message 1
+  content: '''
+    {}
+  '''
+}

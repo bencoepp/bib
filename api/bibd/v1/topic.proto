@@ -4,9 +4,14 @@ option go_package = "github.com/bencoepp/bib/internal/pb/bibd/v1;bibv1";
 package bibd.v1;
 
 message TopicRequest {
+  string title = 2;
+  string description = 3;
 }
 
 message TopicResponse {
+  string id = 1;
+  string title = 2;
+  string description = 3;
 }
 
 message ListTopicsRequest {

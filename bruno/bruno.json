@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "name": "bibd",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ],
+  "size": 0.0003662109375,
+  "filesCount": 4,
+  "protobuf": {
+    "importPaths": [
+      {
+        "path": "../api/bibd/v1",
+        "enabled": true
+      }
+    ],
+    "protoFiles": [
+      {
+        "path": "../api/bibd/v1/topic.proto",
+        "type": "file"
+      },
+      {
+        "path": "../api/bibd/v1/identitiy.proto",
+        "type": "file"
+      },
+      {
+        "path": "../api/bibd/v1/discovery.proto",
+        "type": "file"
+      }
+    ]
+  }
+}
