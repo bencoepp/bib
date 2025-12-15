@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"bib/internal/config"
+	"bib/internal/domain"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -14,7 +15,7 @@ import (
 
 // cacheEntry represents a cached query result.
 type cacheEntry struct {
-	result    *QueryResult
+	result    *domain.QueryResult
 	expiresAt time.Time
 }
 
@@ -25,6 +26,7 @@ type ProxyHandler struct {
 	discovery *Discovery
 	cfg       config.P2PConfig
 	configDir string
+	client    *ProtocolClient
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -46,6 +48,7 @@ func NewProxyHandler(h host.Host, discovery *Discovery, cfg config.P2PConfig, co
 		cfg:       cfg,
 		configDir: configDir,
 		cache:     make(map[string]*cacheEntry),
+		client:    NewProtocolClient(h),
 	}
 
 	// Parse favorite peers
@@ -114,7 +117,7 @@ func (h *ProxyHandler) parseFavorites(addrs []string) error {
 }
 
 // Query forwards a query to peers and caches the result.
-func (h *ProxyHandler) Query(ctx context.Context, req QueryRequest) (*QueryResult, error) {
+func (h *ProxyHandler) Query(ctx context.Context, req domain.QueryRequest) (*domain.QueryResult, error) {
 	// Generate cache key
 	cacheKey := h.cacheKey(req)
 
@@ -136,14 +139,14 @@ func (h *ProxyHandler) Query(ctx context.Context, req QueryRequest) (*QueryResul
 }
 
 // cacheKey generates a cache key for a query request.
-func (h *ProxyHandler) cacheKey(req QueryRequest) string {
+func (h *ProxyHandler) cacheKey(req domain.QueryRequest) string {
 	// Simple key based on query parameters
 	data, _ := json.Marshal(req)
 	return string(data)
 }
 
 // getFromCache retrieves a result from cache if not expired.
-func (h *ProxyHandler) getFromCache(key string) *QueryResult {
+func (h *ProxyHandler) getFromCache(key string) *domain.QueryResult {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -163,7 +166,7 @@ func (h *ProxyHandler) getFromCache(key string) *QueryResult {
 }
 
 // putInCache stores a result in cache.
-func (h *ProxyHandler) putInCache(key string, result *QueryResult) {
+func (h *ProxyHandler) putInCache(key string, result *domain.QueryResult) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -207,21 +210,21 @@ func (h *ProxyHandler) evictOldest() {
 }
 
 // forwardQuery forwards a query to available peers.
-func (h *ProxyHandler) forwardQuery(ctx context.Context, req QueryRequest) (*QueryResult, error) {
+func (h *ProxyHandler) forwardQuery(ctx context.Context, req domain.QueryRequest) (*domain.QueryResult, error) {
 	// Get peers to query
 	peers := h.getPeersForForwarding()
 
 	if len(peers) == 0 {
 		// No peers available, return empty result
-		return &QueryResult{
+		return &domain.QueryResult{
 			QueryID:    req.ID,
-			Entries:    []CatalogEntry{},
+			Entries:    []domain.CatalogEntry{},
 			TotalCount: 0,
 		}, nil
 	}
 
 	// Query each peer and aggregate results
-	var allEntries []CatalogEntry
+	var allEntries []domain.CatalogEntry
 	seen := make(map[string]bool)
 	var sourcePeer string
 
@@ -258,7 +261,7 @@ func (h *ProxyHandler) forwardQuery(ctx context.Context, req QueryRequest) (*Que
 		allEntries = allEntries[:req.Limit]
 	}
 
-	return &QueryResult{
+	return &domain.QueryResult{
 		QueryID:    req.ID,
 		Entries:    allEntries,
 		TotalCount: total,
@@ -299,12 +302,13 @@ func (h *ProxyHandler) getPeersForForwarding() []peer.ID {
 	return peers
 }
 
-// queryPeer queries a specific peer.
-// TODO: This will use the /bib/discovery/1.0.0 protocol in Phase 1.4.
-func (h *ProxyHandler) queryPeer(ctx context.Context, peerID peer.ID, req QueryRequest) ([]CatalogEntry, error) {
-	// Placeholder: return empty for now
-	// This will be implemented with proper protocols in Phase 1.4
-	return []CatalogEntry{}, nil
+// queryPeer queries a specific peer using the discovery protocol.
+func (h *ProxyHandler) queryPeer(ctx context.Context, peerID peer.ID, req domain.QueryRequest) ([]domain.CatalogEntry, error) {
+	result, err := h.client.QueryCatalog(ctx, peerID, &req)
+	if err != nil {
+		return nil, err
+	}
+	return result.Entries, nil
 }
 
 // cleanupLoop periodically cleans expired cache entries.

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bib/internal/config"
+	"bib/internal/domain"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -21,6 +22,7 @@ type SelectiveHandler struct {
 	discovery *Discovery
 	cfg       config.P2PConfig
 	configDir string
+	client    *ProtocolClient
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -28,8 +30,8 @@ type SelectiveHandler struct {
 
 	// mu protects the fields below
 	mu            sync.RWMutex
-	subscriptions []Subscription
-	catalog       map[string][]CatalogEntry // keyed by topic pattern
+	subscriptions []domain.Subscription
+	catalog       map[string][]domain.CatalogEntry // keyed by topic pattern
 }
 
 // NewSelectiveHandler creates a new selective handler.
@@ -39,8 +41,9 @@ func NewSelectiveHandler(h host.Host, discovery *Discovery, cfg config.P2PConfig
 		discovery:     discovery,
 		cfg:           cfg,
 		configDir:     configDir,
-		subscriptions: []Subscription{},
-		catalog:       make(map[string][]CatalogEntry),
+		subscriptions: []domain.Subscription{},
+		catalog:       make(map[string][]domain.CatalogEntry),
+		client:        NewProtocolClient(h),
 	}
 
 	// Load persisted subscriptions
@@ -108,7 +111,7 @@ func (h *SelectiveHandler) addSubscriptionLocked(pattern string) {
 		}
 	}
 
-	h.subscriptions = append(h.subscriptions, Subscription{
+	h.subscriptions = append(h.subscriptions, domain.Subscription{
 		TopicPattern: pattern,
 		CreatedAt:    time.Now(),
 	})
@@ -133,22 +136,22 @@ func (h *SelectiveHandler) Unsubscribe(pattern string) error {
 }
 
 // Subscriptions returns all current subscriptions.
-func (h *SelectiveHandler) Subscriptions() []Subscription {
+func (h *SelectiveHandler) Subscriptions() []domain.Subscription {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	result := make([]Subscription, len(h.subscriptions))
+	result := make([]domain.Subscription, len(h.subscriptions))
 	copy(result, h.subscriptions)
 	return result
 }
 
 // Query queries for data matching a request by asking all peers.
-func (h *SelectiveHandler) Query(ctx context.Context, req QueryRequest) (*QueryResult, error) {
+func (h *SelectiveHandler) Query(ctx context.Context, req domain.QueryRequest) (*domain.QueryResult, error) {
 	h.mu.RLock()
 	peers := h.host.Network().Peers()
 	h.mu.RUnlock()
 
-	var allEntries []CatalogEntry
+	var allEntries []domain.CatalogEntry
 	seen := make(map[string]bool)
 
 	for _, peerID := range peers {
@@ -181,7 +184,7 @@ func (h *SelectiveHandler) Query(ctx context.Context, req QueryRequest) (*QueryR
 		allEntries = allEntries[:req.Limit]
 	}
 
-	return &QueryResult{
+	return &domain.QueryResult{
 		QueryID:    req.ID,
 		Entries:    allEntries,
 		TotalCount: total,
@@ -189,17 +192,18 @@ func (h *SelectiveHandler) Query(ctx context.Context, req QueryRequest) (*QueryR
 	}, nil
 }
 
-// queryPeer queries a specific peer for catalog entries.
-// TODO: This will use the /bib/discovery/1.0.0 protocol in Phase 1.4.
-func (h *SelectiveHandler) queryPeer(ctx context.Context, peerID peer.ID, req QueryRequest) ([]CatalogEntry, error) {
-	// Placeholder: return empty for now
-	// This will be implemented with proper protocols in Phase 1.4
-	return []CatalogEntry{}, nil
+// queryPeer queries a specific peer for catalog entries using the discovery protocol.
+func (h *SelectiveHandler) queryPeer(ctx context.Context, peerID peer.ID, req domain.QueryRequest) ([]domain.CatalogEntry, error) {
+	result, err := h.client.QueryCatalog(ctx, peerID, &req)
+	if err != nil {
+		return nil, err
+	}
+	return result.Entries, nil
 }
 
 // SyncSubscription syncs data for a specific subscription pattern.
 func (h *SelectiveHandler) SyncSubscription(ctx context.Context, pattern string) error {
-	result, err := h.Query(ctx, QueryRequest{
+	result, err := h.Query(ctx, domain.QueryRequest{
 		ID: "sync-" + pattern,
 	})
 	if err != nil {
@@ -272,12 +276,12 @@ func (h *SelectiveHandler) saveSubscriptionsLocked() error {
 }
 
 // GetCachedEntries returns cached entries for a subscription pattern.
-func (h *SelectiveHandler) GetCachedEntries(pattern string) []CatalogEntry {
+func (h *SelectiveHandler) GetCachedEntries(pattern string) []domain.CatalogEntry {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	if entries, ok := h.catalog[pattern]; ok {
-		result := make([]CatalogEntry, len(entries))
+		result := make([]domain.CatalogEntry, len(entries))
 		copy(result, entries)
 		return result
 	}

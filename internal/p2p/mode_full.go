@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"bib/internal/config"
+	"bib/internal/domain"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -19,6 +20,7 @@ type FullReplicaHandler struct {
 	discovery *Discovery
 	cfg       config.P2PConfig
 	configDir string
+	client    *ProtocolClient
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -26,8 +28,8 @@ type FullReplicaHandler struct {
 
 	// mu protects the fields below
 	mu         sync.RWMutex
-	catalogs   map[peer.ID]*Catalog
-	syncStatus SyncStatus
+	catalogs   map[peer.ID]*domain.Catalog
+	syncStatus domain.SyncStatus
 }
 
 // NewFullReplicaHandler creates a new full replica handler.
@@ -37,7 +39,8 @@ func NewFullReplicaHandler(h host.Host, discovery *Discovery, cfg config.P2PConf
 		discovery: discovery,
 		cfg:       cfg,
 		configDir: configDir,
-		catalogs:  make(map[peer.ID]*Catalog),
+		catalogs:  make(map[peer.ID]*domain.Catalog),
+		client:    NewProtocolClient(h),
 	}, nil
 }
 
@@ -78,7 +81,7 @@ func (h *FullReplicaHandler) OnConfigUpdate(cfg config.P2PConfig) error {
 }
 
 // SyncStatus returns the current sync status.
-func (h *FullReplicaHandler) SyncStatus() SyncStatus {
+func (h *FullReplicaHandler) SyncStatus() domain.SyncStatus {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.syncStatus
@@ -164,24 +167,17 @@ func (h *FullReplicaHandler) syncFromPeer(peerID peer.ID) error {
 	return nil
 }
 
-// requestCatalog requests a peer's catalog.
-// TODO: This is a placeholder that will be implemented with proper protocols in Phase 1.4.
-func (h *FullReplicaHandler) requestCatalog(ctx context.Context, peerID peer.ID) (*Catalog, error) {
-	// For now, return an empty catalog
-	// This will be replaced with actual protocol communication
-	return &Catalog{
-		PeerID:      peerID.String(),
-		Entries:     []CatalogEntry{},
-		LastUpdated: time.Now(),
-	}, nil
+// requestCatalog requests a peer's catalog using the discovery protocol.
+func (h *FullReplicaHandler) requestCatalog(ctx context.Context, peerID peer.ID) (*domain.Catalog, error) {
+	return h.client.GetCatalog(ctx, peerID)
 }
 
 // GetCatalogs returns all known peer catalogs.
-func (h *FullReplicaHandler) GetCatalogs() map[peer.ID]*Catalog {
+func (h *FullReplicaHandler) GetCatalogs() map[peer.ID]*domain.Catalog {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	result := make(map[peer.ID]*Catalog)
+	result := make(map[peer.ID]*domain.Catalog)
 	for k, v := range h.catalogs {
 		result[k] = v
 	}
@@ -189,12 +185,12 @@ func (h *FullReplicaHandler) GetCatalogs() map[peer.ID]*Catalog {
 }
 
 // GetAllEntries returns all catalog entries from all peers (deduplicated by hash).
-func (h *FullReplicaHandler) GetAllEntries() []CatalogEntry {
+func (h *FullReplicaHandler) GetAllEntries() []domain.CatalogEntry {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	seen := make(map[string]bool)
-	var entries []CatalogEntry
+	var entries []domain.CatalogEntry
 
 	for _, catalog := range h.catalogs {
 		for _, entry := range catalog.Entries {

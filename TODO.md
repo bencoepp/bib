@@ -94,19 +94,24 @@
   - No persistent storage
 
 ### 1.4 P2P Protocols
-- [ ] **P2P-012**: Define custom protocols
+- [x] **P2P-012**: Define custom protocols
   - `/bib/discovery/1.0.0` - Node & dataset discovery
   - `/bib/data/1.0.0` - Data transfer protocol
-  - `/bib/jobs/1.0.0` - Job distribution protocol
+  - `/bib/jobs/1.0.0` - Job distribution protocol (placeholder)
   - `/bib/sync/1.0.0` - State synchronization
-- [ ] **P2P-013**: PubSub for real-time updates
+  - Multi-version support
+  - Protobuf message definitions
+- [x] **P2P-013**: PubSub for real-time updates
   - GossipSub for topic-based messaging
-  - Topic structure: `/bib/topics/<topic-id>`
+  - Topic structure: `/bib/global`, `/bib/nodes`, `/bib/topics/<topic-id>`
   - Message validation & signing
-- [ ] **P2P-014**: Data transfer
+  - Timestamp freshness validation
+- [x] **P2P-014**: Data transfer
   - Chunked transfer for large datasets
-  - Resumable downloads
-  - Integrity verification (content hashing)
+  - Resumable downloads with bitmap tracking
+  - Integrity verification (SHA-256)
+  - Parallel downloads from multiple peers
+  - Configurable chunk size
 
 ### 1.5 Raft Consensus (Optional HA Mode)
 - [ ] **P2P-015**: Raft integration for HA clusters

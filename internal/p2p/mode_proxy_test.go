@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"bib/internal/config"
+	"bib/internal/domain"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -31,10 +32,10 @@ func TestProxyHandler_Cache(t *testing.T) {
 	}
 
 	// Test cache put and get
-	req := QueryRequest{ID: "test-1", TopicID: "topic-1"}
-	result := &QueryResult{
+	req := domain.QueryRequest{ID: "test-1", TopicID: "topic-1"}
+	result := &domain.QueryResult{
 		QueryID: "test-1",
-		Entries: []CatalogEntry{{TopicID: "topic-1", DatasetID: "ds-1"}},
+		Entries: []domain.CatalogEntry{{TopicID: "topic-1", DatasetID: "ds-1"}},
 	}
 
 	key := handler.cacheKey(req)
@@ -80,8 +81,8 @@ func TestProxyHandler_CacheEviction(t *testing.T) {
 
 	// Fill cache
 	for i := 0; i < 5; i++ {
-		req := QueryRequest{ID: string(rune('a' + i))}
-		result := &QueryResult{QueryID: req.ID}
+		req := domain.QueryRequest{ID: string(rune('a' + i))}
+		result := &domain.QueryResult{QueryID: req.ID}
 		handler.putInCache(handler.cacheKey(req), result)
 	}
 
@@ -155,8 +156,8 @@ func TestProxyHandler_ClearCache(t *testing.T) {
 
 	// Add some entries
 	for i := 0; i < 5; i++ {
-		req := QueryRequest{ID: string(rune('a' + i))}
-		result := &QueryResult{QueryID: req.ID}
+		req := domain.QueryRequest{ID: string(rune('a' + i))}
+		result := &domain.QueryResult{QueryID: req.ID}
 		handler.putInCache(handler.cacheKey(req), result)
 	}
 
