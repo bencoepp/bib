@@ -3,6 +3,7 @@ package cluster
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,7 +73,10 @@ func NewStorage(cfg config.ClusterConfig, configDir string) (*Storage, error) {
 
 	// Enable WAL mode for better concurrency
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
+		err := db.Close()
+		if err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
@@ -83,7 +87,10 @@ func NewStorage(cfg config.ClusterConfig, configDir string) (*Storage, error) {
 	}
 
 	if err := s.init(); err != nil {
-		db.Close()
+		err := db.Close()
+		if err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -244,7 +251,7 @@ func (s *Storage) GetLog(index uint64) (*LogEntry, error) {
 		index,
 	).Scan(&entry.Index, &entry.Term, &entry.Type, &entry.Data)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -274,13 +281,23 @@ func (s *Storage) StoreLogs(entries []*LogEntry) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func(tx *sql.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+			return
+		}
+	}(tx)
 
 	stmt, err := tx.Prepare("INSERT OR REPLACE INTO raft_log (log_index, term, entry_type, data) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func(stmt *sql.Stmt) {
+		err := stmt.Close()
+		if err != nil {
+			return
+		}
+	}(stmt)
 
 	for _, entry := range entries {
 		if _, err := stmt.Exec(entry.Index, entry.Term, entry.Type, entry.Data); err != nil {
@@ -312,7 +329,7 @@ func (s *Storage) GetHardState() (*HardState, error) {
 		"SELECT term, vote, commit_index FROM raft_state WHERE id = 1",
 	).Scan(&state.Term, &state.Vote, &state.Commit)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return &HardState{}, nil
 	}
 	if err != nil {
@@ -354,7 +371,10 @@ func (s *Storage) CreateSnapshot(index, term uint64, configuration []byte, data 
 		id, index, term, configuration, len(data),
 	)
 	if err != nil {
-		os.Remove(snapshotPath)
+		err := os.Remove(snapshotPath)
+		if err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -381,7 +401,7 @@ func (s *Storage) GetLatestSnapshot() (*SnapshotMeta, error) {
 		"SELECT id, log_index, term, configuration, size, created_at FROM snapshots ORDER BY log_index DESC LIMIT 1",
 	).Scan(&meta.ID, &meta.Index, &meta.Term, &meta.Configuration, &meta.Size, &meta.CreatedAt)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -407,7 +427,12 @@ func (s *Storage) ListSnapshots() ([]SnapshotMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			return
+		}
+	}(rows)
 
 	var snapshots []SnapshotMeta
 	for rows.Next() {
@@ -437,7 +462,12 @@ func (s *Storage) cleanupSnapshots() {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			return
+		}
+	}(rows)
 
 	var idsToDelete []string
 	for rows.Next() {
@@ -450,7 +480,10 @@ func (s *Storage) cleanupSnapshots() {
 
 	for _, id := range idsToDelete {
 		snapshotPath := filepath.Join(s.dataDir, "snapshots", id+".snap")
-		os.Remove(snapshotPath)
+		err := os.Remove(snapshotPath)
+		if err != nil {
+			return
+		}
 		s.db.Exec("DELETE FROM snapshots WHERE id = ?", id)
 	}
 }
@@ -492,7 +525,12 @@ func (s *Storage) GetMembers() ([]ClusterMember, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			return
+		}
+	}(rows)
 
 	var members []ClusterMember
 	for rows.Next() {
@@ -537,7 +575,7 @@ func (s *Storage) ValidateJoinToken(token string) (*JoinToken, error) {
 		FROM join_tokens WHERE token = ?
 	`, token).Scan(&jt.Token, &jt.ClusterName, &jt.LeaderAddr, &jt.ExpiresAt, &used)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("invalid join token")
 	}
 	if err != nil {
@@ -610,7 +648,12 @@ func (s *Storage) GetCatalogEntries() ([]ReplicatedCatalogEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			return
+		}
+	}(rows)
 
 	var entries []ReplicatedCatalogEntry
 	for rows.Next() {
@@ -714,7 +757,7 @@ func (s *Storage) GetConfig(key string) ([]byte, error) {
 
 	var value []byte
 	err := s.db.QueryRow("SELECT value FROM replicated_config WHERE key = ?", key).Scan(&value)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return value, err

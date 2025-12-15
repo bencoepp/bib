@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -187,7 +188,7 @@ func (ps *PeerStore) GetPeer(id peer.ID) (*peer.AddrInfo, *PeerScore, error) {
 	`, id.String()).Scan(&addrsStr, &score.ConnectionSuccesses, &score.ConnectionFailures,
 		&score.AverageLatencyMs, &lastSeen, &isBootstrap)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, nil
 	}
 	if err != nil {

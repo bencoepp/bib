@@ -677,7 +677,7 @@ func TestWrappedError_Unwrap(t *testing.T) {
 	}
 
 	unwrapped := wrapped.Unwrap()
-	if unwrapped != originalErr {
+	if !errors.Is(unwrapped, originalErr) {
 		t.Error("expected original error from Unwrap")
 	}
 }

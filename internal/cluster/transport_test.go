@@ -16,7 +16,12 @@ func TestNewTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create transport: %v", err)
 	}
-	defer transport.Close()
+	defer func(transport *Transport) {
+		err := transport.Close()
+		if err != nil {
+			t.Errorf("failed to close transport: %v", err)
+		}
+	}(transport)
 
 	// Verify local address is set
 	addr := transport.LocalAddr()
@@ -38,13 +43,23 @@ func TestTransportConnectDisconnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create transport 1: %v", err)
 	}
-	defer t1.Close()
+	defer func(t1 *Transport) {
+		err := t1.Close()
+		if err != nil {
+			t.Errorf("failed to close transport 1: %v", err)
+		}
+	}(t1)
 
 	t2, err := NewTransport(cfg2, "node-2")
 	if err != nil {
 		t.Fatalf("failed to create transport 2: %v", err)
 	}
-	defer t2.Close()
+	defer func(t2 *Transport) {
+		err := t2.Close()
+		if err != nil {
+			t.Errorf("failed to close transport 2: %v", err)
+		}
+	}(t2)
 
 	// Connect t1 to t2
 	err = t1.Connect("node-2", t2.LocalAddr())
