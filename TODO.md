@@ -114,14 +114,18 @@
   - Configurable chunk size
 
 ### 1.5 Raft Consensus (Optional HA Mode)
-- [ ] **P2P-015**: Raft integration for HA clusters
-  - Hashicorp Raft or etcd/raft
+- [x] **P2P-015**: Raft integration for HA clusters
+  - etcd/raft for consensus
   - Leader election for coordinator nodes
-  - Log replication for critical metadata
-- [ ] **P2P-016**: Cluster membership
-  - Join/leave cluster operations
-  - Snapshot & restore
-  - Split-brain protection
+  - Log replication for critical metadata (catalog, jobs, config)
+  - SQLite-backed storage for logs/snapshots
+  - FSM for catalog, job, and config replication
+- [x] **P2P-016**: Cluster membership
+  - Join/leave cluster operations via `bib setup --cluster` and `--cluster-join`
+  - Join token generation with 24h expiry
+  - Voters + Non-voters support (minimum 3 voters)
+  - Snapshot & restore (automatic and manual)
+  - Simple split-brain protection (leader steps down without quorum)
 
 ---
 
