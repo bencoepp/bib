@@ -44,15 +44,15 @@
 ## Phase 1: P2P Networking Foundation
 
 ### 1.1 Core libp2p Integration
-- [ ] **P2P-001**: Set up libp2p host with identity management
+- [x] **P2P-001**: Set up libp2p host with identity management
   - Generate/persist node identity (Ed25519 keypair)
   - Configure listen addresses (TCP, QUIC, WebSocket)
   - Store identity in config/secrets
-- [ ] **P2P-002**: Implement transport layer
+- [x] **P2P-002**: Implement transport layer
   - TCP transport with Noise encryption
   - QUIC transport for improved performance
   - Optional WebSocket for browser-based access (future)
-- [ ] **P2P-003**: Configure multiplexing
+- [x] **P2P-003**: Configure multiplexing
   - Yamux multiplexer
   - Connection manager with limits
 

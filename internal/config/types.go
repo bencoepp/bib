@@ -1,5 +1,9 @@
 package config
 
+import (
+	"time"
+)
+
 // LogConfig holds logging configuration shared by both bib and bibd
 type LogConfig struct {
 	Level           string   `mapstructure:"level"`              // debug, info, warn, error
@@ -45,6 +49,41 @@ type TLSConfig struct {
 	KeyFile  string `mapstructure:"key_file"`
 }
 
+// P2PConfig holds P2P networking configuration for the daemon
+type P2PConfig struct {
+	// Enabled controls whether P2P networking is active
+	Enabled bool `mapstructure:"enabled"`
+
+	// Identity configuration
+	Identity P2PIdentityConfig `mapstructure:"identity"`
+
+	// Listen addresses in multiaddr format
+	// Defaults: ["/ip4/0.0.0.0/tcp/4001", "/ip4/0.0.0.0/udp/4001/quic-v1"]
+	ListenAddresses []string `mapstructure:"listen_addresses"`
+
+	// Connection manager settings
+	ConnManager ConnManagerConfig `mapstructure:"connection_manager"`
+}
+
+// P2PIdentityConfig holds node P2P identity configuration
+type P2PIdentityConfig struct {
+	// KeyPath is the path to the PEM-encoded Ed25519 private key file.
+	// If empty, defaults to the config directory + "/identity.pem"
+	KeyPath string `mapstructure:"key_path"`
+}
+
+// ConnManagerConfig holds connection manager settings
+type ConnManagerConfig struct {
+	// LowWatermark is the minimum number of connections to maintain.
+	LowWatermark int `mapstructure:"low_watermark"`
+
+	// HighWatermark is the maximum number of connections before pruning begins.
+	HighWatermark int `mapstructure:"high_watermark"`
+
+	// GracePeriod is the duration a new connection is protected from pruning.
+	GracePeriod time.Duration `mapstructure:"grace_period"`
+}
+
 // BibConfig is the complete configuration for the bib CLI
 type BibConfig struct {
 	Log      LogConfig      `mapstructure:"log"`
@@ -58,6 +97,7 @@ type BibdConfig struct {
 	Log      LogConfig      `mapstructure:"log"`
 	Identity IdentityConfig `mapstructure:"identity"`
 	Server   ServerConfig   `mapstructure:"server"`
+	P2P      P2PConfig      `mapstructure:"p2p"`
 }
 
 // DefaultBibConfig returns sensible defaults for bib CLI
@@ -110,6 +150,19 @@ func DefaultBibdConfig() *BibdConfig {
 			DataDir: "~/.local/share/bibd",
 			TLS: TLSConfig{
 				Enabled: false,
+			},
+		},
+		P2P: P2PConfig{
+			Enabled:  true,
+			Identity: P2PIdentityConfig{},
+			ListenAddresses: []string{
+				"/ip4/0.0.0.0/tcp/4001",
+				"/ip4/0.0.0.0/udp/4001/quic-v1",
+			},
+			ConnManager: ConnManagerConfig{
+				LowWatermark:  100,
+				HighWatermark: 400,
+				GracePeriod:   30 * time.Second,
 			},
 		},
 	}

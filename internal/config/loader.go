@@ -161,6 +161,13 @@ func setViperDefaults(v *viper.Viper, cfg interface{}) {
 		v.SetDefault("server.tls.key_file", c.Server.TLS.KeyFile)
 		v.SetDefault("server.pid_file", c.Server.PIDFile)
 		v.SetDefault("server.data_dir", c.Server.DataDir)
+		// P2P defaults
+		v.SetDefault("p2p.enabled", c.P2P.Enabled)
+		v.SetDefault("p2p.identity.key_path", c.P2P.Identity.KeyPath)
+		v.SetDefault("p2p.listen_addresses", c.P2P.ListenAddresses)
+		v.SetDefault("p2p.connection_manager.low_watermark", c.P2P.ConnManager.LowWatermark)
+		v.SetDefault("p2p.connection_manager.high_watermark", c.P2P.ConnManager.HighWatermark)
+		v.SetDefault("p2p.connection_manager.grace_period", c.P2P.ConnManager.GracePeriod)
 	}
 }
 
@@ -200,6 +207,13 @@ func NewViperFromConfig(appName string, cfg interface{}) *viper.Viper {
 		v.Set("server.tls.key_file", c.Server.TLS.KeyFile)
 		v.Set("server.pid_file", c.Server.PIDFile)
 		v.Set("server.data_dir", c.Server.DataDir)
+		// P2P settings
+		v.Set("p2p.enabled", c.P2P.Enabled)
+		v.Set("p2p.identity.key_path", c.P2P.Identity.KeyPath)
+		v.Set("p2p.listen_addresses", c.P2P.ListenAddresses)
+		v.Set("p2p.connection_manager.low_watermark", c.P2P.ConnManager.LowWatermark)
+		v.Set("p2p.connection_manager.high_watermark", c.P2P.ConnManager.HighWatermark)
+		v.Set("p2p.connection_manager.grace_period", c.P2P.ConnManager.GracePeriod)
 	}
 
 	return v
