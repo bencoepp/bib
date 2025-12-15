@@ -74,20 +74,23 @@
   - Peer reputation/scoring (basic)
 
 ### 1.3 Node Modes Implementation
-- [ ] **P2P-008**: Node mode configuration
+- [x] **P2P-008**: Node mode configuration
   - Config option: `mode: full | selective | proxy`
   - Mode-specific initialization
-- [ ] **P2P-009**: Full replica mode
+  - Hot config reload for runtime mode switching
+- [x] **P2P-009**: Full replica mode
   - Topic discovery protocol
   - Automatic subscription to all topics
-  - Full dataset replication logic
-- [ ] **P2P-010**: Selective mode
+  - Full dataset replication logic (periodic polling)
+- [x] **P2P-010**: Selective mode
   - Topic/dataset catalog sync
   - On-demand subscription mechanism
   - Partial replication with metadata
-- [ ] **P2P-011**: Proxy mode
+  - Persistent subscriptions across restarts
+- [x] **P2P-011**: Proxy mode
   - Request forwarding to known peers
-  - Response caching (configurable TTL)
+  - Response caching (configurable TTL, in-memory)
+  - Favorite peers configuration
   - No persistent storage
 
 ### 1.4 P2P Protocols

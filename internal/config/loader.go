@@ -163,6 +163,7 @@ func setViperDefaults(v *viper.Viper, cfg interface{}) {
 		v.SetDefault("server.data_dir", c.Server.DataDir)
 		// P2P defaults
 		v.SetDefault("p2p.enabled", c.P2P.Enabled)
+		v.SetDefault("p2p.mode", c.P2P.Mode)
 		v.SetDefault("p2p.identity.key_path", c.P2P.Identity.KeyPath)
 		v.SetDefault("p2p.listen_addresses", c.P2P.ListenAddresses)
 		v.SetDefault("p2p.connection_manager.low_watermark", c.P2P.ConnManager.LowWatermark)
@@ -181,6 +182,15 @@ func setViperDefaults(v *viper.Viper, cfg interface{}) {
 		v.SetDefault("p2p.dht.mode", c.P2P.DHT.Mode)
 		// Peer store defaults
 		v.SetDefault("p2p.peer_store.path", c.P2P.PeerStore.Path)
+		// Full replica mode defaults
+		v.SetDefault("p2p.full_replica.sync_interval", c.P2P.FullReplica.SyncInterval)
+		// Selective mode defaults
+		v.SetDefault("p2p.selective.subscriptions", c.P2P.Selective.Subscriptions)
+		v.SetDefault("p2p.selective.subscription_store_path", c.P2P.Selective.SubscriptionStorePath)
+		// Proxy mode defaults
+		v.SetDefault("p2p.proxy.cache_ttl", c.P2P.Proxy.CacheTTL)
+		v.SetDefault("p2p.proxy.max_cache_size", c.P2P.Proxy.MaxCacheSize)
+		v.SetDefault("p2p.proxy.favorite_peers", c.P2P.Proxy.FavoritePeers)
 	}
 }
 
@@ -222,6 +232,7 @@ func NewViperFromConfig(appName string, cfg interface{}) *viper.Viper {
 		v.Set("server.data_dir", c.Server.DataDir)
 		// P2P settings
 		v.Set("p2p.enabled", c.P2P.Enabled)
+		v.Set("p2p.mode", c.P2P.Mode)
 		v.Set("p2p.identity.key_path", c.P2P.Identity.KeyPath)
 		v.Set("p2p.listen_addresses", c.P2P.ListenAddresses)
 		v.Set("p2p.connection_manager.low_watermark", c.P2P.ConnManager.LowWatermark)
@@ -240,6 +251,15 @@ func NewViperFromConfig(appName string, cfg interface{}) *viper.Viper {
 		v.Set("p2p.dht.mode", c.P2P.DHT.Mode)
 		// Peer store settings
 		v.Set("p2p.peer_store.path", c.P2P.PeerStore.Path)
+		// Full replica mode settings
+		v.Set("p2p.full_replica.sync_interval", c.P2P.FullReplica.SyncInterval)
+		// Selective mode settings
+		v.Set("p2p.selective.subscriptions", c.P2P.Selective.Subscriptions)
+		v.Set("p2p.selective.subscription_store_path", c.P2P.Selective.SubscriptionStorePath)
+		// Proxy mode settings
+		v.Set("p2p.proxy.cache_ttl", c.P2P.Proxy.CacheTTL)
+		v.Set("p2p.proxy.max_cache_size", c.P2P.Proxy.MaxCacheSize)
+		v.Set("p2p.proxy.favorite_peers", c.P2P.Proxy.FavoritePeers)
 	}
 
 	return v

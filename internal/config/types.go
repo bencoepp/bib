@@ -54,6 +54,12 @@ type P2PConfig struct {
 	// Enabled controls whether P2P networking is active
 	Enabled bool `mapstructure:"enabled"`
 
+	// Mode controls the node operation mode: "proxy", "selective", or "full"
+	// - proxy: no local storage, forwards requests to peers (default)
+	// - selective: subscribe to specific topics/datasets on-demand
+	// - full: replicate all data from connected peers
+	Mode string `mapstructure:"mode"`
+
 	// Identity configuration
 	Identity P2PIdentityConfig `mapstructure:"identity"`
 
@@ -75,6 +81,15 @@ type P2PConfig struct {
 
 	// Peer store configuration
 	PeerStore PeerStoreConfig `mapstructure:"peer_store"`
+
+	// Full replica mode configuration
+	FullReplica FullReplicaConfig `mapstructure:"full_replica"`
+
+	// Selective mode configuration
+	Selective SelectiveConfig `mapstructure:"selective"`
+
+	// Proxy mode configuration
+	Proxy ProxyConfig `mapstructure:"proxy"`
 }
 
 // P2PIdentityConfig holds node P2P identity configuration
@@ -139,6 +154,36 @@ type PeerStoreConfig struct {
 	// Path is the path to the SQLite peer store database
 	// If empty, defaults to config directory + "/peers.db"
 	Path string `mapstructure:"path"`
+}
+
+// FullReplicaConfig holds configuration for full replica mode
+type FullReplicaConfig struct {
+	// SyncInterval is how often to poll peers for new data
+	SyncInterval time.Duration `mapstructure:"sync_interval"`
+}
+
+// SelectiveConfig holds configuration for selective mode
+type SelectiveConfig struct {
+	// Subscriptions is a list of topic patterns to subscribe to
+	// Persisted across restarts
+	Subscriptions []string `mapstructure:"subscriptions"`
+
+	// SubscriptionStorePath is where to persist subscriptions
+	// If empty, defaults to config directory + "/subscriptions.json"
+	SubscriptionStorePath string `mapstructure:"subscription_store_path"`
+}
+
+// ProxyConfig holds configuration for proxy mode
+type ProxyConfig struct {
+	// CacheTTL is how long to cache query results
+	CacheTTL time.Duration `mapstructure:"cache_ttl"`
+
+	// MaxCacheSize is the maximum number of cached entries
+	MaxCacheSize int `mapstructure:"max_cache_size"`
+
+	// FavoritePeers is a list of preferred peers for forwarding requests
+	// If empty, forwards to any discovered peer
+	FavoritePeers []string `mapstructure:"favorite_peers"`
 }
 
 // BibConfig is the complete configuration for the bib CLI
@@ -211,6 +256,7 @@ func DefaultBibdConfig() *BibdConfig {
 		},
 		P2P: P2PConfig{
 			Enabled:  true,
+			Mode:     "proxy", // Default to proxy mode
 			Identity: P2PIdentityConfig{},
 			ListenAddresses: []string{
 				"/ip4/0.0.0.0/tcp/4001",
@@ -241,6 +287,18 @@ func DefaultBibdConfig() *BibdConfig {
 			},
 			PeerStore: PeerStoreConfig{
 				Path: "", // defaults to config dir + "/peers.db"
+			},
+			FullReplica: FullReplicaConfig{
+				SyncInterval: 5 * time.Minute,
+			},
+			Selective: SelectiveConfig{
+				Subscriptions:         []string{},
+				SubscriptionStorePath: "", // defaults to config dir + "/subscriptions.json"
+			},
+			Proxy: ProxyConfig{
+				CacheTTL:      2 * time.Minute,
+				MaxCacheSize:  1000,
+				FavoritePeers: []string{},
 			},
 		},
 	}
