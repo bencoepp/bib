@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"bib/internal/config"
+	"bib/internal/logger"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -16,6 +19,18 @@ var (
 
 	// cfg holds the loaded configuration
 	cfg *config.BibConfig
+
+	// log is the logger instance
+	log *logger.Logger
+
+	// auditLog is the audit logger instance
+	auditLog *logger.AuditLogger
+
+	// cmdStartTime tracks when command execution started
+	cmdStartTime time.Time
+
+	// cmdCtx is the command context with logger and command context
+	cmdCtx context.Context
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -29,7 +44,74 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
-		return loadConfig(cmd)
+		if err := loadConfig(cmd); err != nil {
+			return err
+		}
+
+		// Initialize logger
+		var err error
+		log, err = logger.New(cfg.Log)
+		if err != nil {
+			return fmt.Errorf("failed to initialize logger: %w", err)
+		}
+
+		// Initialize audit logger if configured
+		if cfg.Log.AuditPath != "" {
+			auditLog, err = logger.NewAuditLogger(cfg.Log.AuditPath, cfg.Log.AuditMaxAgeDays)
+			if err != nil {
+				log.Warn("failed to initialize audit logger", "error", err)
+			}
+		}
+
+		// Create command context
+		cc := logger.NewCommandContext(cmd, args)
+		cmdCtx = logger.WithCommandContext(context.Background(), cc)
+		cmdCtx = logger.WithLogger(cmdCtx, log)
+
+		// Track start time for duration logging
+		cmdStartTime = time.Now()
+
+		// Log command start
+		log.Debug("command started",
+			"command", cc.Command,
+			"args", cc.Args,
+			"request_id", cc.RequestID,
+			"user", cc.User,
+			"hostname", cc.Hostname,
+			"working_dir", cc.WorkingDir,
+		)
+
+		return nil
+	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		if log == nil {
+			return nil
+		}
+
+		duration := time.Since(cmdStartTime)
+		cc := logger.CommandContextFrom(cmdCtx)
+
+		log.Debug("command completed",
+			"command", cc.Command,
+			"duration_ms", duration.Milliseconds(),
+			"request_id", cc.RequestID,
+		)
+
+		// Log to audit if configured
+		if auditLog != nil {
+			auditLog.LogCommand(cmdCtx, cc.Command, logger.AuditOutcomeSuccess, map[string]any{
+				"duration_ms": duration.Milliseconds(),
+				"args":        cc.Args,
+			})
+		}
+
+		// Cleanup
+		if auditLog != nil {
+			auditLog.Close()
+		}
+		log.Close()
+
+		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -92,4 +174,19 @@ func Config() *config.BibConfig {
 // ConfigFile returns the config file path (for use by subcommands)
 func ConfigFile() string {
 	return cfgFile
+}
+
+// Log returns the logger instance (for use by subcommands)
+func Log() *logger.Logger {
+	return log
+}
+
+// AuditLog returns the audit logger instance (for use by subcommands)
+func AuditLog() *logger.AuditLogger {
+	return auditLog
+}
+
+// Context returns the command context (for use by subcommands)
+func Context() context.Context {
+	return cmdCtx
 }

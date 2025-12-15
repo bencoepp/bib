@@ -2,9 +2,18 @@ package config
 
 // LogConfig holds logging configuration shared by both bib and bibd
 type LogConfig struct {
-	Level  string `mapstructure:"level"`  // debug, info, warn, error
-	Format string `mapstructure:"format"` // text, json
-	Output string `mapstructure:"output"` // stdout, stderr, or file path
+	Level           string   `mapstructure:"level"`              // debug, info, warn, error
+	Format          string   `mapstructure:"format"`             // text, json, pretty
+	Output          string   `mapstructure:"output"`             // stdout, stderr, or file path
+	FilePath        string   `mapstructure:"file_path"`          // path to log file (in addition to output)
+	MaxSizeMB       int      `mapstructure:"max_size_mb"`        // max size in MB before rotation
+	MaxBackups      int      `mapstructure:"max_backups"`        // max number of old log files to keep
+	MaxAgeDays      int      `mapstructure:"max_age_days"`       // max days to retain old log files
+	EnableCaller    bool     `mapstructure:"enable_caller"`      // include source file/line in logs
+	NoColor         bool     `mapstructure:"no_color"`           // disable colored output (pretty format only)
+	AuditPath       string   `mapstructure:"audit_path"`         // path to audit log file
+	AuditMaxAgeDays int      `mapstructure:"audit_max_age_days"` // max days to retain audit logs
+	RedactFields    []string `mapstructure:"redact_fields"`      // field names to redact from logs
 }
 
 // IdentityConfig holds identity/authentication configuration
@@ -55,9 +64,17 @@ type BibdConfig struct {
 func DefaultBibConfig() *BibConfig {
 	return &BibConfig{
 		Log: LogConfig{
-			Level:  "info",
-			Format: "text",
-			Output: "stderr",
+			Level:           "info",
+			Format:          "text",
+			Output:          "stderr",
+			FilePath:        "",
+			MaxSizeMB:       100,
+			MaxBackups:      3,
+			MaxAgeDays:      28,
+			EnableCaller:    false,
+			AuditPath:       "",
+			AuditMaxAgeDays: 365,
+			RedactFields:    []string{"password", "token", "key", "secret", "credential", "auth"},
 		},
 		Identity: IdentityConfig{},
 		Output: OutputConfig{
@@ -72,9 +89,18 @@ func DefaultBibConfig() *BibConfig {
 func DefaultBibdConfig() *BibdConfig {
 	return &BibdConfig{
 		Log: LogConfig{
-			Level:  "info",
-			Format: "json",
-			Output: "stdout",
+			Level:           "info",
+			Format:          "pretty",
+			Output:          "stdout",
+			FilePath:        "",
+			MaxSizeMB:       100,
+			MaxBackups:      3,
+			MaxAgeDays:      28,
+			EnableCaller:    true,
+			NoColor:         false,
+			AuditPath:       "",
+			AuditMaxAgeDays: 365,
+			RedactFields:    []string{"password", "token", "key", "secret", "credential", "auth"},
 		},
 		Identity: IdentityConfig{},
 		Server: ServerConfig{

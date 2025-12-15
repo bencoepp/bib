@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
-	"log"
+	stdlog "log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"bib/internal/config"
+	"bib/internal/logger"
 )
 
 var (
@@ -31,26 +35,98 @@ func main() {
 	if cfgFile == "" {
 		path, created, err := config.GenerateConfigIfNotExists(config.AppBibd, "yaml")
 		if err == nil && created {
-			log.Printf("Created default config at: %s", path)
-			log.Printf("Run 'bib setup --daemon' to customize your configuration.")
+			stdlog.Printf("Created default config at: %s", path)
+			stdlog.Printf("Run 'bib setup --daemon' to customize your configuration.")
 		}
 	}
 
 	// Load configuration
 	cfg, err := config.LoadBibd(cfgFile)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		stdlog.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Start daemon
-	log.Printf("Starting bibd on %s:%d", cfg.Server.Host, cfg.Server.Port)
-	log.Printf("Log level: %s, format: %s", cfg.Log.Level, cfg.Log.Format)
-	log.Printf("Data directory: %s", cfg.Server.DataDir)
+	// Initialize structured logger
+	log, err := logger.New(cfg.Log)
+	if err != nil {
+		stdlog.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer log.Close()
+
+	// Initialize audit logger if configured
+	var auditLog *logger.AuditLogger
+	if cfg.Log.AuditPath != "" {
+		auditLog, err = logger.NewAuditLogger(cfg.Log.AuditPath, cfg.Log.AuditMaxAgeDays)
+		if err != nil {
+			log.Warn("failed to initialize audit logger", "error", err)
+		} else {
+			defer auditLog.Close()
+		}
+	}
+
+	// Create daemon context
+	cc := logger.NewDaemonContext("bibd")
+	ctx := logger.WithCommandContext(context.Background(), cc)
+	ctx = logger.WithLogger(ctx, log)
+
+	// Log startup
+	log.Info("starting bibd",
+		"host", cfg.Server.Host,
+		"port", cfg.Server.Port,
+		"log_level", cfg.Log.Level,
+		"log_format", cfg.Log.Format,
+		"data_dir", cfg.Server.DataDir,
+		"request_id", cc.RequestID,
+	)
 
 	if cfg.Server.TLS.Enabled {
-		log.Printf("TLS enabled with cert: %s", cfg.Server.TLS.CertFile)
+		log.Info("TLS enabled",
+			"cert_file", cfg.Server.TLS.CertFile,
+		)
 	}
 
-	// TODO: Implement actual daemon logic
-	select {}
+	// Log startup audit event
+	if auditLog != nil {
+		auditLog.Log(ctx, logger.AuditEvent{
+			Action:   logger.AuditActionCommand,
+			Actor:    cc.User,
+			Resource: "bibd",
+			Outcome:  logger.AuditOutcomeSuccess,
+			Metadata: map[string]any{
+				"event":    "startup",
+				"host":     cfg.Server.Host,
+				"port":     cfg.Server.Port,
+				"data_dir": cfg.Server.DataDir,
+			},
+		})
+	}
+
+	// Setup graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// TODO: Implement actual daemon logic here
+	// For now, wait for shutdown signal
+
+	sig := <-sigChan
+	log.Info("received shutdown signal",
+		"signal", sig.String(),
+		"request_id", cc.RequestID,
+	)
+
+	// Log shutdown audit event
+	if auditLog != nil {
+		auditLog.Log(ctx, logger.AuditEvent{
+			Action:   logger.AuditActionCommand,
+			Actor:    cc.User,
+			Resource: "bibd",
+			Outcome:  logger.AuditOutcomeSuccess,
+			Metadata: map[string]any{
+				"event":  "shutdown",
+				"signal": sig.String(),
+			},
+		})
+	}
+
+	log.Info("bibd stopped", "request_id", cc.RequestID)
 }
