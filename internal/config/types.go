@@ -63,6 +63,18 @@ type P2PConfig struct {
 
 	// Connection manager settings
 	ConnManager ConnManagerConfig `mapstructure:"connection_manager"`
+
+	// Bootstrap node configuration
+	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
+
+	// mDNS local discovery configuration
+	MDNS MDNSConfig `mapstructure:"mdns"`
+
+	// DHT configuration
+	DHT DHTConfig `mapstructure:"dht"`
+
+	// Peer store configuration
+	PeerStore PeerStoreConfig `mapstructure:"peer_store"`
 }
 
 // P2PIdentityConfig holds node P2P identity configuration
@@ -82,6 +94,51 @@ type ConnManagerConfig struct {
 
 	// GracePeriod is the duration a new connection is protected from pruning.
 	GracePeriod time.Duration `mapstructure:"grace_period"`
+}
+
+// BootstrapConfig holds bootstrap node configuration
+type BootstrapConfig struct {
+	// Peers is a list of bootstrap peer multiaddrs
+	// Default includes bib.dev bootstrap node
+	Peers []string `mapstructure:"peers"`
+
+	// MinPeers is the minimum number of bootstrap peers to connect to before continuing
+	MinPeers int `mapstructure:"min_peers"`
+
+	// RetryInterval is the initial retry interval for failed connections
+	RetryInterval time.Duration `mapstructure:"retry_interval"`
+
+	// MaxRetryInterval is the maximum retry interval (exponential backoff cap)
+	MaxRetryInterval time.Duration `mapstructure:"max_retry_interval"`
+}
+
+// MDNSConfig holds mDNS local discovery configuration
+type MDNSConfig struct {
+	// Enabled controls whether mDNS discovery is active
+	Enabled bool `mapstructure:"enabled"`
+
+	// ServiceName is the mDNS service name to advertise/discover
+	// Default: "bib.local"
+	ServiceName string `mapstructure:"service_name"`
+}
+
+// DHTConfig holds Kademlia DHT configuration
+type DHTConfig struct {
+	// Enabled controls whether DHT is active
+	Enabled bool `mapstructure:"enabled"`
+
+	// Mode controls the DHT operation mode: "auto", "server", or "client"
+	// - auto: libp2p decides based on reachability
+	// - server: full DHT participant, stores records (requires public IP)
+	// - client: queries only, doesn't store records (works behind NAT)
+	Mode string `mapstructure:"mode"`
+}
+
+// PeerStoreConfig holds peer store configuration
+type PeerStoreConfig struct {
+	// Path is the path to the SQLite peer store database
+	// If empty, defaults to config directory + "/peers.db"
+	Path string `mapstructure:"path"`
 }
 
 // BibConfig is the complete configuration for the bib CLI
@@ -163,6 +220,27 @@ func DefaultBibdConfig() *BibdConfig {
 				LowWatermark:  100,
 				HighWatermark: 400,
 				GracePeriod:   30 * time.Second,
+			},
+			Bootstrap: BootstrapConfig{
+				Peers: []string{
+					// bib.dev bootstrap node - peer ID will be discovered via DNS
+					"/dns4/bib.dev/tcp/4001",
+					"/dns4/bib.dev/udp/4001/quic-v1",
+				},
+				MinPeers:         1,
+				RetryInterval:    5 * time.Second,
+				MaxRetryInterval: 1 * time.Hour,
+			},
+			MDNS: MDNSConfig{
+				Enabled:     true,
+				ServiceName: "bib.local",
+			},
+			DHT: DHTConfig{
+				Enabled: true,
+				Mode:    "auto",
+			},
+			PeerStore: PeerStoreConfig{
+				Path: "", // defaults to config dir + "/peers.db"
 			},
 		},
 	}

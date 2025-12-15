@@ -168,6 +168,19 @@ func setViperDefaults(v *viper.Viper, cfg interface{}) {
 		v.SetDefault("p2p.connection_manager.low_watermark", c.P2P.ConnManager.LowWatermark)
 		v.SetDefault("p2p.connection_manager.high_watermark", c.P2P.ConnManager.HighWatermark)
 		v.SetDefault("p2p.connection_manager.grace_period", c.P2P.ConnManager.GracePeriod)
+		// Bootstrap defaults
+		v.SetDefault("p2p.bootstrap.peers", c.P2P.Bootstrap.Peers)
+		v.SetDefault("p2p.bootstrap.min_peers", c.P2P.Bootstrap.MinPeers)
+		v.SetDefault("p2p.bootstrap.retry_interval", c.P2P.Bootstrap.RetryInterval)
+		v.SetDefault("p2p.bootstrap.max_retry_interval", c.P2P.Bootstrap.MaxRetryInterval)
+		// mDNS defaults
+		v.SetDefault("p2p.mdns.enabled", c.P2P.MDNS.Enabled)
+		v.SetDefault("p2p.mdns.service_name", c.P2P.MDNS.ServiceName)
+		// DHT defaults
+		v.SetDefault("p2p.dht.enabled", c.P2P.DHT.Enabled)
+		v.SetDefault("p2p.dht.mode", c.P2P.DHT.Mode)
+		// Peer store defaults
+		v.SetDefault("p2p.peer_store.path", c.P2P.PeerStore.Path)
 	}
 }
 
@@ -214,6 +227,19 @@ func NewViperFromConfig(appName string, cfg interface{}) *viper.Viper {
 		v.Set("p2p.connection_manager.low_watermark", c.P2P.ConnManager.LowWatermark)
 		v.Set("p2p.connection_manager.high_watermark", c.P2P.ConnManager.HighWatermark)
 		v.Set("p2p.connection_manager.grace_period", c.P2P.ConnManager.GracePeriod)
+		// Bootstrap settings
+		v.Set("p2p.bootstrap.peers", c.P2P.Bootstrap.Peers)
+		v.Set("p2p.bootstrap.min_peers", c.P2P.Bootstrap.MinPeers)
+		v.Set("p2p.bootstrap.retry_interval", c.P2P.Bootstrap.RetryInterval)
+		v.Set("p2p.bootstrap.max_retry_interval", c.P2P.Bootstrap.MaxRetryInterval)
+		// mDNS settings
+		v.Set("p2p.mdns.enabled", c.P2P.MDNS.Enabled)
+		v.Set("p2p.mdns.service_name", c.P2P.MDNS.ServiceName)
+		// DHT settings
+		v.Set("p2p.dht.enabled", c.P2P.DHT.Enabled)
+		v.Set("p2p.dht.mode", c.P2P.DHT.Mode)
+		// Peer store settings
+		v.Set("p2p.peer_store.path", c.P2P.PeerStore.Path)
 	}
 
 	return v

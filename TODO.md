@@ -57,18 +57,18 @@
   - Connection manager with limits
 
 ### 1.2 Node Discovery & Bootstrap
-- [ ] **P2P-004**: Bootstrap node configuration
+- [x] **P2P-004**: Bootstrap node configuration
   - Hardcode bib.dev as default bootstrap
   - Allow additional bootstrap nodes in config
   - Implement bootstrap connection logic
-- [ ] **P2P-005**: mDNS local discovery
+- [x] **P2P-005**: mDNS local discovery
   - Enable for local network discovery
   - Configurable on/off
-- [ ] **P2P-006**: DHT implementation
+- [x] **P2P-006**: DHT implementation
   - Kademlia DHT for peer discovery
   - Content routing for data location
   - Provider records for dataset availability
-- [ ] **P2P-007**: Peer store & connection management
+- [x] **P2P-007**: Peer store & connection management
   - Persistent peer store (badger/sqlite)
   - Connection pruning strategies
   - Peer reputation/scoring (basic)
