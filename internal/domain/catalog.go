@@ -19,6 +19,12 @@ type CatalogEntry struct {
 	// DatasetName is the dataset name.
 	DatasetName string `json:"dataset_name"`
 
+	// VersionID is the version ID.
+	VersionID DatasetVersionID `json:"version_id"`
+
+	// Version is the semantic version string.
+	Version string `json:"version"`
+
 	// Hash is the content hash.
 	Hash string `json:"hash"`
 
@@ -27,6 +33,15 @@ type CatalogEntry struct {
 
 	// ChunkCount is the number of chunks.
 	ChunkCount int `json:"chunk_count"`
+
+	// HasContent indicates if the version has data content.
+	HasContent bool `json:"has_content"`
+
+	// HasInstructions indicates if the version has instructions.
+	HasInstructions bool `json:"has_instructions"`
+
+	// Owners are the user IDs who own this dataset.
+	Owners []UserID `json:"owners,omitempty"`
 
 	// UpdatedAt is when this entry was last updated.
 	UpdatedAt time.Time `json:"updated_at"`
