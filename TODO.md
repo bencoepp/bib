@@ -1,0 +1,758 @@
+# BIB Development Roadmap
+
+> A distributed research, analysis and management tool for handling all types of research data.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              BIB ECOSYSTEM                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌──────────────┐         ┌──────────────────────────────────────────┐     │
+│   │   bib CLI    │◄───────►│              bibd daemon                 │     │
+│   │  (bubbletea) │  gRPC   │                                          │     │
+│   └──────────────┘  mTLS   │  ┌────────────┐  ┌───────────────────┐   │     │
+│                            │  │  P2P Layer │  │    Scheduler      │   │     │
+│   ┌──────────────┐         │  │  (libp2p)  │  │  (CEL + Workers)  │   │     │
+│   │  Wish SSH    │◄───────►│  └────────────┘  └───────────────────┘   │     │
+│   │   Server     │         │                                          │     │
+│   └──────────────┘         │  ┌────────────┐  ┌───────────────────┐   │     │
+│                            │  │  Storage   │  │   Web Interface   │   │     │
+│   ┌──────────────┐         │  │ (SQL/Blob) │  │   (Read + More)   │   │     │
+│   │  Bootstrap   │         │  └────────────┘  └───────────────────┘   │     │
+│   │   bib.dev    │         │                                          │     │
+│   └──────────────┘         └──────────────────────────────────────────┘     │
+│                                       │                                      │
+│                                       ▼                                      │
+│                    ┌──────────────────────────────────────┐                 │
+│                    │  PostgreSQL / SQLite / Kubernetes    │                 │
+│                    └──────────────────────────────────────┘                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Node Modes
+
+| Mode | Description | Storage | Data Sync |
+|------|-------------|---------|-----------|
+| **Full Replica** | Replicates all topics/datasets from configured base nodes | Full local | Continuous |
+| **Selective** | Choose which datasets/topics to sync on-demand | Partial local | On-demand |
+| **Proxy** | No local storage, forwards requests to other nodes | None/Cache | Pass-through |
+
+---
+
+## Phase 1: P2P Networking Foundation
+
+### 1.1 Core libp2p Integration
+- [ ] **P2P-001**: Set up libp2p host with identity management
+  - Generate/persist node identity (Ed25519 keypair)
+  - Configure listen addresses (TCP, QUIC, WebSocket)
+  - Store identity in config/secrets
+- [ ] **P2P-002**: Implement transport layer
+  - TCP transport with Noise encryption
+  - QUIC transport for improved performance
+  - Optional WebSocket for browser-based access (future)
+- [ ] **P2P-003**: Configure multiplexing
+  - Yamux multiplexer
+  - Connection manager with limits
+
+### 1.2 Node Discovery & Bootstrap
+- [ ] **P2P-004**: Bootstrap node configuration
+  - Hardcode bib.dev as default bootstrap
+  - Allow additional bootstrap nodes in config
+  - Implement bootstrap connection logic
+- [ ] **P2P-005**: mDNS local discovery
+  - Enable for local network discovery
+  - Configurable on/off
+- [ ] **P2P-006**: DHT implementation
+  - Kademlia DHT for peer discovery
+  - Content routing for data location
+  - Provider records for dataset availability
+- [ ] **P2P-007**: Peer store & connection management
+  - Persistent peer store (badger/sqlite)
+  - Connection pruning strategies
+  - Peer reputation/scoring (basic)
+
+### 1.3 Node Modes Implementation
+- [ ] **P2P-008**: Node mode configuration
+  - Config option: `mode: full | selective | proxy`
+  - Mode-specific initialization
+- [ ] **P2P-009**: Full replica mode
+  - Topic discovery protocol
+  - Automatic subscription to all topics
+  - Full dataset replication logic
+- [ ] **P2P-010**: Selective mode
+  - Topic/dataset catalog sync
+  - On-demand subscription mechanism
+  - Partial replication with metadata
+- [ ] **P2P-011**: Proxy mode
+  - Request forwarding to known peers
+  - Response caching (configurable TTL)
+  - No persistent storage
+
+### 1.4 P2P Protocols
+- [ ] **P2P-012**: Define custom protocols
+  - `/bib/discovery/1.0.0` - Node & dataset discovery
+  - `/bib/data/1.0.0` - Data transfer protocol
+  - `/bib/jobs/1.0.0` - Job distribution protocol
+  - `/bib/sync/1.0.0` - State synchronization
+- [ ] **P2P-013**: PubSub for real-time updates
+  - GossipSub for topic-based messaging
+  - Topic structure: `/bib/topics/<topic-id>`
+  - Message validation & signing
+- [ ] **P2P-014**: Data transfer
+  - Chunked transfer for large datasets
+  - Resumable downloads
+  - Integrity verification (content hashing)
+
+### 1.5 Raft Consensus (Optional HA Mode)
+- [ ] **P2P-015**: Raft integration for HA clusters
+  - Hashicorp Raft or etcd/raft
+  - Leader election for coordinator nodes
+  - Log replication for critical metadata
+- [ ] **P2P-016**: Cluster membership
+  - Join/leave cluster operations
+  - Snapshot & restore
+  - Split-brain protection
+
+---
+
+## Phase 2: Storage Layer
+
+### 2.1 Database Abstraction
+- [ ] **DB-001**: Database interface design
+  - Define repository interfaces
+  - Support both SQLite and PostgreSQL
+  - Connection pooling (pgx for Postgres)
+- [ ] **DB-002**: SQLite embedded mode
+  - Single-file database for simple deployments
+  - WAL mode for concurrency
+  - Auto-vacuum configuration
+- [ ] **DB-003**: PostgreSQL external mode
+  - Connection string configuration
+  - TLS/SSL support
+  - Health checks & reconnection
+
+### 2.2 Managed Database (Container/K8s)
+- [ ] **DB-004**: Container-managed PostgreSQL
+  - Docker/Podman PostgreSQL management
+  - Automatic container lifecycle
+  - Volume management for persistence
+- [ ] **DB-005**: Kubernetes PostgreSQL operator
+  - CRD-based PostgreSQL deployment
+  - StatefulSet management
+  - Backup/restore automation
+
+### 2.3 Schema & Migrations
+- [ ] **DB-006**: Migration framework
+  - golang-migrate or goose
+  - Up/down migrations
+  - Version tracking
+- [ ] **DB-007**: Core schema design
+  ```
+  - nodes (peer_id, address, mode, last_seen, metadata)
+  - topics (id, name, description, schema, created_at)
+  - datasets (id, topic_id, name, size, hash, location, metadata)
+  - chunks (id, dataset_id, index, hash, size, data)
+  - jobs (id, type, status, cel_expression, created_at, updated_at)
+  - job_results (id, job_id, node_id, result, error, completed_at)
+  - audit_log (id, action, actor, resource, timestamp, metadata)
+  ```
+- [ ] **DB-008**: Initial migrations
+  - Create all core tables
+  - Indexes for common queries
+  - Foreign key constraints
+
+### 2.4 Blob Storage
+- [ ] **DB-009**: Local blob storage
+  - Content-addressed storage (CAS)
+  - Directory structure: `<data_dir>/blobs/<hash[0:2]>/<hash[2:4]>/<hash>`
+  - Garbage collection for orphaned blobs
+- [ ] **DB-010**: Optional S3-compatible storage
+  - MinIO/S3 integration
+  - Configurable backend
+  - Tiered storage (hot/cold)
+
+---
+
+## Phase 3: Scheduler & Job System
+
+### 3.1 CEL Integration
+- [ ] **SCHED-001**: CEL environment setup
+  - google/cel-go integration
+  - Custom functions for data operations
+  - Type declarations for bib data model
+- [ ] **SCHED-002**: CEL standard library
+  - Data access functions: `dataset()`, `topic()`, `query()`
+  - Transformation: `map()`, `filter()`, `reduce()`, `aggregate()`
+  - I/O: `fetch()`, `scrape()`, `parse()`
+  - ML: `train()`, `predict()`, `embed()`
+- [ ] **SCHED-003**: CEL validation & compilation
+  - Syntax validation
+  - Type checking
+  - Resource estimation
+
+### 3.2 Job Types
+- [ ] **SCHED-004**: Job type definitions
+  ```go
+  type JobType string
+  const (
+    JobTypeScrape     JobType = "scrape"      // Web scraping
+    JobTypeTransform  JobType = "transform"   // Data transformation
+    JobTypeClean      JobType = "clean"       // Data cleaning
+    JobTypeAnalyze    JobType = "analyze"     // Data analysis
+    JobTypeML         JobType = "ml"          // Machine learning
+    JobTypeETL        JobType = "etl"         // Extract-Transform-Load
+    JobTypeCustom     JobType = "custom"      // Custom CEL job
+  )
+  ```
+- [ ] **SCHED-005**: Job lifecycle
+  - States: pending → queued → running → completed/failed
+  - Retry policies
+  - Timeout handling
+  - Cancellation support
+
+### 3.3 Scheduler Core
+- [ ] **SCHED-006**: Job queue implementation
+  - Priority queue with multiple levels
+  - Fair scheduling across topics
+  - Resource-aware scheduling
+- [ ] **SCHED-007**: Worker pool
+  - Configurable worker count
+  - Worker health monitoring
+  - Graceful shutdown
+- [ ] **SCHED-008**: Job distribution (P2P)
+  - Distribute jobs to capable nodes
+  - Data locality optimization
+  - Load balancing across cluster
+
+### 3.4 Built-in Job Templates
+- [ ] **SCHED-009**: Web scraping jobs
+  - HTTP/HTTPS fetching
+  - HTML parsing (goquery)
+  - Rate limiting & politeness
+  - Robots.txt compliance
+- [ ] **SCHED-010**: Data cleaning jobs
+  - Deduplication
+  - Schema validation
+  - Missing value handling
+  - Outlier detection
+- [ ] **SCHED-011**: ML integration
+  - ONNX runtime for inference
+  - Embedding generation
+  - Model versioning
+  - Training job orchestration (external)
+
+### 3.5 Data Pipeline
+- [ ] **SCHED-012**: Pipeline definition
+  - DAG-based pipeline structure
+  - Step dependencies
+  - Checkpoint/resume
+- [ ] **SCHED-013**: Data warehouse features
+  - Materialized views
+  - Incremental processing
+  - Partitioning support
+
+---
+
+## Phase 4: gRPC API
+
+### 4.1 Protocol Definitions
+- [ ] **GRPC-001**: Proto file structure
+  ```
+  api/proto/
+  ├── bib/v1/
+  │   ├── common.proto       # Shared types
+  │   ├── nodes.proto        # Node management
+  │   ├── topics.proto       # Topic operations
+  │   ├── datasets.proto     # Dataset operations  
+  │   ├── jobs.proto         # Job scheduling
+  │   ├── query.proto        # Data queries
+  │   └── admin.proto        # Administrative ops
+  ```
+- [ ] **GRPC-002**: Common types
+  - Pagination, filtering, sorting
+  - Error types
+  - Metadata structures
+- [ ] **GRPC-003**: Service definitions
+  - NodeService: Register, List, Get, Health
+  - TopicService: Create, List, Subscribe, Unsubscribe
+  - DatasetService: Upload, Download, Query, Delete
+  - JobService: Create, List, Get, Cancel, Retry
+  - QueryService: Execute, Stream
+  - AdminService: Config, Metrics, Logs
+
+### 4.2 Authentication & Security
+- [ ] **GRPC-004**: mTLS implementation
+  - Certificate generation tooling (`bib cert generate`)
+  - CA management
+  - Certificate rotation
+- [ ] **GRPC-005**: Certificate management
+  - Store certs in config directory
+  - Auto-renewal with warning
+  - Revocation list support
+- [ ] **GRPC-006**: Authorization layer
+  - Role-based access control (RBAC)
+  - Resource-level permissions
+  - Audit logging integration
+
+### 4.3 Server Implementation
+- [ ] **GRPC-007**: gRPC server setup
+  - TLS configuration
+  - Interceptors (logging, auth, recovery)
+  - Reflection for debugging
+- [ ] **GRPC-008**: Implement NodeService
+- [ ] **GRPC-009**: Implement TopicService
+- [ ] **GRPC-010**: Implement DatasetService
+- [ ] **GRPC-011**: Implement JobService
+- [ ] **GRPC-012**: Implement QueryService
+- [ ] **GRPC-013**: Implement AdminService
+- [ ] **GRPC-014**: Streaming endpoints
+  - Job status streaming
+  - Query result streaming
+  - Real-time logs
+
+### 4.4 Client SDK
+- [ ] **GRPC-015**: Go client library
+  - Connection management
+  - Retry logic
+  - Context propagation
+- [ ] **GRPC-016**: Client in bib CLI
+  - gRPC client initialization
+  - Connection pooling
+  - Error handling
+
+---
+
+## Phase 5: TUI (Bubbletea + Wish)
+
+### 5.1 Core TUI Framework
+- [ ] **TUI-001**: Bubbletea application structure
+  - Main model with screen navigation
+  - Shared styles (lipgloss)
+  - Key bindings configuration
+- [ ] **TUI-002**: Component library
+  - Tables (bubbles/table)
+  - Lists (bubbles/list)
+  - Text inputs (bubbles/textinput)
+  - Viewports (bubbles/viewport)
+  - Progress bars (bubbles/progress)
+  - Spinners (bubbles/spinner)
+- [ ] **TUI-003**: Theme system
+  - Light/dark themes
+  - Custom color schemes
+  - Configurable via config file
+
+### 5.2 Dashboard View
+- [ ] **TUI-004**: Real-time dashboard
+  - Node status overview
+  - Active jobs count
+  - Data transfer rates
+  - Resource usage (CPU, memory, disk)
+- [ ] **TUI-005**: Live updates
+  - gRPC streaming integration
+  - Auto-refresh intervals
+  - Event-driven updates
+
+### 5.3 Data Browser
+- [ ] **TUI-006**: Topic browser
+  - Hierarchical topic navigation
+  - Topic metadata display
+  - Subscribe/unsubscribe actions
+- [ ] **TUI-007**: Dataset browser
+  - List datasets with filtering
+  - Dataset details view
+  - Preview data (first N rows)
+- [ ] **TUI-008**: Query interface
+  - CEL expression input
+  - Syntax highlighting (if possible)
+  - Result display with pagination
+
+### 5.4 Job Management
+- [ ] **TUI-009**: Job list view
+  - Filter by status, type, topic
+  - Sort by various fields
+  - Bulk actions
+- [ ] **TUI-010**: Job creation wizard
+  - Job type selection
+  - Parameter input
+  - CEL expression editor
+  - Preview & submit
+- [ ] **TUI-011**: Job detail view
+  - Real-time status updates
+  - Log streaming
+  - Result preview
+  - Retry/cancel actions
+
+### 5.5 Interactive Analysis
+- [ ] **TUI-012**: Analysis mode
+  - REPL-like CEL interface
+  - Result visualization (ASCII charts)
+  - History navigation
+- [ ] **TUI-013**: Data exploration
+  - Schema viewer
+  - Sample data viewer
+  - Statistical summaries
+
+### 5.6 Wish SSH Server
+- [ ] **TUI-014**: Wish server integration
+  - SSH server in bibd
+  - Key-based authentication
+  - Session management
+- [ ] **TUI-015**: Remote TUI access
+  - Full TUI over SSH
+  - Read-only mode enforcement
+  - Session timeout
+- [ ] **TUI-016**: SSH tunneling
+  - Port forwarding for web UI
+  - Secure remote access
+
+---
+
+## Phase 6: Web Interface
+
+### 6.1 Technology Decision
+> **Recommendation**: Use **Templ + HTMX + Alpine.js** for the best Go-native experience with modern interactivity.
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Templ + HTMX** | Type-safe templates, Go-native, minimal JS, SSR | Less ecosystem, newer |
+| **Go templates + HTMX** | Simple, stdlib, no build step | Verbose, no type safety |
+| **Embedded SPA (Vue/React)** | Rich interactivity, ecosystem | Build complexity, larger bundle |
+
+- [ ] **WEB-001**: Choose and setup web framework
+  - Templ for type-safe templates
+  - HTMX for dynamic updates
+  - Alpine.js for client-side state
+  - Tailwind CSS for styling
+
+### 6.2 Core Web Infrastructure
+- [ ] **WEB-002**: HTTP server setup
+  - Chi or stdlib mux
+  - Middleware (logging, recovery, auth)
+  - Static file serving (embedded)
+- [ ] **WEB-003**: Authentication
+  - Session-based auth
+  - mTLS client certificates
+  - OAuth2 (optional, future)
+- [ ] **WEB-004**: WebSocket support
+  - Real-time updates
+  - SSE alternative
+  - Connection management
+
+### 6.3 Dashboard Pages
+- [ ] **WEB-005**: Home dashboard
+  - System overview cards
+  - Health status indicators
+  - Quick stats charts
+- [ ] **WEB-006**: Node management page
+  - Connected nodes list
+  - Node details modal
+  - Network topology visualization
+- [ ] **WEB-007**: Real-time metrics
+  - Chart.js or similar
+  - Time-series data
+  - Auto-updating charts
+
+### 6.4 Data Visualization
+- [ ] **WEB-008**: Topic explorer
+  - Tree/list view
+  - Search and filter
+  - Topic details panel
+- [ ] **WEB-009**: Dataset viewer
+  - Grid/table view with virtual scrolling
+  - Column sorting/filtering
+  - Export functionality
+- [ ] **WEB-010**: Data preview
+  - JSON/YAML/Table views
+  - Schema visualization
+  - Relationship diagrams
+- [ ] **WEB-011**: Query playground
+  - CEL editor with syntax highlighting (CodeMirror)
+  - Query execution
+  - Result visualization
+  - Query history
+
+### 6.5 Job Interface
+- [ ] **WEB-012**: Job list page
+  - Filterable/sortable table
+  - Status badges
+  - Bulk operations
+- [ ] **WEB-013**: Job detail page
+  - Status timeline
+  - Log viewer
+  - Result explorer
+- [ ] **WEB-014**: Job creation form
+  - Step-by-step wizard
+  - Template library
+  - Validation feedback
+
+### 6.6 Administration
+- [ ] **WEB-015**: Configuration viewer
+  - Display current config
+  - Config diff view
+- [ ] **WEB-016**: Logs viewer
+  - Real-time log streaming
+  - Log level filtering
+  - Search functionality
+- [ ] **WEB-017**: Audit trail
+  - Audit log table
+  - Filtering by action/actor
+  - Export capability
+
+---
+
+## Phase 7: CLI Commands
+
+### 7.1 Node Management
+- [ ] **CLI-001**: `bib node list` - List known nodes
+- [ ] **CLI-002**: `bib node info <id>` - Node details
+- [ ] **CLI-003**: `bib node connect <addr>` - Connect to node
+- [ ] **CLI-004**: `bib node disconnect <id>` - Disconnect from node
+
+### 7.2 Topic Commands
+- [ ] **CLI-005**: `bib topic list` - List topics
+- [ ] **CLI-006**: `bib topic create <name>` - Create topic
+- [ ] **CLI-007**: `bib topic subscribe <name>` - Subscribe to topic
+- [ ] **CLI-008**: `bib topic unsubscribe <name>` - Unsubscribe
+
+### 7.3 Dataset Commands
+- [ ] **CLI-009**: `bib dataset list` - List datasets
+- [ ] **CLI-010**: `bib dataset get <id>` - Get dataset info
+- [ ] **CLI-011**: `bib dataset upload <file>` - Upload dataset
+- [ ] **CLI-012**: `bib dataset download <id>` - Download dataset
+- [ ] **CLI-013**: `bib dataset query <expr>` - Query with CEL
+
+### 7.4 Job Commands
+- [ ] **CLI-014**: `bib job list` - List jobs
+- [ ] **CLI-015**: `bib job create` - Create job (interactive or flags)
+- [ ] **CLI-016**: `bib job status <id>` - Job status
+- [ ] **CLI-017**: `bib job logs <id>` - Stream job logs
+- [ ] **CLI-018**: `bib job cancel <id>` - Cancel job
+- [ ] **CLI-019**: `bib job retry <id>` - Retry failed job
+
+### 7.5 Certificate Commands
+- [ ] **CLI-020**: `bib cert init` - Initialize CA
+- [ ] **CLI-021**: `bib cert generate` - Generate client cert
+- [ ] **CLI-022**: `bib cert list` - List certificates
+- [ ] **CLI-023**: `bib cert revoke <id>` - Revoke certificate
+
+### 7.6 Interactive Mode
+- [ ] **CLI-024**: `bib` (no args) - Launch TUI
+- [ ] **CLI-025**: `bib shell` - Interactive CEL shell
+
+---
+
+## Phase 8: DevOps & Deployment
+
+### 8.1 Build System
+- [ ] **DEV-001**: Makefile improvements
+  - Build targets for all binaries
+  - Cross-compilation
+  - Version injection via ldflags
+- [ ] **DEV-002**: GoReleaser configuration
+  - Multi-platform releases
+  - Homebrew tap
+  - Docker images
+
+### 8.2 Containerization
+- [ ] **DEV-003**: Dockerfile for bibd
+  - Multi-stage build
+  - Minimal runtime image
+  - Health check
+- [ ] **DEV-004**: Docker Compose for dev
+  - bibd + PostgreSQL
+  - Volume mounts
+  - Network configuration
+
+### 8.3 Kubernetes
+- [ ] **DEV-005**: Helm chart
+  - Configurable values
+  - StatefulSet for bibd
+  - Service & Ingress
+  - ConfigMap & Secrets
+- [ ] **DEV-006**: Kubernetes operator (future)
+  - CRD for BibCluster
+  - Automated scaling
+  - Backup scheduling
+
+### 8.4 Observability
+- [ ] **DEV-007**: Prometheus metrics
+  - `/metrics` endpoint
+  - Custom metrics (jobs, nodes, data)
+  - Grafana dashboards
+- [ ] **DEV-008**: Distributed tracing
+  - OpenTelemetry integration
+  - Trace context propagation
+  - Jaeger/Zipkin export
+
+---
+
+## Phase 9: Testing & Quality
+
+### 9.1 Unit Tests
+- [ ] **TEST-001**: Config package tests
+- [ ] **TEST-002**: Logger package tests
+- [ ] **TEST-003**: P2P layer tests (mocked)
+- [ ] **TEST-004**: Scheduler tests
+- [ ] **TEST-005**: Storage layer tests
+
+### 9.2 Integration Tests
+- [ ] **TEST-006**: gRPC API tests
+- [ ] **TEST-007**: P2P network tests (multiple nodes)
+- [ ] **TEST-008**: Database integration tests
+- [ ] **TEST-009**: End-to-end job execution tests
+
+### 9.3 CI/CD
+- [ ] **TEST-010**: GitHub Actions workflow
+  - Lint (golangci-lint)
+  - Test with coverage
+  - Build verification
+- [ ] **TEST-011**: Release automation
+  - Tag-based releases
+  - Changelog generation
+  - Asset publishing
+
+---
+
+## Appendix: Package Structure (Proposed)
+
+```
+bib/
+├── cmd/
+│   ├── bib/           # CLI application
+│   │   ├── main.go
+│   │   └── cmd/       # Cobra commands
+│   └── bibd/          # Daemon
+│       └── main.go
+├── api/
+│   └── proto/         # Protocol buffer definitions
+│       └── bib/v1/
+├── internal/
+│   ├── config/        # Configuration (✓ exists)
+│   ├── logger/        # Logging (✓ exists)
+│   ├── p2p/           # libp2p networking
+│   │   ├── host.go
+│   │   ├── discovery.go
+│   │   ├── protocols.go
+│   │   └── pubsub.go
+│   ├── storage/       # Data storage
+│   │   ├── db/        # SQL repositories
+│   │   ├── blob/      # Blob storage
+│   │   └── migrations/
+│   ├── scheduler/     # Job scheduling
+│   │   ├── queue.go
+│   │   ├── worker.go
+│   │   ├── cel/       # CEL integration
+│   │   └── jobs/      # Built-in job types
+│   ├── grpc/          # gRPC server
+│   │   ├── server.go
+│   │   ├── interceptors/
+│   │   └── services/
+│   ├── tui/           # Bubbletea UI
+│   │   ├── app.go
+│   │   ├── views/
+│   │   └── components/
+│   └── web/           # Web interface
+│       ├── server.go
+│       ├── handlers/
+│       ├── templates/
+│       └── static/
+├── pkg/               # Public packages
+│   ├── client/        # Go client SDK
+│   └── cel/           # CEL extensions
+├── web/               # Web assets (if SPA)
+├── deployments/
+│   ├── docker/
+│   └── kubernetes/
+└── docs/
+```
+
+---
+
+## Dependency Summary
+
+### Core Dependencies (Add to go.mod)
+
+```go
+// P2P
+github.com/libp2p/go-libp2p
+github.com/libp2p/go-libp2p-kad-dht
+github.com/libp2p/go-libp2p-pubsub
+
+// Database
+github.com/jackc/pgx/v5          // PostgreSQL
+modernc.org/sqlite               // Pure Go SQLite
+github.com/golang-migrate/migrate/v4
+
+// Scheduler & CEL
+github.com/google/cel-go
+
+// gRPC
+google.golang.org/grpc
+google.golang.org/protobuf
+github.com/grpc-ecosystem/go-grpc-middleware/v2
+
+// TUI
+github.com/charmbracelet/bubbletea
+github.com/charmbracelet/bubbles
+github.com/charmbracelet/lipgloss  // ✓ exists
+github.com/charmbracelet/wish
+
+// Web
+github.com/a-h/templ
+github.com/go-chi/chi/v5
+
+// Observability
+go.opentelemetry.io/otel
+github.com/prometheus/client_golang
+
+// Consensus (optional)
+github.com/hashicorp/raft
+```
+
+---
+
+## Priority Order
+
+1. **Phase 1**: P2P Networking Foundation ← START HERE
+2. **Phase 2**: Storage Layer (parallel with P2P)
+3. **Phase 3**: Scheduler & Job System
+4. **Phase 4**: gRPC API
+5. **Phase 5**: TUI
+6. **Phase 6**: Web Interface
+7. **Phase 7**: CLI Commands (incremental, parallel with other phases)
+8. **Phase 8**: DevOps & Deployment
+9. **Phase 9**: Testing & Quality (continuous)
+
+---
+
+## Notes & Recommendations
+
+### Node Discovery Strategy
+For bib.dev bootstrap + distributed discovery:
+1. On startup, connect to `bib.dev` bootstrap node
+2. Use DHT to discover additional peers
+3. Use mDNS for local network discovery (optional, configurable)
+4. Maintain peer list in local database for faster reconnection
+
+### Web Framework Recommendation
+**Templ + HTMX + Alpine.js** is recommended because:
+- Type-safe Go templates with Templ
+- HTMX provides SPA-like experience with server rendering
+- Alpine.js handles client-side interactions
+- Tailwind CSS for rapid styling
+- No complex JS build pipeline
+- Excellent for data visualization with Chart.js
+
+### Raft/HA Considerations
+- Keep Raft optional and off by default
+- Use for: leader election, metadata consistency, configuration sync
+- NOT for: data replication (use libp2p protocols instead)
+- Consider etcd as alternative if you need more features
+
+---
+
+*Last Updated: 2025-12-15*
+*Version: 0.1.0-planning*
+
