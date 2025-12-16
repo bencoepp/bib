@@ -19,25 +19,40 @@
 │   │   Server     │         │                                          │     │
 │   └──────────────┘         │  ┌────────────┐  ┌───────────────────┐   │     │
 │                            │  │  Storage   │  │   Web Interface   │   │     │
-│   ┌──────────────┐         │  │ (SQL/Blob) │  │   (Read + More)   │   │     │
-│   │  Bootstrap   │         │  └────────────┘  └───────────────────┘   │     │
-│   │   bib.dev    │         │                                          │     │
-│   └──────────────┘         └──────────────────────────────────────────┘     │
-│                                       │                                      │
-│                                       ▼                                      │
-│                    ┌──────────────────────────────────────┐                 │
-│                    │  PostgreSQL / SQLite / Kubernetes    │                 │
-│                    └──────────────────────────────────────┘                 │
+│   ┌──────────────┐         │  │  Manager   │  │   (Read + More)   │   │     │
+│   │  Bootstrap   │         │  └─────┬──────┘  └───────────────────┘   │     │
+│   │   bib.dev    │         │        │                                 │     │
+│   └──────────────┘         └────────┼─────────────────────────────────┘     │
+│                                     │                                        │
+│                    ┌────────────────┴─────────────────┐                     │
+│                    │      SECURITY BOUNDARY           │                     │
+│                    │  ┌─────────────────────────────┐ │                     │
+│                    │  │  Managed PostgreSQL         │ │                     │
+│                    │  │  (Container/K8s Pod)        │ │                     │
+│                    │  │  - No external access       │ │                     │
+│                    │  │  - Auto-managed credentials │ │                     │
+│                    │  │  - Full audit logging       │ │                     │
+│                    │  └─────────────────────────────┘ │                     │
+│                    │           OR (limited mode)      │                     │
+│                    │  ┌─────────────────────────────┐ │                     │
+│                    │  │  SQLite (Proxy/Cache Only)  │ │                     │
+│                    │  │  - No authoritative data    │ │                     │
+│                    │  │  - Cannot distribute data   │ │                     │
+│                    │  └─────────────────────────────┘ │                     │
+│                    └──────────────────────────────────┘                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Node Modes
 
-| Mode | Description | Storage | Data Sync |
-|------|-------------|---------|-----------|
-| **Full Replica** | Replicates all topics/datasets from configured base nodes | Full local | Continuous |
-| **Selective** | Choose which datasets/topics to sync on-demand | Partial local | On-demand |
-| **Proxy** | No local storage, forwards requests to other nodes | None/Cache | Pass-through |
+| Mode | Description | Storage | Data Sync | Required Backend |
+|------|-------------|---------|-----------|------------------|
+| **Full Replica** | Replicates all topics/datasets from configured base nodes | Full local | Continuous | PostgreSQL (managed) |
+| **Selective** | Choose which datasets/topics to sync on-demand | Partial local | On-demand | PostgreSQL preferred, SQLite (cache only) |
+| **Proxy** | No local storage, forwards requests to other nodes | None/Cache | Pass-through | SQLite or PostgreSQL |
+
+> **Note**: SQLite nodes cannot be authoritative data distributors. Only PostgreSQL-backed nodes 
+> running in `full` or `selective` mode can serve as trusted data sources in the P2P network.
 
 ---
 
@@ -131,59 +146,380 @@
 
 ## Phase 2: Storage Layer
 
+> **Security Architecture**: The database is a critical security boundary. bibd MUST be the sole manager 
+> of its database. No external access is permitted by default. All data operations flow through bibd's 
+> gRPC API, ensuring audit trails, access control, and data integrity.
+
+### 2.0 Storage Mode Constraints
+
+| Storage Backend | Allowed Node Modes | Rationale |
+|-----------------|-------------------|-----------|
+| **SQLite** | `proxy`, `selective` (cache only) | SQLite cannot be hardened; node cannot be trusted data distributor |
+| **PostgreSQL (managed)** | `full`, `selective`, `proxy` | Fully hardened, audited, secure |
+
+- [ ] **DB-000**: Storage mode enforcement
+  - SQLite mode restricts node to proxy/selective-cache only
+  - SQLite nodes marked as `untrusted-storage` in peer metadata
+  - Full replica mode REQUIRES managed PostgreSQL
+  - Startup validation: reject `mode: full` with SQLite backend
+  - Clear error messages explaining security rationale
+
 ### 2.1 Database Abstraction
 - [ ] **DB-001**: Database interface design
-  - Define repository interfaces
-  - Support both SQLite and PostgreSQL
+  - Define repository interfaces with permission contexts
+  - Support both SQLite (limited) and PostgreSQL (full)
   - Connection pooling (pgx for Postgres)
-- [ ] **DB-002**: SQLite embedded mode
-  - Single-file database for simple deployments
+  - All queries tagged with job/operation context for audit
+- [ ] **DB-002**: SQLite embedded mode (Proxy/Cache Only)
+  - Single-file database for cache/metadata only
   - WAL mode for concurrency
   - Auto-vacuum configuration
-- [ ] **DB-003**: PostgreSQL external mode
-  - Connection string configuration
-  - TLS/SSL support
-  - Health checks & reconnection
+  - **Limitations enforced:**
+    - No authoritative data storage
+    - Cache TTL with automatic expiration
+    - Cannot serve data to other peers (pass-through only)
+    - Marked as non-authoritative in DHT provider records
+- [ ] **DB-003**: PostgreSQL managed mode (Preferred)
+  - bibd manages PostgreSQL lifecycle entirely
+  - No external connection strings accepted by default
+  - mTLS between bibd and PostgreSQL
+  - Health checks & automatic recovery
 
-### 2.2 Managed Database (Container/K8s)
-- [ ] **DB-004**: Container-managed PostgreSQL
-  - Docker/Podman PostgreSQL management
-  - Automatic container lifecycle
-  - Volume management for persistence
-- [ ] **DB-005**: Kubernetes PostgreSQL operator
-  - CRD-based PostgreSQL deployment
-  - StatefulSet management
-  - Backup/restore automation
+### 2.2 Managed PostgreSQL (Container/Kubernetes)
 
-### 2.3 Schema & Migrations
-- [ ] **DB-006**: Migration framework
+> **Principle**: bibd owns and operates its PostgreSQL instance. External management is prohibited.
+> The database is an internal implementation detail, not an externally accessible service.
+
+- [ ] **DB-004**: Container-managed PostgreSQL (Docker/Podman)
+  - bibd automatically provisions PostgreSQL container on startup
+  - Container naming: `bibd-postgres-<node-id-short>`
+  - Automatic container lifecycle (start/stop/restart with bibd)
+  - Volume management for persistence (`<data_dir>/postgres/`)
+  - Container health monitoring and auto-restart
+  - PostgreSQL version pinning with security updates
+  - Resource limits (memory, CPU) configurable
+  - Automatic cleanup on `bibd cleanup` command
+  
+- [ ] **DB-005**: Kubernetes PostgreSQL deployment
+  - bibd creates/manages PostgreSQL StatefulSet
+  - Runs in same namespace as bibd
+  - PersistentVolumeClaim for data durability
+  - Pod anti-affinity with bibd for resilience
+  - Automatic backup CronJob creation
+  - NetworkPolicy restricting access to bibd pod only
+  - ServiceAccount with minimal RBAC permissions
+
+### 2.3 Database Security & Hardening
+
+> **Zero Trust Database Access**: The PostgreSQL instance is invisible to everything except bibd.
+> All credentials are generated, rotated, and never exposed. Every query is audited.
+
+- [ ] **DB-006**: Credential management
+  - bibd generates all PostgreSQL credentials at initialization
+  - Superuser password: 64-char random, never logged, never exposed
+  - Credentials stored encrypted in `<config_dir>/secrets/db.enc`
+  - Encryption key derived from node identity (Ed25519)
+  - Automatic credential rotation (configurable interval, default 7 days)
+  - Rotation is zero-downtime (create new role, migrate, drop old)
+  - Credentials never appear in config files, logs, or error messages
+
+- [ ] **DB-007**: Role-based database access (per job type)
+  ```sql
+  -- bibd creates these roles automatically
+  -- Superuser (bibd internal only, never exposed)
+  CREATE ROLE bibd_admin WITH LOGIN SUPERUSER PASSWORD '<generated>';
+  
+  -- Job-specific roles with minimal permissions
+  CREATE ROLE bibd_scrape WITH LOGIN PASSWORD '<generated>';
+  GRANT INSERT ON datasets, chunks TO bibd_scrape;
+  GRANT SELECT ON topics TO bibd_scrape;  -- Read topic config only
+  
+  CREATE ROLE bibd_query WITH LOGIN PASSWORD '<generated>';
+  GRANT SELECT ON datasets, chunks, topics TO bibd_query;
+  
+  CREATE ROLE bibd_transform WITH LOGIN PASSWORD '<generated>';
+  GRANT SELECT, INSERT, UPDATE ON datasets, chunks TO bibd_transform;
+  
+  CREATE ROLE bibd_admin_jobs WITH LOGIN PASSWORD '<generated>';
+  GRANT ALL ON ALL TABLES TO bibd_admin_jobs;  -- For migrations, maintenance
+  
+  CREATE ROLE bibd_audit WITH LOGIN PASSWORD '<generated>';
+  GRANT INSERT ON audit_log TO bibd_audit;
+  GRANT SELECT ON audit_log TO bibd_audit;  -- For audit queries
+  ```
+  - Each job execution uses appropriate role
+  - Role selection based on job type at runtime
+  - Connection pool per role for isolation
+
+- [ ] **DB-008**: Network isolation
+  - **Docker/Podman:**
+    - PostgreSQL binds to Unix socket only (no TCP by default)
+    - If TCP required: bind to `127.0.0.1` only
+    - Custom Docker network with no external access
+    - Container has no published ports
+  - **Kubernetes:**
+    - NetworkPolicy: ingress only from bibd pod label
+    - No Service exposure (ClusterIP: None or headless)
+    - Pod-to-pod communication via pod IP only
+    - Optional: Istio/Linkerd mTLS sidecar
+  - Firewall rules managed by bibd where possible
+
+- [ ] **DB-009**: PostgreSQL hardening configuration
+  ```ini
+  # bibd generates and manages postgresql.conf
+  listen_addresses = ''  # Unix socket only, or '127.0.0.1' if needed
+  ssl = on
+  ssl_cert_file = '/var/lib/bibd/certs/server.crt'
+  ssl_key_file = '/var/lib/bibd/certs/server.key'
+  ssl_ca_file = '/var/lib/bibd/certs/ca.crt'
+  
+  # Authentication
+  password_encryption = scram-sha-256
+  
+  # Logging for audit
+  log_statement = 'all'
+  log_connections = on
+  log_disconnections = on
+  log_duration = on
+  
+  # Restrict dangerous operations
+  shared_preload_libraries = 'pg_stat_statements'
+  ```
+  - pg_hba.conf generated to only allow bibd roles
+  - No `trust` authentication ever
+  - Certificate-based auth for all connections
+
+- [ ] **DB-010**: Encryption at rest
+  - PostgreSQL data directory encryption
+  - Option 1: LUKS/dm-crypt volume (Linux)
+  - Option 2: PostgreSQL TDE extension (pgcrypto)
+  - Encryption key managed by bibd, derived from node identity
+  - Key escrow/backup mechanism for disaster recovery
+
+### 2.4 Database Audit & Monitoring
+
+- [ ] **DB-011**: Comprehensive audit logging
+  - Every query logged with:
+    - Timestamp (UTC, microsecond precision)
+    - Job ID / Operation ID
+    - Role used
+    - Query text (with parameter values redacted)
+    - Rows affected
+    - Execution time
+    - Source (which bibd component)
+  - Audit log stored in separate table, append-only
+  - Audit log replicated to separate storage (optional)
+  - Tamper detection via hash chains
+  - Retention policy (configurable, default 90 days)
+
+- [ ] **DB-012**: Audit log schema
+  ```sql
+  CREATE TABLE audit_log (
+    id              BIGSERIAL PRIMARY KEY,
+    timestamp       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    node_id         TEXT NOT NULL,
+    job_id          UUID,
+    operation_id    UUID NOT NULL,
+    role_used       TEXT NOT NULL,
+    action          TEXT NOT NULL,  -- SELECT, INSERT, UPDATE, DELETE, DDL
+    table_name      TEXT,
+    query_hash      TEXT,           -- Hash of query for grouping
+    rows_affected   INTEGER,
+    duration_ms     INTEGER,
+    source_component TEXT,          -- scheduler, grpc, p2p, etc.
+    metadata        JSONB,
+    prev_hash       TEXT,           -- Hash chain for tamper detection
+    entry_hash      TEXT NOT NULL   -- Hash of this entry
+  );
+  
+  -- Append-only enforced via trigger
+  CREATE OR REPLACE FUNCTION audit_no_modify() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE EXCEPTION 'Audit log is append-only';
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  CREATE TRIGGER audit_immutable
+    BEFORE UPDATE OR DELETE ON audit_log
+    FOR EACH ROW EXECUTE FUNCTION audit_no_modify();
+  ```
+
+- [ ] **DB-013**: Real-time audit streaming
+  - Audit events published to internal channel
+  - Optional export to external SIEM (Splunk, ELK, etc.)
+  - Alerts for suspicious patterns:
+    - Unusual query patterns
+    - Failed authentication attempts
+    - Schema modification attempts
+    - Bulk data access
+
+### 2.5 Break Glass Emergency Access
+
+> **Emergency Access**: For disaster recovery and debugging, a controlled break-glass procedure 
+> exists. It requires explicit action, is heavily audited, and auto-expires.
+
+- [ ] **DB-014**: Break glass configuration
+  ```yaml
+  # config.yaml - disabled by default
+  database:
+    break_glass:
+      enabled: false                    # Must be explicitly enabled
+      require_restart: true             # bibd restart required to enable
+      max_duration: 1h                  # Auto-disable after duration
+      allowed_users:                    # Pre-configured emergency users
+        - name: "emergency_admin"
+          public_key: "ssh-ed25519 AAAA..."  # SSH key for auth
+      audit_level: "paranoid"           # Log everything including data
+      notification:
+        webhook: "https://..."          # Alert when break glass activated
+        email: "security@..."
+  ```
+
+- [ ] **DB-015**: Break glass procedure
+  1. `bib admin break-glass enable --reason "description" --duration 1h`
+  2. Requires confirmation with node admin key
+  3. Creates time-limited PostgreSQL user with restricted access
+  4. All actions logged with `break_glass: true` flag
+  5. Notification sent to configured endpoints
+  6. User can connect via `bib admin break-glass connect`
+  7. Session recorded (terminal recording if SSH)
+  8. Auto-expires after duration, credentials invalidated
+  9. Summary report generated after session ends
+  10. `bib admin break-glass disable` for manual early termination
+
+- [ ] **DB-016**: Break glass audit trail
+  - Separate audit category for break glass sessions
+  - Full query logging (no redaction)
+  - Terminal session recording (if applicable)
+  - Post-session review required (configurable)
+  - Compliance report generation
+
+### 2.6 Schema & Migrations
+- [ ] **DB-017**: Migration framework
   - golang-migrate or goose
-  - Up/down migrations
-  - Version tracking
-- [ ] **DB-007**: Core schema design
+  - Migrations executed by `bibd_admin_jobs` role only
+  - Up/down migrations with checksums
+  - Version tracking in `schema_migrations` table
+  - Migration audit logging
+- [ ] **DB-018**: Core schema design
+  ```sql
+  -- All tables include audit columns
+  CREATE TABLE nodes (
+    peer_id         TEXT PRIMARY KEY,
+    address         TEXT[],
+    mode            TEXT NOT NULL,
+    storage_type    TEXT NOT NULL,  -- 'sqlite' | 'postgres'
+    trusted_storage BOOLEAN NOT NULL DEFAULT false,
+    last_seen       TIMESTAMPTZ,
+    metadata        JSONB,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+  );
+  
+  CREATE TABLE topics (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT UNIQUE NOT NULL,
+    description     TEXT,
+    schema          JSONB,
+    owner_node_id   TEXT REFERENCES nodes(peer_id),
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+  );
+  
+  CREATE TABLE datasets (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    topic_id        UUID REFERENCES topics(id),
+    name            TEXT NOT NULL,
+    size_bytes      BIGINT,
+    hash            TEXT NOT NULL,  -- Content hash
+    location        TEXT,           -- Blob storage path
+    metadata        JSONB,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+  );
+  
+  CREATE TABLE chunks (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dataset_id      UUID REFERENCES datasets(id) ON DELETE CASCADE,
+    chunk_index     INTEGER NOT NULL,
+    hash            TEXT NOT NULL,
+    size_bytes      INTEGER NOT NULL,
+    storage_path    TEXT,
+    UNIQUE (dataset_id, chunk_index)
+  );
+  
+  CREATE TABLE jobs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    cel_expression  TEXT,
+    priority        INTEGER DEFAULT 0,
+    config          JSONB,
+    created_by      TEXT,  -- Node ID or user
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ
+  );
+  
+  CREATE TABLE job_results (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id          UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    node_id         TEXT REFERENCES nodes(peer_id),
+    status          TEXT NOT NULL,
+    result          JSONB,
+    error           TEXT,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ DEFAULT NOW()
+  );
   ```
-  - nodes (peer_id, address, mode, last_seen, metadata)
-  - topics (id, name, description, schema, created_at)
-  - datasets (id, topic_id, name, size, hash, location, metadata)
-  - chunks (id, dataset_id, index, hash, size, data)
-  - jobs (id, type, status, cel_expression, created_at, updated_at)
-  - job_results (id, job_id, node_id, result, error, completed_at)
-  - audit_log (id, action, actor, resource, timestamp, metadata)
-  ```
-- [ ] **DB-008**: Initial migrations
-  - Create all core tables
+- [ ] **DB-019**: Initial migrations
+  - Create all core tables with proper constraints
+  - Create audit_log table and triggers
+  - Create role-specific permissions
   - Indexes for common queries
-  - Foreign key constraints
+  - Row-level security policies (optional, for extra isolation)
 
-### 2.4 Blob Storage
-- [ ] **DB-009**: Local blob storage
+### 2.7 Blob Storage
+- [ ] **DB-020**: Local blob storage
   - Content-addressed storage (CAS)
   - Directory structure: `<data_dir>/blobs/<hash[0:2]>/<hash[2:4]>/<hash>`
+  - Integrity verification on read
   - Garbage collection for orphaned blobs
-- [ ] **DB-010**: Optional S3-compatible storage
+  - Blob access logged to audit trail
+- [ ] **DB-021**: Optional S3-compatible storage
   - MinIO/S3 integration
   - Configurable backend
   - Tiered storage (hot/cold)
+  - S3 credentials managed by bibd (same security model)
+
+### 2.8 Database Lifecycle Management
+- [ ] **DB-022**: Initialization workflow
+  1. `bibd` starts, checks for existing PostgreSQL
+  2. If none: provision container/pod with generated config
+  3. Wait for PostgreSQL ready (health check)
+  4. Connect as superuser, create roles and schema
+  5. Run pending migrations
+  6. Switch to least-privilege role for normal operations
+  7. Begin accepting requests
+
+- [ ] **DB-023**: Backup & recovery
+  - Automatic daily backups (pg_dump)
+  - Backup encryption with node key
+  - Backup integrity verification
+  - Point-in-time recovery (WAL archiving)
+  - Backup to local storage or S3
+  - `bib admin backup` and `bib admin restore` commands
+  - Disaster recovery documentation
+
+- [ ] **DB-024**: Graceful shutdown
+  - Drain active connections
+  - Complete in-flight transactions
+  - Checkpoint and sync
+  - Stop PostgreSQL container/pod
+  - Verify clean shutdown in logs
+
+
 
 ---
 
@@ -765,6 +1101,6 @@ For bib.dev bootstrap + distributed discovery:
 
 ---
 
-*Last Updated: 2025-12-15*
+*Last Updated: 2025-12-16*
 *Version: 0.1.0-planning*
 
