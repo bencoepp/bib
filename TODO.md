@@ -157,7 +157,7 @@
 | **SQLite** | `proxy`, `selective` (cache only) | SQLite cannot be hardened; node cannot be trusted data distributor |
 | **PostgreSQL (managed)** | `full`, `selective`, `proxy` | Fully hardened, audited, secure |
 
-- [ ] **DB-000**: Storage mode enforcement
+- [x] **DB-000**: Storage mode enforcement
   - SQLite mode restricts node to proxy/selective-cache only
   - SQLite nodes marked as `untrusted-storage` in peer metadata
   - Full replica mode REQUIRES managed PostgreSQL
@@ -190,7 +190,7 @@
 > **Principle**: bibd owns and operates its PostgreSQL instance. External management is prohibited.
 > The database is an internal implementation detail, not an externally accessible service.
 
-- [ ] **DB-004**: Container-managed PostgreSQL (Docker/Podman)
+- [x] **DB-004**: Container-managed PostgreSQL (Docker/Podman)
   - bibd automatically provisions PostgreSQL container on startup
   - Container naming: `bibd-postgres-<node-id-short>`
   - Automatic container lifecycle (start/stop/restart with bibd)

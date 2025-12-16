@@ -48,8 +48,16 @@ type PostgresConfig struct {
 	// When true, bibd provisions and manages a PostgreSQL container.
 	Managed bool `mapstructure:"managed"`
 
-	// ContainerRuntime is the container runtime to use: "docker" or "podman"
+	// ContainerRuntime is the container runtime to use: "docker", "podman", or "kubernetes"
+	// If empty, auto-detected (docker > podman > kubernetes)
 	ContainerRuntime string `mapstructure:"container_runtime"`
+
+	// SocketPath is the path to the container runtime socket
+	// Auto-detected if empty
+	SocketPath string `mapstructure:"socket_path"`
+
+	// KubeconfigPath is the path to kubeconfig file (for Kubernetes runtime)
+	KubeconfigPath string `mapstructure:"kubeconfig_path"`
 
 	// Image is the PostgreSQL container image.
 	// Defaults to "postgres:16-alpine"
@@ -82,9 +90,66 @@ type PostgresConfig struct {
 	// ResourceLimits for the container.
 	Resources ContainerResources `mapstructure:"resources"`
 
+	// Network configuration
+	Network NetworkConfig `mapstructure:"network"`
+
+	// Health check configuration
+	Health HealthConfig `mapstructure:"health"`
+
+	// TLS configuration for PostgreSQL connections
+	TLS TLSConfig `mapstructure:"tls"`
+
 	// Advanced allows manual connection configuration (for debugging only).
 	// When set, Managed must be false.
 	Advanced *AdvancedPostgresConfig `mapstructure:"advanced,omitempty"`
+}
+
+// NetworkConfig holds network configuration for managed PostgreSQL.
+type NetworkConfig struct {
+	// UseBridgeNetwork creates a private bridge network for isolation
+	UseBridgeNetwork bool `mapstructure:"use_bridge_network"`
+
+	// BridgeNetworkName is the name of the bridge network
+	BridgeNetworkName string `mapstructure:"bridge_network_name"`
+
+	// UseUnixSocket uses Unix socket only (no TCP)
+	UseUnixSocket bool `mapstructure:"use_unix_socket"`
+
+	// BindAddress is the address to bind to (default: 127.0.0.1)
+	BindAddress string `mapstructure:"bind_address"`
+}
+
+// HealthConfig holds health check configuration for managed PostgreSQL.
+type HealthConfig struct {
+	// Interval is how often to check health
+	Interval time.Duration `mapstructure:"interval"`
+
+	// Timeout is the timeout for each health check
+	Timeout time.Duration `mapstructure:"timeout"`
+
+	// StartupTimeout is how long to wait for initial startup
+	StartupTimeout time.Duration `mapstructure:"startup_timeout"`
+
+	// Action defines what happens on repeated failures: "shutdown", "retry_always", "retry_limit"
+	Action string `mapstructure:"action"`
+
+	// MaxRetries is the maximum retries (for "retry_limit" action)
+	MaxRetries int `mapstructure:"max_retries"`
+
+	// RetryBackoff is the backoff duration between retries
+	RetryBackoff time.Duration `mapstructure:"retry_backoff"`
+}
+
+// TLSConfig holds TLS configuration for PostgreSQL connections.
+type TLSConfig struct {
+	// Enabled controls whether mTLS is enabled (always true for managed)
+	Enabled bool `mapstructure:"enabled"`
+
+	// CertDir is where certificates are stored
+	CertDir string `mapstructure:"cert_dir"`
+
+	// AutoGenerate automatically generates certificates from node identity
+	AutoGenerate bool `mapstructure:"auto_generate"`
 }
 
 // ContainerResources defines resource limits for the PostgreSQL container.
@@ -184,7 +249,8 @@ func DefaultConfig() Config {
 		},
 		Postgres: PostgresConfig{
 			Managed:                    true,
-			ContainerRuntime:           "docker",
+			ContainerRuntime:           "", // Auto-detect
+			SocketPath:                 "", // Auto-detect
 			Image:                      "postgres:16-alpine",
 			DataDir:                    "", // Defaults to <data_dir>/postgres
 			Port:                       5432,
@@ -196,6 +262,24 @@ func DefaultConfig() Config {
 			Resources: ContainerResources{
 				MemoryMB: 512,
 				CPUCores: 1.0,
+			},
+			Network: NetworkConfig{
+				UseBridgeNetwork:  true,
+				BridgeNetworkName: "bibd-network",
+				UseUnixSocket:     true,
+				BindAddress:       "127.0.0.1",
+			},
+			Health: HealthConfig{
+				Interval:       5 * time.Second,
+				Timeout:        5 * time.Second,
+				StartupTimeout: 60 * time.Second,
+				Action:         "retry_limit",
+				MaxRetries:     5,
+				RetryBackoff:   10 * time.Second,
+			},
+			TLS: TLSConfig{
+				Enabled:      true,
+				AutoGenerate: true,
 			},
 		},
 		Audit: AuditConfig{
