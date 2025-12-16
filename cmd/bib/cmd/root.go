@@ -31,6 +31,10 @@ var (
 
 	// cmdCtx is the command context with logger and command context
 	cmdCtx context.Context
+
+	// Global output flags
+	outputFormat string
+	verboseMode  bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -38,6 +42,8 @@ var rootCmd = &cobra.Command{
 	Use:   "bib",
 	Short: "bib is a CLI client",
 	Long:  `bib is a command-line interface client that communicates with the bibd daemon.`,
+	// Allow flags before or after subcommand
+	TraverseChildren: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip config loading for setup command when no config exists
 		if cmd.Name() == "setup" {
@@ -132,7 +138,8 @@ func init() {
 
 	// Global persistent flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/bib/config.yaml)")
-	rootCmd.PersistentFlags().StringP("output", "o", "", "output format (text, json, yaml, table)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "output format (json, yaml, table, quiet)")
+	rootCmd.PersistentFlags().BoolVarP(&verboseMode, "verbose", "v", false, "verbose output (includes full log output)")
 
 	// Bind flags to viper
 	viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("output"))
@@ -189,4 +196,14 @@ func AuditLog() *logger.AuditLogger {
 // Context returns the command context (for use by subcommands)
 func Context() context.Context {
 	return cmdCtx
+}
+
+// OutputFormat returns the current output format (json, yaml, table, quiet)
+func OutputFormat() string {
+	return outputFormat
+}
+
+// IsVerbose returns whether verbose mode is enabled
+func IsVerbose() bool {
+	return verboseMode
 }

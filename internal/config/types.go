@@ -271,12 +271,43 @@ type SnapshotConfig struct {
 	RetainCount int `mapstructure:"retain_count"`
 }
 
+// FavoriteNode represents a preferred node for connection
+type FavoriteNode struct {
+	// ID is the unique node identifier (peer ID)
+	ID string `mapstructure:"id"`
+
+	// Alias is a human-friendly name for this node
+	Alias string `mapstructure:"alias"`
+
+	// Priority determines connection preference (lower = higher priority)
+	Priority int `mapstructure:"priority"`
+
+	// Address is an optional direct address (multiaddr or host:port)
+	Address string `mapstructure:"address,omitempty"`
+}
+
+// ConnectionConfig holds settings for connecting to bibd nodes
+type ConnectionConfig struct {
+	// FavoriteNodes is a list of preferred nodes for connection
+	FavoriteNodes []FavoriteNode `mapstructure:"favorite_nodes"`
+
+	// AutoDetect enables automatic node discovery
+	AutoDetect bool `mapstructure:"auto_detect"`
+
+	// Timeout is the connection timeout
+	Timeout string `mapstructure:"timeout"`
+
+	// RetryAttempts is the number of connection retry attempts
+	RetryAttempts int `mapstructure:"retry_attempts"`
+}
+
 // BibConfig is the complete configuration for the bib CLI
 type BibConfig struct {
-	Log      LogConfig      `mapstructure:"log"`
-	Identity IdentityConfig `mapstructure:"identity"`
-	Output   OutputConfig   `mapstructure:"output"`
-	Server   string         `mapstructure:"server"` // bibd server address to connect to
+	Log        LogConfig        `mapstructure:"log"`
+	Identity   IdentityConfig   `mapstructure:"identity"`
+	Output     OutputConfig     `mapstructure:"output"`
+	Server     string           `mapstructure:"server"`     // bibd server address to connect to (legacy)
+	Connection ConnectionConfig `mapstructure:"connection"` // Connection settings with favorite nodes
 }
 
 // BibdConfig is the complete configuration for the bibd daemon
@@ -384,10 +415,16 @@ func DefaultBibConfig() *BibConfig {
 		},
 		Identity: IdentityConfig{},
 		Output: OutputConfig{
-			Format: "text",
+			Format: "table",
 			Color:  true,
 		},
 		Server: "localhost:8080",
+		Connection: ConnectionConfig{
+			FavoriteNodes: []FavoriteNode{},
+			AutoDetect:    true,
+			Timeout:       "30s",
+			RetryAttempts: 3,
+		},
 	}
 }
 

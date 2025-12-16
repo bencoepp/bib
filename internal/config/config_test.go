@@ -45,8 +45,8 @@ func TestDefaultBibConfig(t *testing.T) {
 	}
 
 	// Output configuration
-	if cfg.Output.Format != "text" {
-		t.Errorf("expected output format 'text', got %q", cfg.Output.Format)
+	if cfg.Output.Format != "table" {
+		t.Errorf("expected output format 'table', got %q", cfg.Output.Format)
 	}
 	if !cfg.Output.Color {
 		t.Error("expected output color to be true")
