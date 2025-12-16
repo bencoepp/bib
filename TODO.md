@@ -165,12 +165,12 @@
   - Clear error messages explaining security rationale
 
 ### 2.1 Database Abstraction
-- [ ] **DB-001**: Database interface design
+- [x] **DB-001**: Database interface design
   - Define repository interfaces with permission contexts
   - Support both SQLite (limited) and PostgreSQL (full)
   - Connection pooling (pgx for Postgres)
   - All queries tagged with job/operation context for audit
-- [ ] **DB-002**: SQLite embedded mode (Proxy/Cache Only)
+- [x] **DB-002**: SQLite embedded mode (Proxy/Cache Only)
   - Single-file database for cache/metadata only
   - WAL mode for concurrency
   - Auto-vacuum configuration
@@ -179,7 +179,7 @@
     - Cache TTL with automatic expiration
     - Cannot serve data to other peers (pass-through only)
     - Marked as non-authoritative in DHT provider records
-- [ ] **DB-003**: PostgreSQL managed mode (Preferred)
+- [x] **DB-003**: PostgreSQL managed mode (Preferred)
   - bibd manages PostgreSQL lifecycle entirely
   - No external connection strings accepted by default
   - mTLS between bibd and PostgreSQL

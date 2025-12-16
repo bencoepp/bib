@@ -20,6 +20,14 @@ func (id DatasetVersionID) String() string {
 	return string(id)
 }
 
+// ChunkID is a unique identifier for a chunk.
+type ChunkID string
+
+// String returns the string representation.
+func (id ChunkID) String() string {
+	return string(id)
+}
+
 // DatasetStatus represents the status of a dataset.
 type DatasetStatus string
 
@@ -37,6 +45,27 @@ func (s DatasetStatus) IsValid() bool {
 	switch s {
 	case DatasetStatusDraft, DatasetStatusActive, DatasetStatusArchived,
 		DatasetStatusDeleted, DatasetStatusIngesting, DatasetStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+// ChunkStatus represents the status of a chunk.
+type ChunkStatus string
+
+const (
+	ChunkStatusPending     ChunkStatus = "pending"
+	ChunkStatusDownloading ChunkStatus = "downloading"
+	ChunkStatusDownloaded  ChunkStatus = "downloaded"
+	ChunkStatusVerified    ChunkStatus = "verified"
+	ChunkStatusFailed      ChunkStatus = "failed"
+)
+
+// IsValid checks if the status is valid.
+func (s ChunkStatus) IsValid() bool {
+	switch s {
+	case ChunkStatusPending, ChunkStatusDownloading, ChunkStatusDownloaded, ChunkStatusVerified, ChunkStatusFailed:
 		return true
 	default:
 		return false
@@ -295,6 +324,9 @@ type SourceMetadata struct {
 
 // Chunk represents a piece of a dataset for chunked transfer.
 type Chunk struct {
+	// ID is the unique chunk identifier.
+	ID ChunkID `json:"id"`
+
 	// DatasetID is the dataset this chunk belongs to.
 	DatasetID DatasetID `json:"dataset_id"`
 
@@ -309,6 +341,12 @@ type Chunk struct {
 
 	// Size is the chunk size in bytes.
 	Size int64 `json:"size"`
+
+	// Status is the chunk download/verification status.
+	Status ChunkStatus `json:"status"`
+
+	// StoragePath is the local storage path for this chunk.
+	StoragePath string `json:"storage_path,omitempty"`
 
 	// Data is the chunk content (only populated during transfer).
 	Data []byte `json:"-"`

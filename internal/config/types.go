@@ -286,6 +286,84 @@ type BibdConfig struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	P2P      P2PConfig      `mapstructure:"p2p"`
 	Cluster  ClusterConfig  `mapstructure:"cluster"`
+	Database DatabaseConfig `mapstructure:"database"`
+}
+
+// DatabaseConfig holds storage layer configuration
+type DatabaseConfig struct {
+	// Backend is the storage backend type: "sqlite" or "postgres"
+	Backend string `mapstructure:"backend"`
+
+	// SQLite configuration (used when Backend is "sqlite")
+	SQLite SQLiteDatabaseConfig `mapstructure:"sqlite"`
+
+	// Postgres configuration (used when Backend is "postgres")
+	Postgres PostgresDatabaseConfig `mapstructure:"postgres"`
+
+	// Audit configuration
+	Audit AuditDatabaseConfig `mapstructure:"audit"`
+}
+
+// SQLiteDatabaseConfig holds SQLite-specific configuration
+type SQLiteDatabaseConfig struct {
+	// Path is the path to the SQLite database file
+	// Defaults to <data_dir>/cache.db
+	Path string `mapstructure:"path"`
+
+	// MaxOpenConns is the maximum number of open connections
+	MaxOpenConns int `mapstructure:"max_open_conns"`
+}
+
+// PostgresDatabaseConfig holds PostgreSQL-specific configuration
+type PostgresDatabaseConfig struct {
+	// Managed indicates whether bibd manages the PostgreSQL lifecycle
+	Managed bool `mapstructure:"managed"`
+
+	// ContainerRuntime is the container runtime: "docker" or "podman"
+	ContainerRuntime string `mapstructure:"container_runtime"`
+
+	// Image is the PostgreSQL container image
+	Image string `mapstructure:"image"`
+
+	// DataDir is where PostgreSQL data is stored
+	DataDir string `mapstructure:"data_dir"`
+
+	// Port is the PostgreSQL port (internal)
+	Port int `mapstructure:"port"`
+
+	// MaxConnections is the maximum number of connections
+	MaxConnections int `mapstructure:"max_connections"`
+
+	// MemoryMB is the memory limit for the container
+	MemoryMB int `mapstructure:"memory_mb"`
+
+	// CPUCores is the CPU limit for the container
+	CPUCores float64 `mapstructure:"cpu_cores"`
+
+	// Advanced allows manual connection (for debugging only)
+	Advanced *PostgresAdvancedConfig `mapstructure:"advanced,omitempty"`
+}
+
+// PostgresAdvancedConfig allows manual PostgreSQL configuration (testing only)
+type PostgresAdvancedConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Database string `mapstructure:"database"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	SSLMode  string `mapstructure:"ssl_mode"`
+}
+
+// AuditDatabaseConfig holds audit logging configuration
+type AuditDatabaseConfig struct {
+	// Enabled controls whether audit logging is active
+	Enabled bool `mapstructure:"enabled"`
+
+	// RetentionDays is how long to keep audit logs
+	RetentionDays int `mapstructure:"retention_days"`
+
+	// HashChain enables hash chain for tamper detection
+	HashChain bool `mapstructure:"hash_chain"`
 }
 
 // DefaultBibConfig returns sensible defaults for bib CLI
@@ -411,6 +489,28 @@ func DefaultBibdConfig() *BibdConfig {
 				Interval:    30 * time.Minute, // Automatic snapshots every 30 minutes
 				Threshold:   8192,             // Also snapshot after 8192 log entries
 				RetainCount: 3,
+			},
+		},
+		Database: DatabaseConfig{
+			Backend: "sqlite", // Default to SQLite for easy onboarding
+			SQLite: SQLiteDatabaseConfig{
+				Path:         "", // defaults to <data_dir>/cache.db
+				MaxOpenConns: 10,
+			},
+			Postgres: PostgresDatabaseConfig{
+				Managed:          true,
+				ContainerRuntime: "docker",
+				Image:            "postgres:16-alpine",
+				DataDir:          "", // defaults to <data_dir>/postgres
+				Port:             5432,
+				MaxConnections:   100,
+				MemoryMB:         512,
+				CPUCores:         1.0,
+			},
+			Audit: AuditDatabaseConfig{
+				Enabled:       true,
+				RetentionDays: 90,
+				HashChain:     true,
 			},
 		},
 	}

@@ -286,6 +286,39 @@ type JobResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
+// JobResult represents the result of a job execution on a specific node.
+type JobResult struct {
+	// ID is the unique result identifier.
+	ID string `json:"id"`
+
+	// JobID is the job this result belongs to.
+	JobID JobID `json:"job_id"`
+
+	// NodeID is the node that produced this result.
+	NodeID string `json:"node_id"`
+
+	// Status is the execution status.
+	Status JobStatus `json:"status"`
+
+	// Result is the output data (JSON encoded).
+	Result string `json:"result,omitempty"`
+
+	// Error is the error message if failed.
+	Error string `json:"error,omitempty"`
+
+	// StartedAt is when execution started on this node.
+	StartedAt *time.Time `json:"started_at,omitempty"`
+
+	// CompletedAt is when execution completed.
+	CompletedAt time.Time `json:"completed_at"`
+
+	// DurationMS is the execution time in milliseconds.
+	DurationMS int64 `json:"duration_ms"`
+
+	// Metadata holds additional result metadata.
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
 // Pipeline represents a collection of jobs with dependencies.
 // Convenience type for creating complex workflows.
 type Pipeline struct {
