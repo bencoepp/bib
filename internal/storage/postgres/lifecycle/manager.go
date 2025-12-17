@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -149,11 +150,8 @@ type CredentialsConfig struct {
 
 // DefaultLifecycleConfig returns sensible defaults.
 func DefaultLifecycleConfig() LifecycleConfig {
-	// On Windows, we can't use Unix sockets for PostgreSQL connections
-	useUnixSocket := true
-	if filepath.Separator == '\\' { // Windows uses backslash
-		useUnixSocket = false
-	}
+	// On Windows, we can't use Unix sockets for PostgreSQL connections from host to Docker container
+	useUnixSocket := runtime.GOOS != "windows"
 
 	return LifecycleConfig{
 		Runtime:    "", // Auto-detect
@@ -232,6 +230,11 @@ type Credentials struct {
 
 // NewManager creates a new PostgreSQL lifecycle manager.
 func NewManager(cfg LifecycleConfig, nodeID, dataDir string) (*Manager, error) {
+	// On Windows, force Unix socket to false (cannot connect from host to Docker via Unix socket)
+	if runtime.GOOS == "windows" {
+		cfg.Network.UseUnixSocket = false
+	}
+
 	m := &Manager{
 		cfg:        cfg,
 		nodeID:     nodeID,
@@ -240,11 +243,11 @@ func NewManager(cfg LifecycleConfig, nodeID, dataDir string) (*Manager, error) {
 	}
 
 	// Detect or validate runtime
-	runtime, err := m.detectRuntime()
+	rt, err := m.detectRuntime()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect runtime: %w", err)
 	}
-	m.runtime = runtime
+	m.runtime = rt
 
 	// Set defaults based on node ID
 	if m.cfg.ContainerName == "" {
@@ -982,16 +985,13 @@ func (m *Manager) ConnectionString() string {
 		)
 	}
 
-	sslmode := "disable"
-	if m.cfg.TLS.Enabled {
-		sslmode = "require"
-	}
-
-	return fmt.Sprintf("host=%s port=%d user=postgres password=%s dbname=bibd sslmode=%s",
+	// For TCP connections to localhost (Docker/Podman), disable TLS
+	// The connection is local and the container isn't configured with SSL certificates
+	// TLS is only useful for remote connections
+	return fmt.Sprintf("host=%s port=%d user=postgres password=%s dbname=bibd sslmode=disable",
 		m.cfg.Network.BindAddress,
 		m.cfg.Port,
 		m.credentials.SuperuserPassword,
-		sslmode,
 	)
 }
 

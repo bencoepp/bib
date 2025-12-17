@@ -353,7 +353,6 @@ func (d *Daemon) openManagedPostgresStore(ctx context.Context, pgCfg storage.Pos
 	}
 
 	// Extract components from lifecycle manager
-	creds := d.pgLifecycle.Credentials()
 
 	// For Kubernetes, get connection info from the manager
 	runtime := d.pgLifecycle.Runtime()
@@ -393,29 +392,39 @@ func (d *Daemon) openManagedPostgresStore(ctx context.Context, pgCfg storage.Pos
 			modifiedCfg.Postgres.Advanced.SSLMode = sslmode
 		}
 	} else {
-		// For Docker/Podman, use the existing logic
-		if d.cfg.Database.Postgres.Network.UseUnixSocket {
-			modifiedCfg.Postgres.Advanced.Host = filepath.Join(d.cfg.Server.DataDir, "postgres", "run")
-		} else {
-			modifiedCfg.Postgres.Advanced.Host = d.cfg.Database.Postgres.Network.BindAddress
-			if modifiedCfg.Postgres.Advanced.Host == "" {
-				modifiedCfg.Postgres.Advanced.Host = "127.0.0.1"
+		// For Docker/Podman, parse the connection string from the lifecycle manager
+		// The lifecycle manager has already applied Windows-specific fixes (forcing TCP on Windows)
+		connStr := d.pgLifecycle.ConnectionString()
+		d.log.Debug("using Docker/Podman connection", "connection_string_format", "parsed")
+
+		// Parse the connection string to populate Advanced config
+		parts := make(map[string]string)
+		for _, part := range splitConnectionString(connStr) {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				parts[kv[0]] = kv[1]
 			}
 		}
-		modifiedCfg.Postgres.Advanced.Port = d.cfg.Database.Postgres.Port
-		if modifiedCfg.Postgres.Advanced.Port == 0 {
-			modifiedCfg.Postgres.Advanced.Port = 5432
+
+		if host, ok := parts["host"]; ok {
+			modifiedCfg.Postgres.Advanced.Host = host
 		}
-		modifiedCfg.Postgres.Advanced.User = "postgres"
-		modifiedCfg.Postgres.Advanced.Password = creds.SuperuserPassword
-		modifiedCfg.Postgres.Advanced.Database = "bibd"
-		modifiedCfg.Postgres.Advanced.SSLMode = d.cfg.Database.Postgres.SSLMode
-		if modifiedCfg.Postgres.Advanced.SSLMode == "" {
-			if d.cfg.Database.Postgres.TLS.Enabled {
-				modifiedCfg.Postgres.Advanced.SSLMode = "require"
-			} else {
-				modifiedCfg.Postgres.Advanced.SSLMode = "disable"
+		if port, ok := parts["port"]; ok {
+			if p, err := strconv.Atoi(port); err == nil {
+				modifiedCfg.Postgres.Advanced.Port = p
 			}
+		}
+		if user, ok := parts["user"]; ok {
+			modifiedCfg.Postgres.Advanced.User = user
+		}
+		if password, ok := parts["password"]; ok {
+			modifiedCfg.Postgres.Advanced.Password = password
+		}
+		if dbname, ok := parts["dbname"]; ok {
+			modifiedCfg.Postgres.Advanced.Database = dbname
+		}
+		if sslmode, ok := parts["sslmode"]; ok {
+			modifiedCfg.Postgres.Advanced.SSLMode = sslmode
 		}
 	}
 

@@ -37,9 +37,11 @@ func GenerateConfig(appName, format string) (string, error) {
 	var defaultCfg interface{}
 	switch appName {
 	case AppBib:
-		defaultCfg = DefaultBibConfig()
+		cfg := DefaultBibConfig()
+		defaultCfg = &cfg
 	case AppBibd:
-		defaultCfg = DefaultBibdConfig()
+		cfg := DefaultBibdConfig()
+		defaultCfg = &cfg
 	default:
 		return "", fmt.Errorf("unknown app: %s", appName)
 	}

@@ -28,7 +28,8 @@ func runConfigTUI(isDaemon bool) error {
 		// Load existing config or use defaults
 		cfg, _ := config.LoadBibd("")
 		if cfg == nil {
-			cfg = config.DefaultBibdConfig()
+			defaultCfg := config.DefaultBibdConfig()
+			cfg = &defaultCfg
 		}
 
 		// Ensure config file path exists

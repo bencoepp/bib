@@ -57,9 +57,12 @@ func main() {
 	dataDir := expandPath(cfg.Server.DataDir)
 	cfg.Server.DataDir = dataDir
 
+	// Debug: log what we're trying to create
+	stdlog.Printf("Creating data directory: %q", dataDir)
+
 	// Create data directory if it doesn't exist
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		stdlog.Fatalf("Failed to create data directory: %v", err)
+		stdlog.Fatalf("Failed to create data directory %q: %v", dataDir, err)
 	}
 
 	// Initialize structured logger

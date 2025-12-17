@@ -1,7 +1,7 @@
 package config
 
 import (
-	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -498,13 +498,20 @@ func DefaultBibConfig() *BibConfig {
 	}
 }
 
+// getDefaultDataDir returns a platform-appropriate default data directory
+func getDefaultDataDir() string {
+	if runtime.GOOS == "windows" {
+		// On Windows, use %LOCALAPPDATA%\bibd or fallback to ~\.bibd\data
+		return "~/AppData/Local/bibd"
+	}
+	// On Unix-like systems, use XDG Base Directory specification
+	return "~/.local/share/bibd"
+}
+
 // DefaultBibdConfig returns the default bibd configuration.
 func DefaultBibdConfig() BibdConfig {
-	// On Windows, we can't use Unix sockets for PostgreSQL connections
-	useUnixSocket := true
-	if filepath.Separator == '\\' { // Windows uses backslash
-		useUnixSocket = false
-	}
+	// On Windows, we can't use Unix sockets for PostgreSQL connections from host to Docker container
+	useUnixSocket := runtime.GOOS != "windows"
 
 	return BibdConfig{
 		Log: LogConfig{
@@ -525,8 +532,8 @@ func DefaultBibdConfig() BibdConfig {
 		Server: ServerConfig{
 			Host:    "0.0.0.0",
 			Port:    8080,
-			PIDFile: "/var/run/bibd.pid",
-			DataDir: "~/.local/share/bibd",
+			PIDFile: "~/bibd.pid",
+			DataDir: getDefaultDataDir(),
 			TLS: TLSConfig{
 				Enabled: false,
 			},
