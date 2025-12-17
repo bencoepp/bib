@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"time"
 )
 
@@ -497,9 +498,15 @@ func DefaultBibConfig() *BibConfig {
 	}
 }
 
-// DefaultBibdConfig returns sensible defaults for bibd daemon
-func DefaultBibdConfig() *BibdConfig {
-	return &BibdConfig{
+// DefaultBibdConfig returns the default bibd configuration.
+func DefaultBibdConfig() BibdConfig {
+	// On Windows, we can't use Unix sockets for PostgreSQL connections
+	useUnixSocket := true
+	if filepath.Separator == '\\' { // Windows uses backslash
+		useUnixSocket = false
+	}
+
+	return BibdConfig{
 		Log: LogConfig{
 			Level:           "info",
 			Format:          "pretty",
@@ -619,7 +626,7 @@ func DefaultBibdConfig() *BibdConfig {
 				Network: PostgresNetworkConfig{
 					UseBridgeNetwork:  true,
 					BridgeNetworkName: "bibd-network",
-					UseUnixSocket:     true,
+					UseUnixSocket:     useUnixSocket,
 					BindAddress:       "127.0.0.1",
 				},
 				Health: PostgresHealthConfig{

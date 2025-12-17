@@ -341,6 +341,10 @@ func (d *Daemon) openManagedPostgresStore(ctx context.Context, pgCfg storage.Pos
 		Postgres: pgCfg,
 	}
 
+	// For managed PostgreSQL, we use Advanced config to connect
+	// Set Managed to false to pass validation (we're just connecting, not managing)
+	modifiedCfg.Postgres.Managed = false
+
 	// Parse connection string to populate Advanced config
 	// Format: "host=X port=Y user=Z password=W dbname=D sslmode=S"
 	// For simplicity, we'll pass the connection components

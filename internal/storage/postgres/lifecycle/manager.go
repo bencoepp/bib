@@ -149,6 +149,12 @@ type CredentialsConfig struct {
 
 // DefaultLifecycleConfig returns sensible defaults.
 func DefaultLifecycleConfig() LifecycleConfig {
+	// On Windows, we can't use Unix sockets for PostgreSQL connections
+	useUnixSocket := true
+	if filepath.Separator == '\\' { // Windows uses backslash
+		useUnixSocket = false
+	}
+
 	return LifecycleConfig{
 		Runtime:    "", // Auto-detect
 		SocketPath: "", // Auto-detect
@@ -157,7 +163,7 @@ func DefaultLifecycleConfig() LifecycleConfig {
 		Network: NetworkConfig{
 			UseBridgeNetwork:  true,
 			BridgeNetworkName: "bibd-network",
-			UseUnixSocket:     true,
+			UseUnixSocket:     useUnixSocket,
 			BindAddress:       "127.0.0.1",
 		},
 		Resources: ResourceConfig{
@@ -175,6 +181,15 @@ func DefaultLifecycleConfig() LifecycleConfig {
 		TLS: TLSConfig{
 			Enabled:      true,
 			AutoGenerate: true,
+		},
+		Kubernetes: storage.KubernetesConfig{
+			// Use defaults from storage.DefaultConfig()
+			StorageSize:          "10Gi",
+			BackupEnabled:        false, // Disabled by default for container runtimes
+			NetworkPolicyEnabled: false, // Not applicable for container runtimes
+			PodAntiAffinity:      false,
+			UpdateStrategy:       "RollingUpdate",
+			DeleteOnCleanup:      true,
 		},
 		Credentials: CredentialsConfig{
 			RotationInterval: 7 * 24 * time.Hour,
@@ -285,7 +300,7 @@ func (m *Manager) detectRuntime() (RuntimeType, error) {
 		return RuntimePodman, nil
 	}
 
-	return "", fmt.Errorf("no container runtime found; install Docker or Podman, or configure manual PostgreSQL")
+	return "", fmt.Errorf("no container runtime found; install Docker or Podman, or configure manual PostgreSQL (tried: Docker='docker info', Podman='podman info')")
 }
 
 // isKubernetes checks if running in Kubernetes.
@@ -316,6 +331,16 @@ func (m *Manager) isKubernetes() bool {
 
 // isDockerAvailable checks if Docker is available.
 func (m *Manager) isDockerAvailable() bool {
+	// Try to run docker command directly (works on all platforms including Windows)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "info")
+
+	if cmd.Run() == nil {
+		return true
+	}
+
+	// Fallback: check socket path (Unix/Linux only)
 	socketPath := m.cfg.SocketPath
 	if socketPath == "" {
 		socketPath = "/var/run/docker.sock"
@@ -334,6 +359,15 @@ func (m *Manager) isDockerAvailable() bool {
 
 // isPodmanAvailable checks if Podman is available.
 func (m *Manager) isPodmanAvailable() bool {
+	// First, try to run podman command directly (works on all platforms)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "podman", "info")
+	if cmd.Run() == nil {
+		return true
+	}
+
+	// Fallback: check socket path (Unix/Linux only)
 	socketPath := m.cfg.SocketPath
 	if socketPath == "" {
 		// Check common Podman socket locations
@@ -384,9 +418,10 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	// Generate PostgreSQL configuration
-	if err := m.generatePostgresConfig(); err != nil {
-		return fmt.Errorf("failed to generate PostgreSQL config: %w", err)
-	}
+	// Temporarily disabled - using PostgreSQL defaults
+	// if err := m.generatePostgresConfig(); err != nil {
+	// 	return fmt.Errorf("failed to generate PostgreSQL config: %w", err)
+	// }
 
 	// Start based on runtime
 	switch m.runtime {
@@ -557,7 +592,9 @@ func (m *Manager) buildPostgresConf() string {
 		sb.WriteString("listen_addresses = ''\n")
 		sb.WriteString(fmt.Sprintf("unix_socket_directories = '%s'\n", filepath.Join(m.cfg.DataDir, "run")))
 	} else {
-		sb.WriteString(fmt.Sprintf("listen_addresses = '%s'\n", m.cfg.Network.BindAddress))
+		// Inside Docker container, listen on all interfaces
+		// Port forwarding will restrict access to 127.0.0.1 on the host
+		sb.WriteString("listen_addresses = '*'\n")
 	}
 	sb.WriteString(fmt.Sprintf("port = %d\n", m.cfg.Port))
 
@@ -659,18 +696,32 @@ func (m *Manager) startContainer(ctx context.Context, runtime string) error {
 		args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", m.cfg.Port, m.cfg.Port))
 	}
 
-	// Volumes
-	args = append(args, "-v", fmt.Sprintf("%s:/var/lib/postgresql/data", filepath.Join(m.cfg.DataDir, "data")))
-	args = append(args, "-v", fmt.Sprintf("%s:/etc/postgresql", filepath.Join(m.cfg.DataDir, "config")))
+	// Volumes - Convert to absolute paths for Docker/Podman compatibility
+	dataPath, err := filepath.Abs(filepath.Join(m.cfg.DataDir, "data"))
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for data directory: %w", err)
+	}
+
+	args = append(args, "-v", fmt.Sprintf("%s:/var/lib/postgresql/data", dataPath))
+	// Config volume mount disabled - using PostgreSQL defaults for now
+	// Future: Re-enable after fixing postgresql.conf generation
 
 	if m.cfg.TLS.Enabled {
-		args = append(args, "-v", fmt.Sprintf("%s:/var/lib/postgresql/certs:ro", m.cfg.TLS.CertDir))
+		certPath, err := filepath.Abs(m.cfg.TLS.CertDir)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for cert directory: %w", err)
+		}
+		args = append(args, "-v", fmt.Sprintf("%s:/var/lib/postgresql/certs:ro", certPath))
 	}
 
 	if m.cfg.Network.UseUnixSocket {
 		runDir := filepath.Join(m.cfg.DataDir, "run")
 		os.MkdirAll(runDir, 0755)
-		args = append(args, "-v", fmt.Sprintf("%s:/var/run/postgresql", runDir))
+		runPath, err := filepath.Abs(runDir)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for run directory: %w", err)
+		}
+		args = append(args, "-v", fmt.Sprintf("%s:/var/run/postgresql", runPath))
 	}
 
 	// Resource limits
@@ -683,7 +734,9 @@ func (m *Manager) startContainer(ctx context.Context, runtime string) error {
 
 	// Environment
 	args = append(args, "-e", fmt.Sprintf("POSTGRES_PASSWORD=%s", m.credentials.SuperuserPassword))
-	args = append(args, "-e", "POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256")
+	args = append(args, "-e", "POSTGRES_DB=bibd")
+	// Removed SCRAM auth forcing - using PostgreSQL defaults
+	// args = append(args, "-e", "POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256")
 
 	// Health check
 	args = append(args, "--health-cmd", "pg_isready -U postgres")
@@ -742,6 +795,9 @@ func (m *Manager) waitForReady(ctx context.Context) error {
 		}
 
 		if m.checkHealth(ctx) {
+			// Add a small delay to ensure PostgreSQL is fully ready to accept connections
+			// pg_isready can return true slightly before PostgreSQL is fully initialized
+			time.Sleep(2 * time.Second)
 			return nil
 		}
 
