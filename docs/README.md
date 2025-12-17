@@ -45,11 +45,11 @@ Together, they enable researchers and data engineers to organize, share, version
 
 ## Quick Links
 
-| Component | Description |
-|-----------|-------------|
-| `bib` | CLI client for user interaction |
-| `bibd` | Daemon for P2P, storage, and execution |
-| `bib.dev` | Bootstrap node for peer discovery |
+| Component | Description                            |
+|-----------|----------------------------------------|
+| `bib`     | CLI client for user interaction        |
+| `bibd`    | Daemon for P2P, storage, and execution |
+| `bib.dev` | Bootstrap node for peer discovery      |
 
 ## Version
 
