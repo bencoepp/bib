@@ -30,6 +30,14 @@ type Discovery struct {
 
 // NewDiscovery creates a new discovery manager.
 func NewDiscovery(h host.Host, cfg config.P2PConfig, configDir string) (*Discovery, error) {
+	discLog := getLogger("discovery")
+
+	discLog.Debug("creating discovery manager",
+		"mdns_enabled", cfg.MDNS.Enabled,
+		"dht_enabled", cfg.DHT.Enabled,
+		"bootstrap_peers", len(cfg.Bootstrap.Peers),
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d := &Discovery{
@@ -44,18 +52,22 @@ func NewDiscovery(h host.Host, cfg config.P2PConfig, configDir string) (*Discove
 	peerStore, err := NewPeerStore(cfg.PeerStore, configDir)
 	if err != nil {
 		cancel()
+		discLog.Error("failed to create peer store", "error", err)
 		return nil, fmt.Errorf("failed to create peer store: %w", err)
 	}
 	d.peerStore = peerStore
+	discLog.Debug("peer store initialized")
 
 	// Initialize bootstrapper
 	bootstrapper, err := NewBootstrapper(h, cfg.Bootstrap)
 	if err != nil {
 		peerStore.Close()
 		cancel()
+		discLog.Error("failed to create bootstrapper", "error", err)
 		return nil, fmt.Errorf("failed to create bootstrapper: %w", err)
 	}
 	d.bootstrapper = bootstrapper
+	discLog.Debug("bootstrapper initialized", "peer_count", len(cfg.Bootstrap.Peers))
 
 	// Initialize mDNS
 	d.mdns = NewMDNSDiscovery(h, cfg.MDNS)
@@ -70,41 +82,57 @@ func NewDiscovery(h host.Host, cfg config.P2PConfig, configDir string) (*Discove
 		},
 	})
 
+	discLog.Info("discovery manager created")
 	return d, nil
 }
 
 // Start begins all discovery mechanisms.
 func (d *Discovery) Start(ctx context.Context) error {
+	discLog := getLogger("discovery")
+
+	discLog.Info("starting discovery mechanisms")
+
 	// Start mDNS discovery
 	if d.cfg.MDNS.Enabled {
+		discLog.Debug("starting mDNS discovery", "service_name", d.cfg.MDNS.ServiceName)
 		if err := d.mdns.Start(); err != nil {
+			discLog.Error("failed to start mDNS", "error", err)
 			return fmt.Errorf("failed to start mDNS: %w", err)
 		}
+		discLog.Info("mDNS discovery started")
 	}
 
 	// Start bootstrap connections
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
+		discLog.Debug("starting bootstrap connections")
 		if err := d.bootstrapper.Start(ctx); err != nil {
+			discLog.Warn("bootstrap connection error", "error", err)
 			// Log error but don't fail - we might find peers through other means
 		}
 	}()
 
 	// Initialize DHT after bootstrap connections are established
 	if d.cfg.DHT.Enabled {
+		discLog.Debug("waiting for bootstrap before DHT init")
 		// Wait a bit for bootstrap connections
 		time.Sleep(2 * time.Second)
 
+		discLog.Debug("initializing DHT", "mode", d.cfg.DHT.Mode)
 		bootstrapPeers := d.bootstrapper.peers
 		dht, err := NewDHT(d.ctx, d.host, d.cfg.DHT, bootstrapPeers)
 		if err != nil {
+			discLog.Error("failed to create DHT", "error", err)
 			return fmt.Errorf("failed to create DHT: %w", err)
 		}
 		d.dht = dht
+		discLog.Info("DHT initialized", "mode", d.cfg.DHT.Mode)
 
 		// Bootstrap the DHT
+		discLog.Debug("bootstrapping DHT")
 		if err := d.dht.Bootstrap(ctx); err != nil {
+			discLog.Warn("DHT bootstrap error", "error", err)
 			// Log but don't fail
 		}
 	}
@@ -113,71 +141,94 @@ func (d *Discovery) Start(ctx context.Context) error {
 	d.wg.Add(1)
 	go d.maintenanceLoop()
 
+	discLog.Info("discovery started successfully")
 	return nil
 }
 
 // Stop stops all discovery mechanisms.
 func (d *Discovery) Stop() error {
+	discLog := getLogger("discovery")
+	discLog.Info("stopping discovery mechanisms")
+
 	d.cancel()
 	d.wg.Wait()
 
 	var errs []error
 
 	if d.bootstrapper != nil {
+		discLog.Debug("stopping bootstrapper")
 		d.bootstrapper.Stop()
 	}
 
 	if d.mdns != nil {
+		discLog.Debug("stopping mDNS")
 		if err := d.mdns.Stop(); err != nil {
+			discLog.Error("error stopping mDNS", "error", err)
 			errs = append(errs, err)
 		}
 	}
 
 	if d.dht != nil {
+		discLog.Debug("closing DHT")
 		if err := d.dht.Close(); err != nil {
+			discLog.Error("error closing DHT", "error", err)
 			errs = append(errs, err)
 		}
 	}
 
 	if d.peerStore != nil {
+		discLog.Debug("closing peer store")
 		if err := d.peerStore.Close(); err != nil {
+			discLog.Error("error closing peer store", "error", err)
 			errs = append(errs, err)
 		}
 	}
 
 	if len(errs) > 0 {
+		discLog.Warn("discovery stopped with errors", "error_count", len(errs))
 		return fmt.Errorf("errors stopping discovery: %v", errs)
 	}
+
+	discLog.Info("discovery stopped successfully")
 	return nil
 }
 
 // onPeerConnected is called when a peer connects.
 func (d *Discovery) onPeerConnected(id peer.ID) {
+	discLog := getLogger("discovery")
 	isBootstrap := d.bootstrapper != nil && d.bootstrapper.IsBootstrapPeer(id)
+
+	discLog.Debug("peer connected",
+		"peer_id", id.String(),
+		"is_bootstrap", isBootstrap,
+	)
 
 	addrs := d.host.Peerstore().Addrs(id)
 	info := peer.AddrInfo{ID: id, Addrs: addrs}
 
 	// Add to peer store
 	if err := d.peerStore.AddPeer(info, isBootstrap); err != nil {
-		// Log error
+		discLog.Warn("failed to add peer to store", "peer_id", id.String(), "error", err)
 	}
 
 	// Record successful connection
 	// Note: We don't have latency info here, would need to measure separately
 	if err := d.peerStore.RecordConnection(id, true, 0); err != nil {
-		// Log error
+		discLog.Warn("failed to record connection", "peer_id", id.String(), "error", err)
 	}
 }
 
 // onPeerDisconnected is called when a peer disconnects.
 func (d *Discovery) onPeerDisconnected(id peer.ID) {
+	discLog := getLogger("discovery")
+	discLog.Debug("peer disconnected", "peer_id", id.String())
 	// Could update peer store here if needed
 }
 
 // maintenanceLoop periodically maintains the peer store.
 func (d *Discovery) maintenanceLoop() {
 	defer d.wg.Done()
+	discLog := getLogger("discovery")
 
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
@@ -187,9 +238,13 @@ func (d *Discovery) maintenanceLoop() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
+			discLog.Debug("running peer store maintenance")
 			// Prune peers not seen in 30 days
-			if _, err := d.peerStore.PruneOldPeers(30 * 24 * time.Hour); err != nil {
-				// Log error
+			pruned, err := d.peerStore.PruneOldPeers(30 * 24 * time.Hour)
+			if err != nil {
+				discLog.Warn("failed to prune old peers", "error", err)
+			} else if pruned > 0 {
+				discLog.Info("pruned old peers", "count", pruned)
 			}
 		}
 	}

@@ -56,45 +56,69 @@ var OpenPostgres func(ctx context.Context, cfg PostgresConfig, dataDir, nodeID s
 // It validates the configuration and returns the appropriate store implementation.
 // Note: The caller must import the sqlite and/or postgres packages to register the factories.
 func Open(ctx context.Context, cfg Config, dataDir, nodeID, nodeMode string) (Store, error) {
+	storageLog := getLogger("open")
+
+	storageLog.Debug("opening storage",
+		"backend", cfg.Backend,
+		"data_dir", dataDir,
+		"node_id", nodeID,
+		"node_mode", nodeMode,
+	)
+
 	if err := cfg.Validate(); err != nil {
+		storageLog.Error("invalid storage config", "error", err)
 		return nil, fmt.Errorf("invalid storage config: %w", err)
 	}
 
 	// Validate mode vs backend compatibility
 	if err := ValidateModeBackend(nodeMode, cfg.Backend); err != nil {
+		storageLog.Error("mode/backend incompatibility", "error", err, "mode", nodeMode, "backend", cfg.Backend)
 		return nil, err
 	}
 
 	switch cfg.Backend {
 	case BackendSQLite:
+		storageLog.Debug("creating SQLite store")
 		if OpenSQLite == nil {
+			storageLog.Error("SQLite backend not available")
 			return nil, fmt.Errorf("SQLite backend not available; import bib/internal/storage/sqlite")
 		}
 		store, err := OpenSQLite(ctx, cfg.SQLite, dataDir, nodeID)
 		if err != nil {
+			storageLog.Error("failed to create SQLite store", "error", err)
 			return nil, fmt.Errorf("failed to create SQLite store: %w", err)
 		}
+		storageLog.Debug("running SQLite migrations")
 		if err := store.Migrate(ctx); err != nil {
 			store.Close()
+			storageLog.Error("failed to run SQLite migrations", "error", err)
 			return nil, fmt.Errorf("failed to run SQLite migrations: %w", err)
 		}
+		storageLog.Info("SQLite storage opened successfully", "authoritative", store.IsAuthoritative())
 		return store, nil
 
 	case BackendPostgres:
+		storageLog.Debug("creating PostgreSQL store")
 		if OpenPostgres == nil {
+			storageLog.Error("PostgreSQL backend not available")
 			return nil, fmt.Errorf("PostgreSQL backend not available; import bib/internal/storage/postgres")
 		}
 		store, err := OpenPostgres(ctx, cfg.Postgres, dataDir, nodeID)
 		if err != nil {
+			storageLog.Error("failed to create PostgreSQL store", "error", err)
 			return nil, fmt.Errorf("failed to create PostgreSQL store: %w", err)
 		}
+		storageLog.Debug("running PostgreSQL migrations")
 		if err := store.Migrate(ctx); err != nil {
 			store.Close()
+			storageLog.Error("failed to run PostgreSQL migrations", "error", err)
 			return nil, fmt.Errorf("failed to run PostgreSQL migrations: %w", err)
 		}
+		storageLog.Info("PostgreSQL storage opened successfully", "authoritative", store.IsAuthoritative())
 		return store, nil
 
 	default:
+		storageLog.Error("unknown storage backend", "backend", cfg.Backend)
 		return nil, fmt.Errorf("unknown storage backend: %s", cfg.Backend)
 	}
 }

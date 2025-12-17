@@ -26,15 +26,32 @@ type Host struct {
 // NewHost creates a new libp2p host with the given configuration.
 // The configDir is used to resolve the identity key path if not explicitly set.
 func NewHost(ctx context.Context, cfg config.P2PConfig, configDir string) (*Host, error) {
+	hostLog := getLogger("host")
+
+	hostLog.Debug("creating P2P host",
+		"listen_addresses", cfg.ListenAddresses,
+		"conn_low_watermark", cfg.ConnManager.LowWatermark,
+		"conn_high_watermark", cfg.ConnManager.HighWatermark,
+	)
+
 	// Load or generate identity
 	identity, err := LoadOrGenerateIdentity(cfg.Identity.KeyPath, configDir)
 	if err != nil {
+		hostLog.Error("failed to load identity", "error", err)
 		return nil, fmt.Errorf("failed to load identity: %w", err)
 	}
+
+	peerID, err := peer.IDFromPrivateKey(identity.PrivKey)
+	if err != nil {
+		hostLog.Error("failed to get peer ID from identity", "error", err)
+		return nil, fmt.Errorf("failed to get peer ID: %w", err)
+	}
+	hostLog.Debug("loaded P2P identity", "peer_id", peerID.String())
 
 	// Parse listen addresses
 	listenAddrs, err := parseMultiaddrs(cfg.ListenAddresses)
 	if err != nil {
+		hostLog.Error("failed to parse listen addresses", "error", err)
 		return nil, fmt.Errorf("failed to parse listen addresses: %w", err)
 	}
 
@@ -78,8 +95,14 @@ func NewHost(ctx context.Context, cfg config.P2PConfig, configDir string) (*Host
 	// Create the libp2p host
 	h, err := libp2p.New(opts...)
 	if err != nil {
+		hostLog.Error("failed to create libp2p host", "error", err)
 		return nil, fmt.Errorf("failed to create libp2p host: %w", err)
 	}
+
+	hostLog.Info("P2P host created",
+		"peer_id", h.ID().String(),
+		"addrs", h.Addrs(),
+	)
 
 	return &Host{
 		Host: h,

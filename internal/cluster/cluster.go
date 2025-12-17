@@ -107,17 +107,28 @@ type Cluster struct {
 
 // New creates a new cluster manager
 func New(cfg config.ClusterConfig, configDir string) (*Cluster, error) {
+	clusterLog := getLogger("manager")
+
 	if !cfg.Enabled {
+		clusterLog.Debug("cluster disabled in configuration")
 		return nil, nil
 	}
+
+	clusterLog.Debug("creating cluster manager",
+		"cluster_name", cfg.ClusterName,
+		"is_voter", cfg.IsVoter,
+		"bootstrap", cfg.Bootstrap,
+	)
 
 	nodeID := cfg.NodeID
 	if nodeID == "" {
 		var err error
 		nodeID, err = generateNodeID()
 		if err != nil {
+			clusterLog.Error("failed to generate node ID", "error", err)
 			return nil, fmt.Errorf("failed to generate node ID: %w", err)
 		}
+		clusterLog.Debug("generated node ID", "node_id", nodeID)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,6 +143,7 @@ func New(cfg config.ClusterConfig, configDir string) (*Cluster, error) {
 		cancel:    cancel,
 	}
 
+	clusterLog.Info("cluster manager created", "node_id", nodeID)
 	return c, nil
 }
 
@@ -140,43 +152,57 @@ func (c *Cluster) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	clusterLog := getLogger("manager")
+	clusterLog.Info("starting cluster", "node_id", c.nodeID)
+
 	// Initialize storage
+	clusterLog.Debug("initializing cluster storage")
 	storage, err := NewStorage(c.cfg, c.configDir)
 	if err != nil {
+		clusterLog.Error("failed to initialize storage", "error", err)
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	c.storage = storage
 
 	// Initialize FSM
+	clusterLog.Debug("initializing FSM")
 	c.fsm = NewFSM(c.storage)
 
 	// Initialize transport
+	clusterLog.Debug("initializing transport", "listen_addr", c.cfg.ListenAddr)
 	transport, err := NewTransport(c.cfg, c.nodeID)
 	if err != nil {
 		storage.Close()
+		clusterLog.Error("failed to initialize transport", "error", err)
 		return fmt.Errorf("failed to initialize transport: %w", err)
 	}
 	c.transport = transport
 
 	// Initialize Raft node
+	clusterLog.Debug("initializing Raft node")
 	raftNode, err := NewRaftNode(c.cfg, c.nodeID, c.storage, c.transport, c.fsm)
 	if err != nil {
 		transport.Close()
 		storage.Close()
+		clusterLog.Error("failed to initialize raft node", "error", err)
 		return fmt.Errorf("failed to initialize raft node: %w", err)
 	}
 	c.raft = raftNode
 
 	// Bootstrap if this is the first node
 	if c.cfg.Bootstrap {
+		clusterLog.Info("bootstrapping new cluster")
 		if err := c.bootstrap(); err != nil {
+			clusterLog.Error("failed to bootstrap cluster", "error", err)
 			return fmt.Errorf("failed to bootstrap cluster: %w", err)
 		}
 	}
 
 	// Join existing cluster if join token or addresses provided
 	if c.cfg.JoinToken != "" || len(c.cfg.JoinAddrs) > 0 {
+		clusterLog.Info("joining existing cluster")
 		if err := c.join(); err != nil {
+			clusterLog.Error("failed to join cluster", "error", err)
 			return fmt.Errorf("failed to join cluster: %w", err)
 		}
 	}
@@ -185,11 +211,18 @@ func (c *Cluster) Start(ctx context.Context) error {
 	c.wg.Add(1)
 	go c.monitorLoop()
 
+	clusterLog.Info("cluster started successfully",
+		"node_id", c.nodeID,
+		"state", c.state,
+	)
 	return nil
 }
 
 // Stop stops the cluster
 func (c *Cluster) Stop() error {
+	clusterLog := getLogger("manager")
+	clusterLog.Info("stopping cluster", "node_id", c.nodeID)
+
 	c.cancel()
 	c.wg.Wait()
 
@@ -199,26 +232,35 @@ func (c *Cluster) Stop() error {
 	var errs []error
 
 	if c.raft != nil {
+		clusterLog.Debug("shutting down Raft")
 		if err := c.raft.Shutdown(); err != nil {
+			clusterLog.Error("failed to shutdown raft", "error", err)
 			errs = append(errs, fmt.Errorf("failed to shutdown raft: %w", err))
 		}
 	}
 
 	if c.transport != nil {
+		clusterLog.Debug("closing transport")
 		if err := c.transport.Close(); err != nil {
+			clusterLog.Error("failed to close transport", "error", err)
 			errs = append(errs, fmt.Errorf("failed to close transport: %w", err))
 		}
 	}
 
 	if c.storage != nil {
+		clusterLog.Debug("closing storage")
 		if err := c.storage.Close(); err != nil {
+			clusterLog.Error("failed to close storage", "error", err)
 			errs = append(errs, fmt.Errorf("failed to close storage: %w", err))
 		}
 	}
 
 	if len(errs) > 0 {
+		clusterLog.Warn("cluster stopped with errors", "error_count", len(errs))
 		return errors.Join(errs...)
 	}
+
+	clusterLog.Info("cluster stopped successfully")
 	return nil
 }
 
@@ -461,6 +503,8 @@ func (c *Cluster) updateState() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	clusterLog := getLogger("manager")
+
 	if c.raft == nil {
 		return
 	}
@@ -493,6 +537,19 @@ func (c *Cluster) updateState() {
 
 	// Trigger callbacks if state changed
 	if c.state != oldState || c.leader != oldLeader {
+		if c.state != oldState {
+			clusterLog.Info("cluster state changed",
+				"old_state", oldState,
+				"new_state", c.state,
+				"term", c.term,
+			)
+		}
+		if c.leader != oldLeader {
+			clusterLog.Info("cluster leader changed",
+				"old_leader", oldLeader,
+				"new_leader", c.leader,
+			)
+		}
 		if c.onLeaderChange != nil && c.leader != oldLeader {
 			go c.onLeaderChange(c.leader)
 		}

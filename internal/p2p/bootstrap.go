@@ -50,9 +50,17 @@ func NewBootstrapper(h host.Host, cfg config.BootstrapConfig) (*Bootstrapper, er
 // Start begins the bootstrap process, connecting to peers with exponential backoff.
 // It returns after at least minPeers are connected, or the context is cancelled.
 func (b *Bootstrapper) Start(ctx context.Context) error {
+	bootLog := getLogger("bootstrap")
+
 	if len(b.peers) == 0 {
+		bootLog.Debug("no bootstrap peers configured")
 		return nil // No bootstrap peers configured
 	}
+
+	bootLog.Info("starting bootstrap process",
+		"peer_count", len(b.peers),
+		"min_peers", b.cfg.MinPeers,
+	)
 
 	// Start connection attempts for each peer
 	for _, peerInfo := range b.peers {
@@ -96,6 +104,7 @@ func (b *Bootstrapper) IsBootstrapPeer(id peer.ID) bool {
 // connectWithBackoff attempts to connect to a peer with exponential backoff.
 func (b *Bootstrapper) connectWithBackoff(peerInfo peer.AddrInfo) {
 	defer b.wg.Done()
+	bootLog := getLogger("bootstrap")
 
 	retryInterval := b.cfg.RetryInterval
 	if retryInterval == 0 {
@@ -105,6 +114,11 @@ func (b *Bootstrapper) connectWithBackoff(peerInfo peer.AddrInfo) {
 	if maxInterval == 0 {
 		maxInterval = time.Hour
 	}
+
+	bootLog.Debug("starting connection attempt",
+		"peer_id", peerInfo.ID.String(),
+		"addrs", peerInfo.Addrs,
+	)
 
 	attempt := 0
 	for {
@@ -119,6 +133,11 @@ func (b *Bootstrapper) connectWithBackoff(peerInfo peer.AddrInfo) {
 			b.mu.Lock()
 			b.connected[peerInfo.ID] = true
 			b.mu.Unlock()
+
+			bootLog.Info("connected to bootstrap peer",
+				"peer_id", peerInfo.ID.String(),
+				"attempt", attempt+1,
+			)
 
 			// Stay connected - monitor and reconnect if disconnected
 			b.monitorConnection(peerInfo)
@@ -135,6 +154,13 @@ func (b *Bootstrapper) connectWithBackoff(peerInfo peer.AddrInfo) {
 		if backoff > maxInterval {
 			backoff = maxInterval
 		}
+
+		bootLog.Debug("bootstrap connection failed, retrying",
+			"peer_id", peerInfo.ID.String(),
+			"attempt", attempt,
+			"backoff", backoff,
+			"error", err,
+		)
 
 		select {
 		case <-b.ctx.Done():

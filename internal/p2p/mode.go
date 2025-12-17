@@ -104,18 +104,28 @@ func NewModeManager(h host.Host, discovery *Discovery, cfg config.P2PConfig, con
 
 // Start begins the mode handler.
 func (mm *ModeManager) Start(ctx context.Context) error {
+	modeLog := getLogger("mode")
+	modeLog.Info("starting mode handler", "mode", mm.mode)
+
 	mm.mu.RLock()
 	handler := mm.handler
 	mm.mu.RUnlock()
 
 	if handler != nil {
-		return handler.Start(ctx)
+		if err := handler.Start(ctx); err != nil {
+			modeLog.Error("failed to start mode handler", "mode", mm.mode, "error", err)
+			return err
+		}
+		modeLog.Info("mode handler started", "mode", mm.mode)
 	}
 	return nil
 }
 
 // Stop stops the mode handler.
 func (mm *ModeManager) Stop() error {
+	modeLog := getLogger("mode")
+	modeLog.Info("stopping mode handler", "mode", mm.mode)
+
 	mm.cancel()
 
 	mm.mu.RLock()
@@ -123,7 +133,11 @@ func (mm *ModeManager) Stop() error {
 	mm.mu.RUnlock()
 
 	if handler != nil {
-		return handler.Stop()
+		if err := handler.Stop(); err != nil {
+			modeLog.Error("failed to stop mode handler", "mode", mm.mode, "error", err)
+			return err
+		}
+		modeLog.Info("mode handler stopped", "mode", mm.mode)
 	}
 	return nil
 }
@@ -137,34 +151,44 @@ func (mm *ModeManager) Mode() NodeMode {
 
 // SetMode switches to a new mode at runtime.
 func (mm *ModeManager) SetMode(mode NodeMode) error {
+	modeLog := getLogger("mode")
+	modeLog.Info("switching mode", "from", mm.mode, "to", mode)
+
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 
 	if mm.mode == mode {
+		modeLog.Debug("already in requested mode", "mode", mode)
 		return nil // Already in this mode
 	}
 
 	// Stop current handler
 	if mm.handler != nil {
+		modeLog.Debug("stopping current handler", "mode", mm.mode)
 		if err := mm.handler.Stop(); err != nil {
+			modeLog.Error("failed to stop current handler", "error", err)
 			return fmt.Errorf("failed to stop current handler: %w", err)
 		}
 	}
 
 	// Create new handler
+	modeLog.Debug("creating new handler", "mode", mode)
 	handler, err := mm.createHandler(mode)
 	if err != nil {
+		modeLog.Error("failed to create handler", "mode", mode, "error", err)
 		return fmt.Errorf("failed to create handler for mode %s: %w", mode, err)
 	}
 
 	// Start new handler
 	if err := handler.Start(mm.ctx); err != nil {
+		modeLog.Error("failed to start handler", "mode", mode, "error", err)
 		return fmt.Errorf("failed to start handler for mode %s: %w", mode, err)
 	}
 
 	mm.mode = mode
 	mm.handler = handler
 
+	modeLog.Info("mode switched successfully", "mode", mode)
 	return nil
 }
 
