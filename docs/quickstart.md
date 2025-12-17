@@ -42,12 +42,13 @@ bibd -version
 bib setup
 ```
 
-Follow the prompts:
-- Enter your name
-- Enter your email
-- Accept defaults for other options
+This launches an **interactive setup wizard** that guides you through configuration:
+- **Identity** - Enter your name and email (for attribution)
+- **Output** - Choose default format (table/json/yaml) and color preferences
+- **Connection** - Specify bibd server address
+- **Logging** - Select log verbosity level
 
-This creates `~/.config/bib/config.yaml`.
+Use `Tab` to move between fields, `Enter` to proceed, and `Esc` to go back. Configuration is saved to `~/.config/bib/config.yaml`.
 
 ### 2. Configure the Daemon
 
@@ -55,10 +56,12 @@ This creates `~/.config/bib/config.yaml`.
 bib setup --daemon
 ```
 
-Follow the prompts:
-- Enter daemon identity name
-- Accept default host (0.0.0.0) and port (8080)
-- Accept default data directory
+The daemon wizard includes additional configuration:
+- **Server** - Host, port, and data directory
+- **TLS** - Optional TLS encryption
+- **Storage** - SQLite (lightweight) or PostgreSQL (full replication)
+- **P2P** - Enable networking and select mode (proxy/selective/full)
+- **Cluster** - Optional high-availability clustering
 
 This creates `~/.config/bibd/config.yaml`.
 
@@ -205,4 +208,9 @@ bib setup
 - [CLI Reference](cli-reference.md)
 - [P2P Networking](p2p-networking.md)
 - [Clustering](clustering.md)
+
+### For Developers
+
+- [Developer Guide](developer-guide.md) - Complete codebase overview
+- [TUI Component System](tui-components.md) - Terminal UI components and themes
 

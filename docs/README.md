@@ -39,7 +39,9 @@ Together, they enable researchers and data engineers to organize, share, version
 - [Clustering](clustering.md) - Setting up high-availability clusters
 
 ### Developer Guides
+- [Developer Guide](developer-guide.md) - Complete guide for new developers and coding agents
 - [Jobs & Tasks](jobs-tasks.md) - Creating and running data processing jobs
+- [TUI Component System](tui-components.md) - Terminal UI components, themes, and layouts
 
 ## Quick Links
 

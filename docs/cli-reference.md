@@ -47,7 +47,7 @@ bib version 0.1.0
 
 ### setup
 
-Interactive configuration setup.
+Interactive configuration setup wizard.
 
 ```bash
 bib setup [flags]
@@ -78,21 +78,40 @@ bib setup --daemon --cluster
 bib setup --daemon --cluster-join <token>
 ```
 
-**Interactive Prompts (CLI):**
-- Your name
-- Your email
-- Default output format
-- Enable colored output
-- bibd server address
-- Log level
+**Interactive Wizard Features:**
 
-**Interactive Prompts (Daemon):**
-- Daemon identity name
-- Daemon identity email
-- Listen host/port
-- TLS settings
-- Data directory
-- Log level/format
+The setup command launches a multi-step wizard using the TUI system. Features include:
+
+- **Step-by-step progression** - Navigate between configuration sections
+- **Help panel** - Contextual help displayed alongside each step
+- **Conditional steps** - Steps are shown/hidden based on previous choices
+- **Validation** - Input validation with error feedback
+- **Summary** - Review all settings before saving
+
+**CLI Setup Steps:**
+1. Welcome - Introduction and overview
+2. Identity - Name and email for attribution
+3. Output - Default format (table/json/yaml) and color preferences
+4. Connection - bibd server address
+5. Logging - Log level selection
+6. Confirm - Review and save
+
+**Daemon Setup Steps:**
+1. Welcome - Introduction and overview
+2. Identity - Daemon name and contact email
+3. Server - Host, port, and data directory
+4. TLS - Enable/configure TLS encryption
+5. Storage - Database backend (SQLite/PostgreSQL)
+6. P2P - Enable P2P and select mode (proxy/selective/full)
+7. Logging - Log level and format
+8. Cluster - Optional HA cluster configuration
+9. Confirm - Review and save
+
+**Keyboard Navigation:**
+- `Enter` - Proceed to next step
+- `Esc` - Go back to previous step
+- `Tab` - Move between form fields
+- `Ctrl+C` - Cancel setup
 
 ---
 

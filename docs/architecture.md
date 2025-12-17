@@ -236,8 +236,49 @@ See [Clustering](clustering.md) for setup instructions.
 | Language | Go 1.25+ |
 | P2P | libp2p (TCP, QUIC, Noise, Kademlia DHT) |
 | CLI | Cobra + Viper |
+| TUI | Bubble Tea + Lip Gloss + Huh |
 | Logging | log/slog with structured output |
 | Database | SQLite (embedded), PostgreSQL (external) |
 | Consensus | etcd/raft |
 | Serialization | JSON (dev), Protobuf (production) |
+
+## Terminal UI Architecture
+
+The TUI system (`internal/tui/`) provides a comprehensive component library for terminal interfaces:
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                      TUI Package (tui.go)                      │
+│           Main entry, type aliases, convenience funcs          │
+├───────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────┐  │
+│  │   themes/   │  │   layout/   │  │      component/       │  │
+│  ├─────────────┤  ├─────────────┤  ├───────────────────────┤  │
+│  │ Registry    │  │ Flex        │  │ Stateless:            │  │
+│  │ Palettes    │  │ Grid        │  │   Card, Box, Badge    │  │
+│  │ Icons       │  │ Responsive  │  │   ProgressBar, etc.   │  │
+│  │ Theme       │  │ Context     │  │                       │  │
+│  │             │  │             │  │ Stateful (tea.Model): │  │
+│  │             │  │             │  │   Table, List, Tree   │  │
+│  │             │  │             │  │   Modal, Toast, Tabs  │  │
+│  └─────────────┘  └─────────────┘  └───────────────────────┘  │
+│                                                                │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │              Wizard, Setup, Tabs (tui/*.go)              │  │
+│  │           High-level composed components                  │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                                                                │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│              External Dependencies                             │
+│  - Bubble Tea (github.com/charmbracelet/bubbletea)            │
+│  - Lip Gloss (github.com/charmbracelet/lipgloss)              │
+│  - Huh (github.com/charmbracelet/huh) - Forms                 │
+└───────────────────────────────────────────────────────────────┘
+```
+
+See [TUI Component System](tui-components.md) for detailed documentation.
 
