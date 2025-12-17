@@ -350,8 +350,14 @@ type PostgresDatabaseConfig struct {
 	// Managed indicates whether bibd manages the PostgreSQL lifecycle
 	Managed bool `mapstructure:"managed"`
 
-	// ContainerRuntime is the container runtime: "docker" or "podman"
+	// ContainerRuntime is the container runtime: "docker", "podman", or "kubernetes"
 	ContainerRuntime string `mapstructure:"container_runtime"`
+
+	// SocketPath is the path to the container runtime socket (auto-detected if empty)
+	SocketPath string `mapstructure:"socket_path"`
+
+	// KubeconfigPath is the path to kubeconfig file (for Kubernetes runtime)
+	KubeconfigPath string `mapstructure:"kubeconfig_path"`
 
 	// Image is the PostgreSQL container image
 	Image string `mapstructure:"image"`
@@ -371,8 +377,71 @@ type PostgresDatabaseConfig struct {
 	// CPUCores is the CPU limit for the container
 	CPUCores float64 `mapstructure:"cpu_cores"`
 
+	// SSLMode is the SSL mode for connections
+	SSLMode string `mapstructure:"ssl_mode"`
+
+	// CredentialRotationInterval is how often to rotate database credentials
+	CredentialRotationInterval time.Duration `mapstructure:"credential_rotation_interval"`
+
+	// Network configuration
+	Network PostgresNetworkConfig `mapstructure:"network"`
+
+	// Health check configuration
+	Health PostgresHealthConfig `mapstructure:"health"`
+
+	// TLS configuration
+	TLS PostgresTLSConfig `mapstructure:"tls"`
+
 	// Advanced allows manual connection (for debugging only)
 	Advanced *PostgresAdvancedConfig `mapstructure:"advanced,omitempty"`
+}
+
+// PostgresNetworkConfig holds network configuration for managed PostgreSQL
+type PostgresNetworkConfig struct {
+	// UseBridgeNetwork creates a private bridge network for isolation
+	UseBridgeNetwork bool `mapstructure:"use_bridge_network"`
+
+	// BridgeNetworkName is the name of the bridge network
+	BridgeNetworkName string `mapstructure:"bridge_network_name"`
+
+	// UseUnixSocket uses Unix socket only (no TCP)
+	UseUnixSocket bool `mapstructure:"use_unix_socket"`
+
+	// BindAddress is the address to bind to (default: 127.0.0.1)
+	BindAddress string `mapstructure:"bind_address"`
+}
+
+// PostgresHealthConfig holds health check configuration for managed PostgreSQL
+type PostgresHealthConfig struct {
+	// Interval is how often to check health
+	Interval time.Duration `mapstructure:"interval"`
+
+	// Timeout is the timeout for each health check
+	Timeout time.Duration `mapstructure:"timeout"`
+
+	// StartupTimeout is how long to wait for initial startup
+	StartupTimeout time.Duration `mapstructure:"startup_timeout"`
+
+	// Action defines what happens on repeated failures: "shutdown", "retry_always", "retry_limit"
+	Action string `mapstructure:"action"`
+
+	// MaxRetries is the maximum retries (for "retry_limit" action)
+	MaxRetries int `mapstructure:"max_retries"`
+
+	// RetryBackoff is the backoff duration between retries
+	RetryBackoff time.Duration `mapstructure:"retry_backoff"`
+}
+
+// PostgresTLSConfig holds TLS configuration for PostgreSQL connections
+type PostgresTLSConfig struct {
+	// Enabled controls whether mTLS is enabled (always true for managed)
+	Enabled bool `mapstructure:"enabled"`
+
+	// CertDir is where certificates are stored
+	CertDir string `mapstructure:"cert_dir"`
+
+	// AutoGenerate automatically generates certificates from node identity
+	AutoGenerate bool `mapstructure:"auto_generate"`
 }
 
 // PostgresAdvancedConfig allows manual PostgreSQL configuration (testing only)
@@ -535,14 +604,37 @@ func DefaultBibdConfig() *BibdConfig {
 				MaxOpenConns: 10,
 			},
 			Postgres: PostgresDatabaseConfig{
-				Managed:          true,
-				ContainerRuntime: "docker",
-				Image:            "postgres:16-alpine",
-				DataDir:          "", // defaults to <data_dir>/postgres
-				Port:             5432,
-				MaxConnections:   100,
-				MemoryMB:         512,
-				CPUCores:         1.0,
+				Managed:                    true,
+				ContainerRuntime:           "", // Auto-detect
+				SocketPath:                 "", // Auto-detect
+				KubeconfigPath:             "",
+				Image:                      "postgres:16-alpine",
+				DataDir:                    "", // defaults to <data_dir>/postgres
+				Port:                       5432,
+				MaxConnections:             100,
+				MemoryMB:                   512,
+				CPUCores:                   1.0,
+				SSLMode:                    "require",
+				CredentialRotationInterval: 7 * 24 * time.Hour, // 7 days
+				Network: PostgresNetworkConfig{
+					UseBridgeNetwork:  true,
+					BridgeNetworkName: "bibd-network",
+					UseUnixSocket:     true,
+					BindAddress:       "127.0.0.1",
+				},
+				Health: PostgresHealthConfig{
+					Interval:       5 * time.Second,
+					Timeout:        5 * time.Second,
+					StartupTimeout: 60 * time.Second,
+					Action:         "retry_limit",
+					MaxRetries:     5,
+					RetryBackoff:   10 * time.Second,
+				},
+				TLS: PostgresTLSConfig{
+					Enabled:      true,
+					CertDir:      "", // defaults to <data_dir>/postgres/certs
+					AutoGenerate: true,
+				},
 			},
 			Audit: AuditDatabaseConfig{
 				Enabled:       true,

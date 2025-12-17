@@ -8,12 +8,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"bib/internal/cluster"
 	"bib/internal/config"
 	"bib/internal/logger"
 	"bib/internal/p2p"
 	"bib/internal/storage"
+	pglifecycle "bib/internal/storage/postgres/lifecycle"
 
 	// Import storage backends to register factories
 	_ "bib/internal/storage/postgres"
@@ -27,11 +29,12 @@ type Daemon struct {
 	log       *logger.Logger
 	auditLog  *logger.AuditLogger
 
-	store   storage.Store
-	p2pHost *p2p.Host
-	p2pDisc *p2p.Discovery
-	p2pMode *p2p.ModeManager
-	cluster *cluster.Cluster
+	store       storage.Store
+	pgLifecycle *pglifecycle.Manager // PostgreSQL lifecycle manager (nil if not using managed postgres)
+	p2pHost     *p2p.Host
+	p2pDisc     *p2p.Discovery
+	p2pMode     *p2p.ModeManager
+	cluster     *cluster.Cluster
 
 	mu      sync.Mutex
 	running bool
@@ -92,6 +95,14 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}
 
+	// 5. Wait for storage to be ready (includes waiting for managed PostgreSQL)
+	if err := d.waitForStorageReady(ctx); err != nil {
+		d.stopCluster()
+		d.stopP2P()
+		d.stopStorage()
+		return fmt.Errorf("storage failed to become ready: %w", err)
+	}
+
 	d.running = true
 	d.log.Info("daemon started successfully")
 
@@ -143,7 +154,9 @@ func (d *Daemon) Stop(ctx context.Context) error {
 	return nil
 }
 
-// startStorage initializes the storage backend.
+// startStorage initializes the storage backend asynchronously.
+// For managed PostgreSQL, this starts the container but does NOT wait for it to be ready.
+// Readiness is checked later by waitForStorageReady() before the node becomes ready.
 func (d *Daemon) startStorage(ctx context.Context) error {
 	d.log.Debug("initializing storage",
 		"backend", d.cfg.Database.Backend,
@@ -153,20 +166,42 @@ func (d *Daemon) startStorage(ctx context.Context) error {
 	// Convert config types
 	storageCfg := d.convertStorageConfig()
 
+	// Validate configuration early (fail fast)
+	if err := storageCfg.Validate(); err != nil {
+		d.log.Error("invalid storage configuration", "error", err)
+		return fmt.Errorf("invalid storage configuration: %w", err)
+	}
+
 	// Determine node ID for storage
 	nodeID := d.cfg.Cluster.NodeID
 	if nodeID == "" {
 		nodeID = "standalone"
 	}
 
-	// Open storage
+	// Validate mode/backend compatibility early (fail fast)
+	if err := storage.ValidateModeBackend(d.cfg.P2P.Mode, storageCfg.Backend); err != nil {
+		d.log.Error("incompatible mode and backend", "error", err, "mode", d.cfg.P2P.Mode, "backend", storageCfg.Backend)
+		return fmt.Errorf("incompatible mode and backend: %w", err)
+	}
+
+	// Handle managed PostgreSQL lifecycle
+	if storageCfg.Backend == storage.BackendPostgres && storageCfg.Postgres.Managed {
+		if err := d.startManagedPostgres(ctx, storageCfg); err != nil {
+			return err
+		}
+		// Don't wait here - we'll wait in waitForStorageReady()
+		d.log.Info("managed PostgreSQL lifecycle started (waiting for readiness)")
+		return nil
+	}
+
+	// For non-managed backends (SQLite or external Postgres), open immediately
 	store, err := storage.Open(ctx, storageCfg, d.cfg.Server.DataDir, nodeID, d.cfg.P2P.Mode)
 	if err != nil {
 		d.log.Error("failed to open storage", "error", err)
-		return err
+		return fmt.Errorf("failed to open storage: %w", err)
 	}
 
-	// Ping to verify connectivity
+	// Initial ping to verify connectivity (fail fast)
 	if err := store.Ping(ctx); err != nil {
 		store.Close()
 		d.log.Error("storage ping failed", "error", err)
@@ -183,21 +218,195 @@ func (d *Daemon) startStorage(ctx context.Context) error {
 	return nil
 }
 
-// stopStorage shuts down the storage backend.
-func (d *Daemon) stopStorage() error {
+// startManagedPostgres initializes and starts a managed PostgreSQL instance.
+// This starts the container/cluster but does NOT wait for readiness.
+func (d *Daemon) startManagedPostgres(ctx context.Context, storageCfg storage.Config) error {
+	d.log.Debug("starting managed PostgreSQL lifecycle")
+
+	// Validate Kubernetes support
+	if storageCfg.Postgres.ContainerRuntime == "kubernetes" {
+		d.log.Error("Kubernetes runtime not yet implemented")
+		return fmt.Errorf("kubernetes runtime is not yet implemented; please use 'docker' or 'podman'")
+	}
+
+	// Create lifecycle config from storage config
+	lifecycleCfg := d.convertToLifecycleConfig(storageCfg.Postgres)
+
+	// Determine node ID
+	nodeID := d.cfg.Cluster.NodeID
+	if nodeID == "" {
+		nodeID = "standalone"
+	}
+
+	// Create lifecycle manager
+	mgr, err := pglifecycle.NewManager(lifecycleCfg, nodeID, d.cfg.Server.DataDir)
+	if err != nil {
+		d.log.Error("failed to create PostgreSQL lifecycle manager", "error", err)
+		return fmt.Errorf("failed to create PostgreSQL lifecycle manager: %w", err)
+	}
+
+	// Validate detected runtime (fail fast)
+	runtime := mgr.Runtime()
+	d.log.Debug("detected container runtime", "runtime", runtime)
+
+	if runtime == "kubernetes" {
+		d.log.Error("Kubernetes runtime detected but not yet implemented")
+		return fmt.Errorf("kubernetes runtime is not yet implemented; please install Docker or Podman")
+	}
+
+	// Start PostgreSQL (asynchronous - container/pod starts but we don't wait)
+	if err := mgr.Start(ctx); err != nil {
+		d.log.Error("failed to start managed PostgreSQL", "error", err)
+		return fmt.Errorf("failed to start managed PostgreSQL: %w", err)
+	}
+
+	d.pgLifecycle = mgr
+	d.log.Info("managed PostgreSQL started",
+		"runtime", runtime,
+		"container", lifecycleCfg.ContainerName,
+	)
+
+	return nil
+}
+
+// waitForStorageReady waits for storage to become healthy before the node becomes ready.
+// This is called after all components are started but before marking the node as ready.
+func (d *Daemon) waitForStorageReady(ctx context.Context) error {
+	d.log.Debug("waiting for storage to become ready")
+
+	// If we have a PostgreSQL lifecycle manager, wait for it to be ready
+	if d.pgLifecycle != nil {
+		d.log.Debug("waiting for managed PostgreSQL to be ready")
+
+		// The lifecycle manager's Start() already waits, but we check again for safety
+		if !d.pgLifecycle.IsReady() {
+			return fmt.Errorf("managed PostgreSQL is not ready")
+		}
+
+		// Now that PostgreSQL is ready, connect to it
+		storageCfg := d.convertStorageConfig()
+		nodeID := d.cfg.Cluster.NodeID
+		if nodeID == "" {
+			nodeID = "standalone"
+		}
+
+		// Open the store with the managed connection
+		store, err := d.openManagedPostgresStore(ctx, storageCfg.Postgres, nodeID)
+		if err != nil {
+			return fmt.Errorf("failed to connect to managed PostgreSQL: %w", err)
+		}
+
+		d.store = store
+		d.log.Info("connected to managed PostgreSQL",
+			"backend", store.Backend(),
+			"authoritative", store.IsAuthoritative(),
+		)
+	}
+
+	// Verify storage is responding
 	if d.store == nil {
-		return nil
+		return fmt.Errorf("storage is not initialized")
 	}
 
-	d.log.Debug("shutting down storage")
+	// Final health check with ping
+	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	if err := d.store.Close(); err != nil {
-		d.log.Error("error closing storage", "error", err)
-		return err
+	if err := d.store.Ping(pingCtx); err != nil {
+		d.log.Error("storage health check failed", "error", err)
+		return fmt.Errorf("storage health check failed: %w", err)
 	}
 
-	d.store = nil
-	d.log.Debug("storage shut down")
+	d.log.Info("storage is ready and healthy", "backend", d.store.Backend())
+	return nil
+}
+
+// openManagedPostgresStore opens a PostgreSQL store connected to a managed instance.
+func (d *Daemon) openManagedPostgresStore(ctx context.Context, pgCfg storage.PostgresConfig, nodeID string) (storage.Store, error) {
+	d.log.Debug("connecting to managed PostgreSQL", "node_id", nodeID)
+
+	// Use the storage.Open with the modified config
+	// We need to construct an AdvancedPostgresConfig from the connection string
+	modifiedCfg := storage.Config{
+		Backend:  storage.BackendPostgres,
+		Postgres: pgCfg,
+	}
+
+	// Parse connection string to populate Advanced config
+	// Format: "host=X port=Y user=Z password=W dbname=D sslmode=S"
+	// For simplicity, we'll pass the connection components
+	if modifiedCfg.Postgres.Advanced == nil {
+		modifiedCfg.Postgres.Advanced = &storage.AdvancedPostgresConfig{}
+	}
+
+	// Extract components from lifecycle manager
+	creds := d.pgLifecycle.Credentials()
+	if d.cfg.Database.Postgres.Network.UseUnixSocket {
+		modifiedCfg.Postgres.Advanced.Host = filepath.Join(d.cfg.Server.DataDir, "postgres", "run")
+	} else {
+		modifiedCfg.Postgres.Advanced.Host = d.cfg.Database.Postgres.Network.BindAddress
+		if modifiedCfg.Postgres.Advanced.Host == "" {
+			modifiedCfg.Postgres.Advanced.Host = "127.0.0.1"
+		}
+	}
+	modifiedCfg.Postgres.Advanced.Port = d.cfg.Database.Postgres.Port
+	if modifiedCfg.Postgres.Advanced.Port == 0 {
+		modifiedCfg.Postgres.Advanced.Port = 5432
+	}
+	modifiedCfg.Postgres.Advanced.User = "postgres"
+	modifiedCfg.Postgres.Advanced.Password = creds.SuperuserPassword
+	modifiedCfg.Postgres.Advanced.Database = "bibd"
+	modifiedCfg.Postgres.Advanced.SSLMode = d.cfg.Database.Postgres.SSLMode
+	if modifiedCfg.Postgres.Advanced.SSLMode == "" {
+		if d.cfg.Database.Postgres.TLS.Enabled {
+			modifiedCfg.Postgres.Advanced.SSLMode = "require"
+		} else {
+			modifiedCfg.Postgres.Advanced.SSLMode = "disable"
+		}
+	}
+
+	// Open with the advanced config
+	store, err := storage.Open(ctx, modifiedCfg, d.cfg.Server.DataDir, nodeID, d.cfg.P2P.Mode)
+	if err != nil {
+		return nil, err
+	}
+
+	return store, nil
+}
+
+// stopStorage shuts down the storage backend and lifecycle manager.
+func (d *Daemon) stopStorage() error {
+	var errs []error
+
+	// Close the store connection first
+	if d.store != nil {
+		d.log.Debug("closing storage connection")
+		if err := d.store.Close(); err != nil {
+			d.log.Error("error closing storage", "error", err)
+			errs = append(errs, fmt.Errorf("close store: %w", err))
+		}
+		d.store = nil
+	}
+
+	// Stop PostgreSQL lifecycle manager if present
+	if d.pgLifecycle != nil {
+		d.log.Debug("stopping managed PostgreSQL")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := d.pgLifecycle.Stop(ctx); err != nil {
+			d.log.Error("error stopping managed PostgreSQL", "error", err)
+			errs = append(errs, fmt.Errorf("stop lifecycle: %w", err))
+		}
+		d.pgLifecycle = nil
+	}
+
+	if len(errs) > 0 {
+		d.log.Debug("storage shutdown completed with errors")
+		return fmt.Errorf("storage shutdown errors: %v", errs)
+	}
+
+	d.log.Debug("storage shut down successfully")
 	return nil
 }
 
@@ -390,15 +599,38 @@ func (d *Daemon) convertStorageConfig() storage.Config {
 			MaxOpenConns: d.cfg.Database.SQLite.MaxOpenConns,
 		},
 		Postgres: storage.PostgresConfig{
-			Managed:          d.cfg.Database.Postgres.Managed,
-			ContainerRuntime: d.cfg.Database.Postgres.ContainerRuntime,
-			Image:            d.cfg.Database.Postgres.Image,
-			DataDir:          d.cfg.Database.Postgres.DataDir,
-			Port:             d.cfg.Database.Postgres.Port,
-			MaxConnections:   d.cfg.Database.Postgres.MaxConnections,
+			Managed:                    d.cfg.Database.Postgres.Managed,
+			ContainerRuntime:           d.cfg.Database.Postgres.ContainerRuntime,
+			SocketPath:                 d.cfg.Database.Postgres.SocketPath,
+			KubeconfigPath:             d.cfg.Database.Postgres.KubeconfigPath,
+			Image:                      d.cfg.Database.Postgres.Image,
+			DataDir:                    d.cfg.Database.Postgres.DataDir,
+			Port:                       d.cfg.Database.Postgres.Port,
+			MaxConnections:             d.cfg.Database.Postgres.MaxConnections,
+			SSLMode:                    d.cfg.Database.Postgres.SSLMode,
+			CredentialRotationInterval: d.cfg.Database.Postgres.CredentialRotationInterval,
 			Resources: storage.ContainerResources{
 				MemoryMB: d.cfg.Database.Postgres.MemoryMB,
 				CPUCores: d.cfg.Database.Postgres.CPUCores,
+			},
+			Network: storage.NetworkConfig{
+				UseBridgeNetwork:  d.cfg.Database.Postgres.Network.UseBridgeNetwork,
+				BridgeNetworkName: d.cfg.Database.Postgres.Network.BridgeNetworkName,
+				UseUnixSocket:     d.cfg.Database.Postgres.Network.UseUnixSocket,
+				BindAddress:       d.cfg.Database.Postgres.Network.BindAddress,
+			},
+			Health: storage.HealthConfig{
+				Interval:       d.cfg.Database.Postgres.Health.Interval,
+				Timeout:        d.cfg.Database.Postgres.Health.Timeout,
+				StartupTimeout: d.cfg.Database.Postgres.Health.StartupTimeout,
+				Action:         d.cfg.Database.Postgres.Health.Action,
+				MaxRetries:     d.cfg.Database.Postgres.Health.MaxRetries,
+				RetryBackoff:   d.cfg.Database.Postgres.Health.RetryBackoff,
+			},
+			TLS: storage.TLSConfig{
+				Enabled:      d.cfg.Database.Postgres.TLS.Enabled,
+				CertDir:      d.cfg.Database.Postgres.TLS.CertDir,
+				AutoGenerate: d.cfg.Database.Postgres.TLS.AutoGenerate,
 			},
 		},
 		Audit: storage.AuditConfig{
@@ -421,6 +653,79 @@ func (d *Daemon) convertStorageConfig() storage.Config {
 	}
 
 	return cfg
+}
+
+// convertToLifecycleConfig converts PostgreSQL config to lifecycle manager config.
+func (d *Daemon) convertToLifecycleConfig(pgCfg storage.PostgresConfig) pglifecycle.LifecycleConfig {
+	lifecycleCfg := pglifecycle.DefaultLifecycleConfig()
+
+	// Override defaults with user configuration
+	if pgCfg.ContainerRuntime != "" {
+		lifecycleCfg.Runtime = pglifecycle.RuntimeType(pgCfg.ContainerRuntime)
+	}
+	if pgCfg.SocketPath != "" {
+		lifecycleCfg.SocketPath = pgCfg.SocketPath
+	}
+	if pgCfg.KubeconfigPath != "" {
+		lifecycleCfg.KubeconfigPath = pgCfg.KubeconfigPath
+	}
+	if pgCfg.Image != "" {
+		lifecycleCfg.Image = pgCfg.Image
+	}
+	if pgCfg.DataDir != "" {
+		lifecycleCfg.DataDir = pgCfg.DataDir
+	}
+	if pgCfg.Port != 0 {
+		lifecycleCfg.Port = pgCfg.Port
+	}
+
+	// Network configuration
+	lifecycleCfg.Network = pglifecycle.NetworkConfig{
+		UseBridgeNetwork:  pgCfg.Network.UseBridgeNetwork,
+		BridgeNetworkName: pgCfg.Network.BridgeNetworkName,
+		UseUnixSocket:     pgCfg.Network.UseUnixSocket,
+		BindAddress:       pgCfg.Network.BindAddress,
+	}
+
+	// Resource limits
+	lifecycleCfg.Resources = pglifecycle.ResourceConfig{
+		MemoryMB: pgCfg.Resources.MemoryMB,
+		CPUCores: pgCfg.Resources.CPUCores,
+	}
+
+	// Health check configuration
+	if pgCfg.Health.Interval > 0 {
+		lifecycleCfg.Health.Interval = pgCfg.Health.Interval
+	}
+	if pgCfg.Health.Timeout > 0 {
+		lifecycleCfg.Health.Timeout = pgCfg.Health.Timeout
+	}
+	if pgCfg.Health.StartupTimeout > 0 {
+		lifecycleCfg.Health.StartupTimeout = pgCfg.Health.StartupTimeout
+	}
+	if pgCfg.Health.Action != "" {
+		lifecycleCfg.Health.Action = pglifecycle.HealthAction(pgCfg.Health.Action)
+	}
+	if pgCfg.Health.MaxRetries > 0 {
+		lifecycleCfg.Health.MaxRetries = pgCfg.Health.MaxRetries
+	}
+	if pgCfg.Health.RetryBackoff > 0 {
+		lifecycleCfg.Health.RetryBackoff = pgCfg.Health.RetryBackoff
+	}
+
+	// TLS configuration
+	lifecycleCfg.TLS = pglifecycle.TLSConfig{
+		Enabled:      pgCfg.TLS.Enabled,
+		CertDir:      pgCfg.TLS.CertDir,
+		AutoGenerate: pgCfg.TLS.AutoGenerate,
+	}
+
+	// Credentials configuration
+	if pgCfg.CredentialRotationInterval > 0 {
+		lifecycleCfg.Credentials.RotationInterval = pgCfg.CredentialRotationInterval
+	}
+
+	return lifecycleCfg
 }
 
 // writePIDFile writes the daemon's PID to a file.
