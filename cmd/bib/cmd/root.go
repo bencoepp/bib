@@ -151,8 +151,8 @@ func onInitialize() {
 	if cfgFile == "" {
 		path, created, err := config.GenerateConfigIfNotExists(config.AppBib, "yaml")
 		if err == nil && created {
-			fmt.Fprintf(os.Stderr, "Created default config at: %s\n", path)
-			fmt.Fprintf(os.Stderr, "Run 'bib setup' to customize your configuration.\n")
+			log.Info("Created default config", "path", path)
+			log.Info("Run 'bib setup' to customize your configuration.")
 		}
 	}
 }
