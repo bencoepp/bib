@@ -647,7 +647,7 @@ func setupBibdCluster() error {
 	// Show welcome screen
 	fmt.Print("\033[H\033[2J") // Clear screen
 
-	theme := tui.DefaultTheme()
+	theme := tui.GetTheme()
 	fmt.Println(tui.Banner())
 	fmt.Println()
 	fmt.Println(theme.Title.Render("bibd HA Cluster Initialization"))
@@ -743,7 +743,7 @@ func setupBibdJoinCluster() error {
 	// Show welcome screen
 	fmt.Print("\033[H\033[2J") // Clear screen
 
-	theme := tui.DefaultTheme()
+	theme := tui.GetTheme()
 	status := tui.NewStatusIndicator()
 
 	fmt.Println(tui.Banner())

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"bib/internal/tui/themes"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -29,7 +31,7 @@ type WizardStep struct {
 
 // Wizard is a multi-step wizard with progress indicator
 type Wizard struct {
-	theme       *Theme
+	theme       *themes.Theme
 	title       string
 	description string
 	steps       []WizardStep
@@ -88,7 +90,7 @@ func WithStepModel(m tea.Model) WizardOption {
 // NewWizard creates a new wizard
 func NewWizard(title, description string, steps []WizardStep, onComplete func() error, opts ...WizardOption) *Wizard {
 	w := &Wizard{
-		theme:         DefaultTheme(),
+		theme:         themes.Global().Active(),
 		title:         title,
 		description:   description,
 		steps:         steps,
@@ -331,7 +333,7 @@ func (w *Wizard) View() string {
 
 	// Error message if any
 	if w.err != nil {
-		errMsg := w.theme.Error.Render(fmt.Sprintf("%s %s", IconCross, w.err.Error()))
+		errMsg := w.theme.Error.Render(fmt.Sprintf("%s %s", themes.IconCross, w.err.Error()))
 		b.WriteString("\n")
 		b.WriteString(errMsg)
 		b.WriteString("\n")
@@ -395,15 +397,15 @@ func (w *Wizard) renderProgress() string {
 		if i < w.currentStep {
 			// Completed step
 			stepStyle = w.theme.StepComplete
-			icon = IconCheck
+			icon = themes.IconCheck
 		} else if i == w.currentStep {
 			// Current step
 			stepStyle = w.theme.StepCurrent
-			icon = IconDot
+			icon = themes.IconDot
 		} else {
 			// Pending step
 			stepStyle = w.theme.StepPending
-			icon = IconCircle
+			icon = themes.IconCircle
 		}
 
 		stepNum := w.theme.StepNumber.Render(icon)
@@ -455,7 +457,7 @@ func (w *Wizard) renderCardWithHelp(availableWidth int) string {
 	// Create the card with border
 	cardStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBorderFocus).
+		BorderForeground(w.theme.Palette.BorderFocus).
 		Padding(1, 2).
 		Width(cardWidth)
 
@@ -471,7 +473,7 @@ func (w *Wizard) renderCardWithHelp(availableWidth int) string {
 		if helpWidth > 10 {
 			// Build help panel
 			helpStyle := lipgloss.NewStyle().
-				Foreground(ColorTextMuted).
+				Foreground(w.theme.Palette.TextMuted).
 				Width(helpWidth).
 				PaddingLeft(2)
 
@@ -491,7 +493,7 @@ func (w *Wizard) renderHelpPanel(text string, width int) string {
 	var b strings.Builder
 
 	// Help icon and title
-	b.WriteString(w.theme.Info.Render(fmt.Sprintf("%s Help", IconInfo)))
+	b.WriteString(w.theme.Info.Render(fmt.Sprintf("%s Help", themes.IconInfo)))
 	b.WriteString("\n\n")
 
 	// Wrap and render help text

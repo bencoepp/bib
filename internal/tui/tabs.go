@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 
+	"bib/internal/tui/themes"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -16,7 +18,7 @@ type Tab struct {
 
 // TabBar is a tab-based navigation component
 type TabBar struct {
-	theme     *Theme
+	theme     *themes.Theme
 	tabs      []Tab
 	activeTab int
 	width     int
@@ -26,7 +28,7 @@ type TabBar struct {
 // NewTabBar creates a new tab bar
 func NewTabBar(tabs []Tab) *TabBar {
 	return &TabBar{
-		theme:     DefaultTheme(),
+		theme:     themes.Global().Active(),
 		tabs:      tabs,
 		activeTab: 0,
 	}

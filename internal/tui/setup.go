@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"bib/internal/config"
+	"bib/internal/tui/component"
+	"bib/internal/tui/themes"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -459,7 +461,7 @@ func CreateClusterJoinForm(data *SetupData, clusterName, leaderAddr string) *huh
 
 // RenderSetupSummary renders a summary of the setup data
 func RenderSetupSummary(data *SetupData, isDaemon bool) string {
-	theme := DefaultTheme()
+	theme := themes.Global().Active()
 	kv := NewKeyValue()
 
 	var b strings.Builder
@@ -547,7 +549,7 @@ func RenderSetupSummary(data *SetupData, isDaemon bool) string {
 
 // RenderWelcome renders the welcome screen for setup
 func RenderWelcome(isDaemon bool) string {
-	theme := DefaultTheme()
+	theme := themes.Global().Active()
 	var b strings.Builder
 
 	// Banner
@@ -590,7 +592,7 @@ func RenderWelcome(isDaemon bool) string {
 
 // RenderSuccess renders the success screen
 func RenderSuccess(configPath string, isDaemon bool) string {
-	theme := DefaultTheme()
+	theme := themes.Global().Active()
 	status := NewStatusIndicator()
 
 	var b strings.Builder
@@ -620,7 +622,7 @@ func RenderSuccess(configPath string, isDaemon bool) string {
 
 // RenderClusterSuccess renders the cluster initialization success screen
 func RenderClusterSuccess(configPath, nodeID, clusterName, joinToken string) string {
-	theme := DefaultTheme()
+	theme := themes.Global().Active()
 	status := NewStatusIndicator()
 
 	var b strings.Builder
@@ -737,4 +739,90 @@ func (d *SetupData) ToBibdConfig() *config.BibdConfig {
 	}
 
 	return cfg
+}
+
+// Backward compatibility helpers for setup.go
+
+// kvRenderer is a helper for rendering key-value pairs
+type kvRenderer struct {
+	theme *themes.Theme
+}
+
+// NewKeyValue creates a new key-value renderer (backward compat)
+func NewKeyValue() *kvRenderer {
+	return &kvRenderer{theme: themes.Global().Active()}
+}
+
+// Render renders a key-value pair
+func (kv *kvRenderer) Render(key, value string) string {
+	return component.NewKeyValue(key, value).View(60)
+}
+
+// Header renders a section header (backward compat)
+func Header(title string) string {
+	return themes.Global().Active().SectionTitle.Render(title)
+}
+
+// HuhTheme returns a huh theme (backward compat)
+func HuhTheme() *huh.Theme {
+	return themes.Global().Active().HuhTheme()
+}
+
+// ColorPrimary for backward compat
+var ColorPrimary = themes.Global().Active().Palette.Primary
+
+// Banner returns the ASCII art banner for bib (backward compat)
+func Banner() string {
+	banner := `
+ ██████╗ ██╗██████╗ 
+ ██╔══██╗██║██╔══██╗
+ ██████╔╝██║██████╔╝
+ ██╔══██╗██║██╔══██╗
+ ██████╔╝██║██████╔╝
+ ╚═════╝ ╚═╝╚═════╝ `
+
+	return lipgloss.NewStyle().
+		Foreground(themes.Global().Active().Palette.Primary).
+		Bold(true).
+		Render(banner)
+}
+
+// BulletList renders a list of bullet points (backward compat)
+func BulletList(items []string) string {
+	theme := themes.Global().Active()
+	var lines []string
+	for _, item := range items {
+		lines = append(lines, theme.Base.Render("  "+themes.IconBullet+" "+item))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// StatusIndicator for backward compat
+type statusIndicator struct {
+	theme *themes.Theme
+}
+
+// NewStatusIndicator creates a new status indicator (backward compat)
+func NewStatusIndicator() *statusIndicator {
+	return &statusIndicator{theme: themes.Global().Active()}
+}
+
+// Success renders a success message
+func (s *statusIndicator) Success(message string) string {
+	return component.Success(message).View(0)
+}
+
+// Error renders an error message
+func (s *statusIndicator) Error(message string) string {
+	return component.Error(message).View(0)
+}
+
+// Warning renders a warning message
+func (s *statusIndicator) Warning(message string) string {
+	return component.Warning(message).View(0)
+}
+
+// Info renders an info message
+func (s *statusIndicator) Info(message string) string {
+	return component.Info(message).View(0)
 }
