@@ -462,7 +462,7 @@ func CreateClusterJoinForm(data *SetupData, clusterName, leaderAddr string) *huh
 // RenderSetupSummary renders a summary of the setup data
 func RenderSetupSummary(data *SetupData, isDaemon bool) string {
 	theme := themes.Global().Active()
-	kv := NewKeyValue()
+	kv := NewKVRenderer()
 
 	var b strings.Builder
 
@@ -637,9 +637,9 @@ func RenderClusterSuccess(configPath, nodeID, clusterName, joinToken string) str
 
 	b.WriteString(theme.SectionTitle.Render("Cluster Details"))
 	b.WriteString("\n")
-	b.WriteString(NewKeyValue().Render("Node ID", nodeID))
+	b.WriteString(NewKVRenderer().Render("Node ID", nodeID))
 	b.WriteString("\n")
-	b.WriteString(NewKeyValue().Render("Cluster", clusterName))
+	b.WriteString(NewKVRenderer().Render("Cluster", clusterName))
 	b.WriteString("\n\n")
 
 	b.WriteString(theme.SectionTitle.Render("Join Token"))
@@ -743,18 +743,18 @@ func (d *SetupData) ToBibdConfig() *config.BibdConfig {
 
 // Backward compatibility helpers for setup.go
 
-// kvRenderer is a helper for rendering key-value pairs
-type kvRenderer struct {
+// KVRenderer is a helper for rendering key-value pairs
+type KVRenderer struct {
 	theme *themes.Theme
 }
 
-// NewKeyValue creates a new key-value renderer (backward compat)
-func NewKeyValue() *kvRenderer {
-	return &kvRenderer{theme: themes.Global().Active()}
+// NewKVRenderer creates a new key-value renderer (backward compat)
+func NewKVRenderer() *KVRenderer {
+	return &KVRenderer{theme: themes.Global().Active()}
 }
 
 // Render renders a key-value pair
-func (kv *kvRenderer) Render(key, value string) string {
+func (kv *KVRenderer) Render(key, value string) string {
 	return component.NewKeyValue(key, value).View(60)
 }
 
@@ -798,31 +798,31 @@ func BulletList(items []string) string {
 }
 
 // StatusIndicator for backward compat
-type statusIndicator struct {
+type StatusIndicator struct {
 	theme *themes.Theme
 }
 
 // NewStatusIndicator creates a new status indicator (backward compat)
-func NewStatusIndicator() *statusIndicator {
-	return &statusIndicator{theme: themes.Global().Active()}
+func NewStatusIndicator() *StatusIndicator {
+	return &StatusIndicator{theme: themes.Global().Active()}
 }
 
 // Success renders a success message
-func (s *statusIndicator) Success(message string) string {
+func (s *StatusIndicator) Success(message string) string {
 	return component.Success(message).View(0)
 }
 
 // Error renders an error message
-func (s *statusIndicator) Error(message string) string {
+func (s *StatusIndicator) Error(message string) string {
 	return component.Error(message).View(0)
 }
 
 // Warning renders a warning message
-func (s *statusIndicator) Warning(message string) string {
+func (s *StatusIndicator) Warning(message string) string {
 	return component.Warning(message).View(0)
 }
 
 // Info renders an info message
-func (s *statusIndicator) Info(message string) string {
+func (s *StatusIndicator) Info(message string) string {
 	return component.Info(message).View(0)
 }

@@ -61,7 +61,7 @@ func NewDiscovery(h host.Host, cfg config.P2PConfig, configDir string) (*Discove
 	// Initialize bootstrapper
 	bootstrapper, err := NewBootstrapper(h, cfg.Bootstrap)
 	if err != nil {
-		peerStore.Close()
+		_ = peerStore.Close()
 		cancel()
 		discLog.Error("failed to create bootstrapper", "error", err)
 		return nil, fmt.Errorf("failed to create bootstrapper: %w", err)

@@ -67,7 +67,7 @@ func main() {
 	if err != nil {
 		stdlog.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	// Initialize audit logger if configured
 	var auditLog *logger.AuditLogger
@@ -76,7 +76,7 @@ func main() {
 		if err != nil {
 			log.Warn("failed to initialize audit logger", "error", err)
 		} else {
-			defer auditLog.Close()
+			defer func() { _ = auditLog.Close() }()
 		}
 	}
 

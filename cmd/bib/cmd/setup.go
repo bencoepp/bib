@@ -655,7 +655,7 @@ func setupBibdCluster() error {
 	fmt.Println(theme.Description.Render("This wizard will initialize a new HA cluster and generate a join token."))
 	fmt.Println()
 	fmt.Println("Press Enter to continue...")
-	fmt.Scanln()
+	_, _ = fmt.Scanln()
 
 	// Create setup data with defaults
 	data := tui.DefaultSetupData()
@@ -754,7 +754,7 @@ func setupBibdJoinCluster() error {
 	fmt.Println(status.Info(fmt.Sprintf("Leader: %s", tokenData.LeaderAddr)))
 	fmt.Println()
 	fmt.Println("Press Enter to continue...")
-	fmt.Scanln()
+	_, _ = fmt.Scanln()
 
 	// Create setup data with defaults
 	data := tui.DefaultSetupData()
@@ -826,12 +826,12 @@ func setupBibdJoinCluster() error {
 	fmt.Println(theme.Base.Render("Config file: "))
 	fmt.Println(theme.Focused.Render("  " + configPath))
 	fmt.Println()
-	fmt.Println(tui.NewKeyValue().Render("Node ID", nodeID))
-	fmt.Println(tui.NewKeyValue().Render("Cluster", tokenData.ClusterName))
+	fmt.Println(tui.NewKVRenderer().Render("Node ID", nodeID))
+	fmt.Println(tui.NewKVRenderer().Render("Cluster", tokenData.ClusterName))
 	if data.IsVoter {
-		fmt.Println(tui.NewKeyValue().Render("Role", "Voter"))
+		fmt.Println(tui.NewKVRenderer().Render("Role", "Voter"))
 	} else {
-		fmt.Println(tui.NewKeyValue().Render("Role", "Non-Voter"))
+		fmt.Println(tui.NewKVRenderer().Render("Role", "Non-Voter"))
 	}
 	fmt.Println()
 	fmt.Println(theme.Base.Render("Start the daemon to complete joining:"))

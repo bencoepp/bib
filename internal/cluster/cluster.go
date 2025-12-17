@@ -172,7 +172,7 @@ func (c *Cluster) Start(ctx context.Context) error {
 	clusterLog.Debug("initializing transport", "listen_addr", c.cfg.ListenAddr)
 	transport, err := NewTransport(c.cfg, c.nodeID)
 	if err != nil {
-		storage.Close()
+		_ = storage.Close()
 		clusterLog.Error("failed to initialize transport", "error", err)
 		return fmt.Errorf("failed to initialize transport: %w", err)
 	}
@@ -182,8 +182,8 @@ func (c *Cluster) Start(ctx context.Context) error {
 	clusterLog.Debug("initializing Raft node")
 	raftNode, err := NewRaftNode(c.cfg, c.nodeID, c.storage, c.transport, c.fsm)
 	if err != nil {
-		transport.Close()
-		storage.Close()
+		_ = transport.Close()
+		_ = storage.Close()
 		clusterLog.Error("failed to initialize raft node", "error", err)
 		return fmt.Errorf("failed to initialize raft node: %w", err)
 	}
