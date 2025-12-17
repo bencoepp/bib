@@ -1,17 +1,18 @@
 package cmd
 
 import (
-	"bufio"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"bib/internal/config"
+	"bib/internal/tui"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
 
@@ -57,34 +58,525 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		if setupClusterJoin != "" {
 			return setupBibdJoinCluster()
 		}
-		return setupBibd()
+		return setupBibdWizard()
 	}
-	return setupBib()
+	return setupBibWizard()
 }
 
-func setupBib() error {
-	fmt.Println("=== bib CLI Configuration Setup ===")
-	fmt.Println()
+// SetupWizardModel wraps the wizard and huh form for a step-by-step setup
+type SetupWizardModel struct {
+	wizard      *tui.Wizard
+	data        *tui.SetupData
+	isDaemon    bool
+	currentForm *huh.Form
+	width       int
+	height      int
+	done        bool
+	cancelled   bool
+	configPath  string
+	err         error
+}
 
-	reader := bufio.NewReader(os.Stdin)
+func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
+	data := tui.DefaultSetupData()
 
-	// Get identity info
-	name := prompt(reader, "Your name", "")
-	email := prompt(reader, "Your email", "")
+	steps := []tui.WizardStep{
+		{
+			ID:          "welcome",
+			Title:       "Welcome",
+			Description: "Let's get started!",
+			HelpText:    "This wizard will guide you through configuring bib. You can press Esc to go back or Ctrl+C to cancel at any time.",
+		},
+		{
+			ID:          "identity",
+			Title:       "Identity",
+			Description: "Configure your identity",
+			HelpText:    "Your identity is used for signing and attributing changes. This information may be visible to others in a collaborative environment.",
+		},
+		{
+			ID:          "output",
+			Title:       "Output",
+			Description: "Configure output settings",
+			HelpText:    "These settings control how bib displays information. Table format is recommended for interactive use, JSON/YAML for scripting.",
+			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
+			ID:          "connection",
+			Title:       "Connection",
+			Description: "Configure connection to bibd",
+			HelpText:    "Specify the address of the bibd daemon you want to connect to.",
+			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
+			ID:          "server",
+			Title:       "Server",
+			Description: "Configure server settings",
+			HelpText:    "These settings control how the daemon listens for connections. Use 0.0.0.0 to accept connections from any interface.",
+			ShouldSkip:  func() bool { return !isDaemon },
+		},
+		{
+			ID:          "tls",
+			Title:       "TLS",
+			Description: "Configure TLS encryption",
+			HelpText:    "TLS encrypts connections between clients and the daemon. Recommended for production use.",
+			ShouldSkip:  func() bool { return !isDaemon },
+		},
+		{
+			ID:          "tls-certs",
+			Title:       "TLS Certificates",
+			Description: "Provide TLS certificate files",
+			HelpText:    "Provide paths to your TLS certificate and private key. You can generate self-signed certificates with: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes",
+			ShouldSkip:  func() bool { return !isDaemon || !data.TLSEnabled },
+		},
+		{
+			ID:          "storage",
+			Title:       "Storage",
+			Description: "Configure storage backend",
+			HelpText:    "SQLite is lightweight and requires no setup. PostgreSQL is recommended for production and enables full data replication.",
+			ShouldSkip:  func() bool { return !isDaemon },
+		},
+		{
+			ID:          "p2p",
+			Title:       "P2P",
+			Description: "Enable P2P networking",
+			HelpText:    "P2P networking allows nodes to discover each other and share data without a central server.",
+			ShouldSkip:  func() bool { return !isDaemon },
+		},
+		{
+			ID:          "p2p-mode",
+			Title:       "P2P Mode",
+			Description: "Select P2P mode",
+			HelpText:    "Proxy: Forwards requests, minimal resources.\nSelective: Subscribe to specific topics.\nFull: Replicate all data (requires PostgreSQL).",
+			ShouldSkip:  func() bool { return !isDaemon || !data.P2PEnabled },
+		},
+		{
+			ID:          "logging",
+			Title:       "Logging",
+			Description: "Configure logging",
+			HelpText:    "Debug level shows detailed information useful for troubleshooting. Info is recommended for normal operation.",
+		},
+		{
+			ID:          "cluster",
+			Title:       "Cluster",
+			Description: "Enable clustering",
+			HelpText:    "Clustering provides high availability through Raft consensus. Requires at least 3 voting nodes for quorum.",
+			ShouldSkip:  func() bool { return !isDaemon },
+		},
+		{
+			ID:          "cluster-settings",
+			Title:       "Cluster Settings",
+			Description: "Configure cluster",
+			HelpText:    "Cluster name must be unique. The Raft address is used for inter-node communication (separate from the API port).",
+			ShouldSkip:  func() bool { return !isDaemon || !data.ClusterEnabled },
+		},
+		{
+			ID:          "confirm",
+			Title:       "Confirm",
+			Description: "Review and save",
+			HelpText:    "Review your settings and save the configuration.",
+		},
+	}
 
-	// Get output preferences
-	outputFormat := prompt(reader, "Default output format (text/json/yaml/table)", "text")
-	colorStr := prompt(reader, "Enable colored output (yes/no)", "yes")
-	color := strings.ToLower(colorStr) == "yes" || strings.ToLower(colorStr) == "y"
+	m := &SetupWizardModel{
+		data:     data,
+		isDaemon: isDaemon,
+	}
 
-	// Get server address
-	server := prompt(reader, "bibd server address", "localhost:8080")
+	m.wizard = tui.NewWizard(
+		getWizardTitle(isDaemon),
+		getWizardDescription(isDaemon),
+		steps,
+		func() error { return m.saveConfig() },
+		tui.WithCardWidth(65),
+		tui.WithHelpPanel(35),
+		tui.WithCentering(true),
+	)
 
-	// Get log level
-	logLevel := prompt(reader, "Log level (debug/info/warn/error)", "info")
+	return m
+}
 
-	// Create config directory
-	configDir, err := config.UserConfigDir(config.AppBib)
+func getWizardTitle(isDaemon bool) string {
+	if isDaemon {
+		return "◆ bibd Daemon Setup"
+	}
+	return "◆ bib CLI Setup"
+}
+
+func getWizardDescription(isDaemon bool) string {
+	if isDaemon {
+		return "Configure the bibd daemon"
+	}
+	return "Configure the bib CLI"
+}
+
+func (m *SetupWizardModel) Init() tea.Cmd {
+	// Initialize with welcome form
+	m.updateFormForCurrentStep()
+	cmds := []tea.Cmd{m.wizard.Init()}
+	if m.currentForm != nil {
+		cmds = append(cmds, m.currentForm.Init())
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *SetupWizardModel) updateFormForCurrentStep() {
+	step := m.wizard.CurrentStep()
+	if step == nil {
+		m.currentForm = nil
+		return
+	}
+
+	theme := tui.HuhTheme()
+
+	switch step.ID {
+	case "welcome":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title(tui.Banner()).
+					Description(m.getWelcomeText()),
+			),
+		).WithTheme(theme).WithShowHelp(false)
+
+	case "identity":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Name").
+					Description("Your display name").
+					Placeholder("John Doe").
+					Value(&m.data.Name),
+				huh.NewInput().
+					Title("Email").
+					Description("Your email address").
+					Placeholder("john@example.com").
+					Value(&m.data.Email),
+			),
+		).WithTheme(theme)
+
+	case "output":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Output Format").
+					Description("Default output format for commands").
+					Options(
+						huh.NewOption("Table", "table"),
+						huh.NewOption("JSON", "json"),
+						huh.NewOption("YAML", "yaml"),
+						huh.NewOption("Text", "text"),
+					).
+					Value(&m.data.OutputFormat),
+				huh.NewConfirm().
+					Title("Enable Colors").
+					Description("Use colored output in the terminal").
+					Affirmative("Yes").
+					Negative("No").
+					Value(&m.data.ColorEnabled),
+			),
+		).WithTheme(theme)
+
+	case "connection":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Server Address").
+					Description("Address of the bibd daemon").
+					Placeholder("localhost:8080").
+					Value(&m.data.ServerAddr),
+			),
+		).WithTheme(theme)
+
+	case "server":
+		portStr := fmt.Sprintf("%d", m.data.Port)
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Listen Host").
+					Description("Host address to bind to").
+					Placeholder("0.0.0.0").
+					Value(&m.data.Host),
+				huh.NewInput().
+					Title("Listen Port").
+					Description("Port number for API").
+					Placeholder("8080").
+					Value(&portStr).
+					Validate(func(s string) error {
+						if s == "" {
+							return nil
+						}
+						var p int
+						_, err := fmt.Sscanf(s, "%d", &p)
+						if err != nil || p < 1 || p > 65535 {
+							return fmt.Errorf("port must be 1-65535")
+						}
+						m.data.Port = p
+						return nil
+					}),
+				huh.NewInput().
+					Title("Data Directory").
+					Description("Where to store data").
+					Placeholder("~/.local/share/bibd").
+					Value(&m.data.DataDir),
+			),
+		).WithTheme(theme)
+
+	case "tls":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("Enable TLS").
+					Description("Encrypt connections with TLS").
+					Affirmative("Yes").
+					Negative("No").
+					Value(&m.data.TLSEnabled),
+			),
+		).WithTheme(theme)
+
+	case "tls-certs":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Certificate File").
+					Description("Path to TLS certificate").
+					Placeholder("/etc/bibd/cert.pem").
+					Value(&m.data.CertFile),
+				huh.NewInput().
+					Title("Key File").
+					Description("Path to TLS private key").
+					Placeholder("/etc/bibd/key.pem").
+					Value(&m.data.KeyFile),
+			),
+		).WithTheme(theme)
+
+	case "storage":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Storage Backend").
+					Description("Database to use for storage").
+					Options(
+						huh.NewOption("SQLite (lightweight, local cache)", "sqlite"),
+						huh.NewOption("PostgreSQL (full replication)", "postgres"),
+					).
+					Value(&m.data.StorageBackend),
+			),
+		).WithTheme(theme)
+
+	case "p2p":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("Enable P2P").
+					Description("Enable peer-to-peer networking").
+					Affirmative("Yes").
+					Negative("No").
+					Value(&m.data.P2PEnabled),
+			),
+		).WithTheme(theme)
+
+	case "p2p-mode":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("P2P Mode").
+					Description("How this node participates in the network").
+					Options(
+						huh.NewOption("Proxy - Forward requests", "proxy"),
+						huh.NewOption("Selective - Subscribe to topics", "selective"),
+						huh.NewOption("Full - Replicate all data", "full"),
+					).
+					Value(&m.data.P2PMode),
+			),
+		).WithTheme(theme)
+
+	case "logging":
+		fields := []huh.Field{
+			huh.NewSelect[string]().
+				Title("Log Level").
+				Description("Verbosity of log output").
+				Options(
+					huh.NewOption("Debug", "debug"),
+					huh.NewOption("Info", "info"),
+					huh.NewOption("Warning", "warn"),
+					huh.NewOption("Error", "error"),
+				).
+				Value(&m.data.LogLevel),
+		}
+		if m.isDaemon {
+			fields = append(fields,
+				huh.NewSelect[string]().
+					Title("Log Format").
+					Description("Format of log messages").
+					Options(
+						huh.NewOption("Pretty", "pretty"),
+						huh.NewOption("Text", "text"),
+						huh.NewOption("JSON", "json"),
+					).
+					Value(&m.data.LogFormat),
+			)
+		}
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(fields...),
+		).WithTheme(theme)
+
+	case "cluster":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewConfirm().
+					Title("Enable Clustering").
+					Description("Join or create an HA cluster").
+					Affirmative("Yes").
+					Negative("No").
+					Value(&m.data.ClusterEnabled),
+			),
+		).WithTheme(theme)
+
+	case "cluster-settings":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Cluster Name").
+					Description("Unique name for this cluster").
+					Placeholder("bib-cluster").
+					Value(&m.data.ClusterName),
+				huh.NewInput().
+					Title("Raft Listen Address").
+					Description("Address for inter-node communication").
+					Placeholder("0.0.0.0:4002").
+					Value(&m.data.ClusterAddr),
+				huh.NewConfirm().
+					Title("Bootstrap New Cluster").
+					Description("Initialize as the first node").
+					Affirmative("Yes, create new").
+					Negative("No, join existing").
+					Value(&m.data.Bootstrap),
+			),
+		).WithTheme(theme)
+
+	case "confirm":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("Configuration Summary").
+					Description(tui.RenderSetupSummary(m.data, m.isDaemon)),
+				huh.NewConfirm().
+					Title("Save Configuration?").
+					Affirmative("Save").
+					Negative("Cancel"),
+			),
+		).WithTheme(theme)
+
+	default:
+		m.currentForm = nil
+	}
+}
+
+func (m *SetupWizardModel) getWelcomeText() string {
+	if m.isDaemon {
+		return "Welcome! This wizard will help you configure the bibd daemon.\n\nWe'll configure identity, server settings, storage, P2P networking, and more.\n\nPress Enter to continue..."
+	}
+	return "Welcome! This wizard will help you configure the bib CLI.\n\nWe'll configure your identity, output preferences, and connection settings.\n\nPress Enter to continue..."
+}
+
+func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		// Pass size to wizard
+		m.wizard.SetSize(msg.Width, msg.Height)
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.cancelled = true
+			m.done = true
+			return m, tea.Quit
+
+		case "esc":
+			if m.wizard.CurrentStepIndex() > 0 {
+				m.wizard.PrevStep()
+				m.updateFormForCurrentStep()
+				if m.currentForm != nil {
+					return m, m.currentForm.Init()
+				}
+			} else {
+				m.cancelled = true
+				m.done = true
+				return m, tea.Quit
+			}
+			return m, nil
+
+		case "enter":
+			// Check if form is complete
+			if m.currentForm != nil {
+				// Update form first
+				var cmd tea.Cmd
+				formModel, cmd := m.currentForm.Update(msg)
+				m.currentForm = formModel.(*huh.Form)
+
+				// If form completed, move to next step
+				if m.currentForm.State == huh.StateCompleted {
+					nextCmd := m.wizard.NextStep()
+					if m.wizard.IsDone() {
+						m.done = true
+						return m, tea.Quit
+					}
+					m.updateFormForCurrentStep()
+					if m.currentForm != nil {
+						return m, tea.Batch(nextCmd, m.currentForm.Init())
+					}
+					return m, nextCmd
+				}
+				return m, cmd
+			}
+		}
+	}
+
+	// Update the current form
+	if m.currentForm != nil {
+		formModel, cmd := m.currentForm.Update(msg)
+		m.currentForm = formModel.(*huh.Form)
+
+		// Check if form was aborted
+		if m.currentForm.State == huh.StateAborted {
+			m.cancelled = true
+			m.done = true
+			return m, tea.Quit
+		}
+
+		return m, cmd
+	}
+
+	return m, nil
+}
+
+func (m *SetupWizardModel) View() string {
+	if m.done {
+		return ""
+	}
+
+	// Set step view function to render the form
+	step := m.wizard.CurrentStep()
+	if step != nil && m.currentForm != nil {
+		step.View = func(width int) string {
+			return m.currentForm.View()
+		}
+	}
+
+	return m.wizard.View()
+}
+
+func (m *SetupWizardModel) saveConfig() error {
+	var appName string
+	if m.isDaemon {
+		appName = config.AppBibd
+	} else {
+		appName = config.AppBib
+	}
+
+	configDir, err := config.UserConfigDir(appName)
 	if err != nil {
 		return fmt.Errorf("failed to get config directory: %w", err)
 	}
@@ -93,66 +585,117 @@ func setupBib() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Generate config file with user values
-	cfg := &config.BibConfig{
-		Log: config.LogConfig{
-			Level:  logLevel,
-			Format: "text",
-			Output: "stderr",
-		},
-		Identity: config.IdentityConfig{
-			Name:  name,
-			Email: email,
-		},
-		Output: config.OutputConfig{
-			Format: outputFormat,
-			Color:  color,
-		},
-		Server: server,
+	var cfg interface{}
+	if m.isDaemon {
+		cfg = m.data.ToBibdConfig()
+	} else {
+		cfg = m.data.ToBibConfig()
 	}
 
-	configPath, err := writeConfig(config.AppBib, setupFormat, cfg)
+	path, err := writeConfig(appName, setupFormat, cfg)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println()
-	fmt.Printf("✓ Configuration saved to: %s\n", configPath)
+	m.configPath = path
 	return nil
 }
 
-func setupBibd() error {
-	fmt.Println("=== bibd Daemon Configuration Setup ===")
-	fmt.Println()
+func setupBibWizard() error {
+	m := newSetupWizardModel(false)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	reader := bufio.NewReader(os.Stdin)
-
-	// Get identity info
-	name := prompt(reader, "Daemon identity name", "")
-	email := prompt(reader, "Daemon identity email", "")
-
-	// Get server settings
-	host := prompt(reader, "Listen host", "0.0.0.0")
-	port := prompt(reader, "Listen port", "8080")
-
-	// TLS settings
-	tlsStr := prompt(reader, "Enable TLS (yes/no)", "no")
-	tlsEnabled := strings.ToLower(tlsStr) == "yes" || strings.ToLower(tlsStr) == "y"
-
-	var certFile, keyFile string
-	if tlsEnabled {
-		certFile = prompt(reader, "TLS certificate file path", "")
-		keyFile = prompt(reader, "TLS key file path", "")
+	finalModel, err := p.Run()
+	if err != nil {
+		return err
 	}
 
-	// Data directory
-	homeDir, _ := os.UserHomeDir()
-	defaultDataDir := homeDir + "/.local/share/bibd"
-	dataDir := prompt(reader, "Data directory", defaultDataDir)
+	result := finalModel.(*SetupWizardModel)
+	if result.cancelled {
+		fmt.Println("\nSetup cancelled.")
+		return nil
+	}
 
-	// Log level
-	logLevel := prompt(reader, "Log level (debug/info/warn/error)", "info")
-	logFormat := prompt(reader, "Log format (text/json)", "json")
+	if result.configPath != "" {
+		fmt.Println(tui.RenderSuccess(result.configPath, false))
+	}
+	return result.err
+}
+
+func setupBibdWizard() error {
+	m := newSetupWizardModel(true)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return err
+	}
+
+	result := finalModel.(*SetupWizardModel)
+	if result.cancelled {
+		fmt.Println("\nSetup cancelled.")
+		return nil
+	}
+
+	if result.configPath != "" {
+		fmt.Println(tui.RenderSuccess(result.configPath, true))
+	}
+	return result.err
+}
+
+func setupBibdCluster() error {
+	// Show welcome screen
+	fmt.Print("\033[H\033[2J") // Clear screen
+
+	theme := tui.DefaultTheme()
+	fmt.Println(tui.Banner())
+	fmt.Println()
+	fmt.Println(theme.Title.Render("bibd HA Cluster Initialization"))
+	fmt.Println()
+	fmt.Println(theme.Description.Render("This wizard will initialize a new HA cluster and generate a join token."))
+	fmt.Println()
+	fmt.Println("Press Enter to continue...")
+	fmt.Scanln()
+
+	// Create setup data with defaults
+	data := tui.DefaultSetupData()
+	data.ClusterEnabled = true
+	data.Bootstrap = true
+
+	// First run the daemon setup form
+	form := tui.CreateBibdSetupForm(data)
+
+	err := form.Run()
+	if err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Then run the cluster setup form
+	clusterForm := tui.CreateClusterSetupForm(data)
+
+	err = clusterForm.Run()
+	if err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Generate node ID
+	nodeID, err := generateNodeID()
+	if err != nil {
+		return fmt.Errorf("failed to generate node ID: %w", err)
+	}
+
+	// Set advertise address if not set
+	if data.AdvertiseAddr == "" {
+		data.AdvertiseAddr = data.ClusterAddr
+	}
 
 	// Create config directory
 	configDir, err := config.UserConfigDir(config.AppBibd)
@@ -164,61 +707,139 @@ func setupBibd() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Parse port
-	var portNum int
-	fmt.Sscanf(port, "%d", &portNum)
-	if portNum == 0 {
-		portNum = 8080
-	}
-
-	// Generate config file with user values
-	cfg := &config.BibdConfig{
-		Log: config.LogConfig{
-			Level:  logLevel,
-			Format: logFormat,
-			Output: "stdout",
-		},
-		Identity: config.IdentityConfig{
-			Name:  name,
-			Email: email,
-		},
-		Server: config.ServerConfig{
-			Host:    host,
-			Port:    portNum,
-			DataDir: dataDir,
-			PIDFile: "/var/run/bibd.pid",
-			TLS: config.TLSConfig{
-				Enabled:  tlsEnabled,
-				CertFile: certFile,
-				KeyFile:  keyFile,
-			},
-		},
-	}
+	// Build config
+	cfg := data.ToBibdConfig()
+	cfg.Cluster.NodeID = nodeID
+	cfg.Cluster.Bootstrap = true
 
 	configPath, err := writeConfig(config.AppBibd, setupFormat, cfg)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println()
-	fmt.Printf("✓ Configuration saved to: %s\n", configPath)
+	// Generate join token
+	joinToken, err := generateJoinToken(data.ClusterName, data.AdvertiseAddr)
+	if err != nil {
+		return fmt.Errorf("failed to generate join token: %w", err)
+	}
+
+	// Show success
+	fmt.Println(tui.RenderClusterSuccess(configPath, nodeID, data.ClusterName, joinToken))
 	return nil
 }
 
-func prompt(reader *bufio.Reader, label, defaultVal string) string {
-	if defaultVal != "" {
-		fmt.Printf("%s [%s]: ", label, defaultVal)
+func setupBibdJoinCluster() error {
+	// Decode join token
+	tokenData, err := decodeJoinToken(setupClusterJoin)
+	if err != nil {
+		return fmt.Errorf("invalid join token: %w", err)
+	}
+
+	// Check if token is expired
+	if time.Now().Unix() > tokenData.ExpiresAt {
+		return fmt.Errorf("join token has expired")
+	}
+
+	// Show welcome screen
+	fmt.Print("\033[H\033[2J") // Clear screen
+
+	theme := tui.DefaultTheme()
+	status := tui.NewStatusIndicator()
+
+	fmt.Println(tui.Banner())
+	fmt.Println()
+	fmt.Println(theme.Title.Render("Join HA Cluster"))
+	fmt.Println()
+	fmt.Println(status.Info(fmt.Sprintf("Cluster: %s", tokenData.ClusterName)))
+	fmt.Println(status.Info(fmt.Sprintf("Leader: %s", tokenData.LeaderAddr)))
+	fmt.Println()
+	fmt.Println("Press Enter to continue...")
+	fmt.Scanln()
+
+	// Create setup data with defaults
+	data := tui.DefaultSetupData()
+	data.ClusterEnabled = true
+	data.Bootstrap = false
+	data.JoinToken = setupClusterJoin
+	data.ClusterName = tokenData.ClusterName
+
+	// First run the daemon setup form
+	form := tui.CreateBibdSetupForm(data)
+
+	err = form.Run()
+	if err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Then run the cluster join form
+	joinForm := tui.CreateClusterJoinForm(data, tokenData.ClusterName, tokenData.LeaderAddr)
+
+	err = joinForm.Run()
+	if err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Generate node ID
+	nodeID, err := generateNodeID()
+	if err != nil {
+		return fmt.Errorf("failed to generate node ID: %w", err)
+	}
+
+	// Set advertise address if not set
+	if data.AdvertiseAddr == "" {
+		data.AdvertiseAddr = data.ClusterAddr
+	}
+
+	// Create config directory
+	configDir, err := config.UserConfigDir(config.AppBibd)
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Build config
+	cfg := data.ToBibdConfig()
+	cfg.Cluster.NodeID = nodeID
+	cfg.Cluster.Bootstrap = false
+	cfg.Cluster.JoinAddrs = []string{tokenData.LeaderAddr}
+
+	configPath, err := writeConfig(config.AppBibd, setupFormat, cfg)
+	if err != nil {
+		return err
+	}
+
+	// Show success
+	fmt.Println()
+	fmt.Println(status.Success("Configuration saved successfully!"))
+	fmt.Println()
+	fmt.Println(theme.Base.Render("Config file: "))
+	fmt.Println(theme.Focused.Render("  " + configPath))
+	fmt.Println()
+	fmt.Println(tui.NewKeyValue().Render("Node ID", nodeID))
+	fmt.Println(tui.NewKeyValue().Render("Cluster", tokenData.ClusterName))
+	if data.IsVoter {
+		fmt.Println(tui.NewKeyValue().Render("Role", "Voter"))
 	} else {
-		fmt.Printf("%s: ", label)
+		fmt.Println(tui.NewKeyValue().Render("Role", "Non-Voter"))
 	}
+	fmt.Println()
+	fmt.Println(theme.Base.Render("Start the daemon to complete joining:"))
+	fmt.Println(theme.Focused.Render("  bibd"))
+	fmt.Println()
+	fmt.Println(theme.Warning.Render("⚠ Minimum 3 voting nodes required for HA quorum."))
 
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input == "" {
-		return defaultVal
-	}
-	return input
+	return nil
 }
 
 func writeConfig(appName, format string, cfg interface{}) (string, error) {
@@ -246,276 +867,6 @@ type JoinTokenData struct {
 	LeaderAddr  string `json:"leader_addr"`
 	Token       string `json:"token"`
 	ExpiresAt   int64  `json:"expires_at"`
-}
-
-// setupBibdCluster initializes a new HA cluster
-func setupBibdCluster() error {
-	fmt.Println("=== bibd HA Cluster Initialization ===")
-	fmt.Println()
-
-	reader := bufio.NewReader(os.Stdin)
-
-	// First, run the normal daemon setup
-	fmt.Println("First, let's configure the daemon...")
-	fmt.Println()
-
-	// Get identity info
-	name := prompt(reader, "Daemon identity name", "")
-	email := prompt(reader, "Daemon identity email", "")
-
-	// Get server settings
-	host := prompt(reader, "Listen host", "0.0.0.0")
-	port := prompt(reader, "Listen port", "8080")
-
-	// TLS settings
-	tlsStr := prompt(reader, "Enable TLS (yes/no)", "no")
-	tlsEnabled := strings.ToLower(tlsStr) == "yes" || strings.ToLower(tlsStr) == "y"
-
-	var certFile, keyFile string
-	if tlsEnabled {
-		certFile = prompt(reader, "TLS certificate file path", "")
-		keyFile = prompt(reader, "TLS key file path", "")
-	}
-
-	// Data directory
-	homeDir, _ := os.UserHomeDir()
-	defaultDataDir := homeDir + "/.local/share/bibd"
-	dataDir := prompt(reader, "Data directory", defaultDataDir)
-
-	// Log level
-	logLevel := prompt(reader, "Log level (debug/info/warn/error)", "info")
-	logFormat := prompt(reader, "Log format (text/json)", "json")
-
-	fmt.Println()
-	fmt.Println("Now, let's configure the cluster...")
-	fmt.Println()
-
-	// Cluster settings
-	clusterName := prompt(reader, "Cluster name", "bib-cluster")
-	clusterAddr := prompt(reader, "Cluster listen address (for Raft)", "0.0.0.0:4002")
-	advertiseAddr := prompt(reader, "Cluster advertise address (accessible by other nodes)", clusterAddr)
-
-	// Parse port
-	var portNum int
-	fmt.Sscanf(port, "%d", &portNum)
-	if portNum == 0 {
-		portNum = 8080
-	}
-
-	// Generate node ID
-	nodeID, err := generateNodeID()
-	if err != nil {
-		return fmt.Errorf("failed to generate node ID: %w", err)
-	}
-
-	// Create config directory
-	configDir, err := config.UserConfigDir(config.AppBibd)
-	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
-	}
-
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	// Generate config file with user values
-	cfg := &config.BibdConfig{
-		Log: config.LogConfig{
-			Level:  logLevel,
-			Format: logFormat,
-			Output: "stdout",
-		},
-		Identity: config.IdentityConfig{
-			Name:  name,
-			Email: email,
-		},
-		Server: config.ServerConfig{
-			Host:    host,
-			Port:    portNum,
-			DataDir: dataDir,
-			PIDFile: "/var/run/bibd.pid",
-			TLS: config.TLSConfig{
-				Enabled:  tlsEnabled,
-				CertFile: certFile,
-				KeyFile:  keyFile,
-			},
-		},
-		Cluster: config.ClusterConfig{
-			Enabled:       true,
-			NodeID:        nodeID,
-			ClusterName:   clusterName,
-			ListenAddr:    clusterAddr,
-			AdvertiseAddr: advertiseAddr,
-			IsVoter:       true, // First node is always a voter
-			Bootstrap:     true, // This is the bootstrap node
-		},
-	}
-
-	configPath, err := writeConfig(config.AppBibd, setupFormat, cfg)
-	if err != nil {
-		return err
-	}
-
-	// Generate join token for other nodes
-	joinToken, err := generateJoinToken(clusterName, advertiseAddr)
-	if err != nil {
-		return fmt.Errorf("failed to generate join token: %w", err)
-	}
-
-	fmt.Println()
-	fmt.Printf("✓ Configuration saved to: %s\n", configPath)
-	fmt.Println()
-	fmt.Println("=== Cluster Initialized ===")
-	fmt.Printf("Node ID: %s\n", nodeID)
-	fmt.Printf("Cluster Name: %s\n", clusterName)
-	fmt.Println()
-	fmt.Println("Share this join token with other nodes to join the cluster:")
-	fmt.Println()
-	fmt.Printf("  %s\n", joinToken)
-	fmt.Println()
-	fmt.Println("To join another node to this cluster, run:")
-	fmt.Printf("  bib setup --daemon --cluster-join %s\n", joinToken)
-	fmt.Println()
-	fmt.Println("NOTE: A minimum of 3 voting nodes is required for HA quorum.")
-
-	return nil
-}
-
-// setupBibdJoinCluster joins an existing HA cluster
-func setupBibdJoinCluster() error {
-	fmt.Println("=== bibd Join HA Cluster ===")
-	fmt.Println()
-
-	// Decode join token
-	tokenData, err := decodeJoinToken(setupClusterJoin)
-	if err != nil {
-		return fmt.Errorf("invalid join token: %w", err)
-	}
-
-	// Check if token is expired
-	if time.Now().Unix() > tokenData.ExpiresAt {
-		return fmt.Errorf("join token has expired")
-	}
-
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Printf("Joining cluster: %s\n", tokenData.ClusterName)
-	fmt.Printf("Leader address: %s\n", tokenData.LeaderAddr)
-	fmt.Println()
-
-	// Get identity info
-	name := prompt(reader, "Daemon identity name", "")
-	email := prompt(reader, "Daemon identity email", "")
-
-	// Get server settings
-	host := prompt(reader, "Listen host", "0.0.0.0")
-	port := prompt(reader, "Listen port", "8080")
-
-	// TLS settings
-	tlsStr := prompt(reader, "Enable TLS (yes/no)", "no")
-	tlsEnabled := strings.ToLower(tlsStr) == "yes" || strings.ToLower(tlsStr) == "y"
-
-	var certFile, keyFile string
-	if tlsEnabled {
-		certFile = prompt(reader, "TLS certificate file path", "")
-		keyFile = prompt(reader, "TLS key file path", "")
-	}
-
-	// Data directory
-	homeDir, _ := os.UserHomeDir()
-	defaultDataDir := homeDir + "/.local/share/bibd"
-	dataDir := prompt(reader, "Data directory", defaultDataDir)
-
-	// Log level
-	logLevel := prompt(reader, "Log level (debug/info/warn/error)", "info")
-	logFormat := prompt(reader, "Log format (text/json)", "json")
-
-	// Cluster settings
-	clusterAddr := prompt(reader, "Cluster listen address (for Raft)", "0.0.0.0:4002")
-	advertiseAddr := prompt(reader, "Cluster advertise address (accessible by other nodes)", clusterAddr)
-	isVoterStr := prompt(reader, "Join as voting member (yes/no)", "yes")
-	isVoter := strings.ToLower(isVoterStr) == "yes" || strings.ToLower(isVoterStr) == "y"
-
-	// Parse port
-	var portNum int
-	fmt.Sscanf(port, "%d", &portNum)
-	if portNum == 0 {
-		portNum = 8080
-	}
-
-	// Generate node ID
-	nodeID, err := generateNodeID()
-	if err != nil {
-		return fmt.Errorf("failed to generate node ID: %w", err)
-	}
-
-	// Create config directory
-	configDir, err := config.UserConfigDir(config.AppBibd)
-	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
-	}
-
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	// Generate config file with user values
-	cfg := &config.BibdConfig{
-		Log: config.LogConfig{
-			Level:  logLevel,
-			Format: logFormat,
-			Output: "stdout",
-		},
-		Identity: config.IdentityConfig{
-			Name:  name,
-			Email: email,
-		},
-		Server: config.ServerConfig{
-			Host:    host,
-			Port:    portNum,
-			DataDir: dataDir,
-			PIDFile: "/var/run/bibd.pid",
-			TLS: config.TLSConfig{
-				Enabled:  tlsEnabled,
-				CertFile: certFile,
-				KeyFile:  keyFile,
-			},
-		},
-		Cluster: config.ClusterConfig{
-			Enabled:       true,
-			NodeID:        nodeID,
-			ClusterName:   tokenData.ClusterName,
-			ListenAddr:    clusterAddr,
-			AdvertiseAddr: advertiseAddr,
-			IsVoter:       isVoter,
-			Bootstrap:     false, // Not a bootstrap node
-			JoinToken:     setupClusterJoin,
-			JoinAddrs:     []string{tokenData.LeaderAddr},
-		},
-	}
-
-	configPath, err := writeConfig(config.AppBibd, setupFormat, cfg)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println()
-	fmt.Printf("✓ Configuration saved to: %s\n", configPath)
-	fmt.Println()
-	fmt.Printf("Node ID: %s\n", nodeID)
-	fmt.Printf("Cluster: %s\n", tokenData.ClusterName)
-	if isVoter {
-		fmt.Println("Role: Voter (participates in leader election)")
-	} else {
-		fmt.Println("Role: Non-Voter (replicates data, no voting)")
-	}
-	fmt.Println()
-	fmt.Println("Start the daemon to complete joining the cluster:")
-	fmt.Println("  bibd")
-	fmt.Println()
-	fmt.Println("NOTE: A minimum of 3 voting nodes is required for HA quorum.")
-
-	return nil
 }
 
 // generateNodeID generates a unique node ID
