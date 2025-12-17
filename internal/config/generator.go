@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/spf13/viper"
 )
 
 // SupportedFormats lists the config file formats we support
@@ -35,20 +33,20 @@ func GenerateConfig(appName, format string) (string, error) {
 		return configPath, fmt.Errorf("config file already exists: %s", configPath)
 	}
 
-	// Create viper instance and set defaults
-	v := viper.New()
-	v.SetConfigType(format)
-
+	// Get default config
+	var defaultCfg interface{}
 	switch appName {
 	case AppBib:
-		defaults := DefaultBibConfig()
-		setViperDefaults(v, defaults)
+		defaultCfg = DefaultBibConfig()
 	case AppBibd:
-		defaults := DefaultBibdConfig()
-		setViperDefaults(v, defaults)
+		defaultCfg = DefaultBibdConfig()
 	default:
 		return "", fmt.Errorf("unknown app: %s", appName)
 	}
+
+	// Create viper instance with the config
+	v := NewViperFromConfig(appName, defaultCfg)
+	v.SetConfigType(format)
 
 	// Write the config file
 	if err := v.WriteConfigAs(configPath); err != nil {
