@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -223,12 +224,6 @@ func (d *Daemon) startStorage(ctx context.Context) error {
 func (d *Daemon) startManagedPostgres(ctx context.Context, storageCfg storage.Config) error {
 	d.log.Debug("starting managed PostgreSQL lifecycle")
 
-	// Validate Kubernetes support
-	if storageCfg.Postgres.ContainerRuntime == "kubernetes" {
-		d.log.Error("Kubernetes runtime not yet implemented")
-		return fmt.Errorf("kubernetes runtime is not yet implemented; please use 'docker' or 'podman'")
-	}
-
 	// Create lifecycle config from storage config
 	lifecycleCfg := d.convertToLifecycleConfig(storageCfg.Postgres)
 
@@ -245,17 +240,31 @@ func (d *Daemon) startManagedPostgres(ctx context.Context, storageCfg storage.Co
 		return fmt.Errorf("failed to create PostgreSQL lifecycle manager: %w", err)
 	}
 
-	// Validate detected runtime (fail fast)
+	// Validate detected runtime
 	runtime := mgr.Runtime()
 	d.log.Debug("detected container runtime", "runtime", runtime)
 
-	if runtime == "kubernetes" {
-		d.log.Error("Kubernetes runtime detected but not yet implemented")
-		return fmt.Errorf("kubernetes runtime is not yet implemented; please install Docker or Podman")
-	}
-
 	// Start PostgreSQL (asynchronous - container/pod starts but we don't wait)
 	if err := mgr.Start(ctx); err != nil {
+		// If Kubernetes fails, check if we can fallback to container runtime
+		if runtime == "kubernetes" {
+			d.log.Warn("Kubernetes deployment failed, checking for container runtime fallback", "error", err)
+
+			// Try to detect Docker or Podman as fallback
+			fallbackMgr, fallbackErr := pglifecycle.NewManager(lifecycleCfg, nodeID, d.cfg.Server.DataDir)
+			if fallbackErr == nil && (fallbackMgr.Runtime() == "docker" || fallbackMgr.Runtime() == "podman") {
+				d.log.Info("falling back to container runtime", "runtime", fallbackMgr.Runtime())
+				if startErr := fallbackMgr.Start(ctx); startErr == nil {
+					d.pgLifecycle = fallbackMgr
+					d.log.Info("managed PostgreSQL started with fallback",
+						"runtime", fallbackMgr.Runtime(),
+						"container", lifecycleCfg.ContainerName,
+					)
+					return nil
+				}
+			}
+		}
+
 		d.log.Error("failed to start managed PostgreSQL", "error", err)
 		return fmt.Errorf("failed to start managed PostgreSQL: %w", err)
 	}
@@ -263,7 +272,7 @@ func (d *Daemon) startManagedPostgres(ctx context.Context, storageCfg storage.Co
 	d.pgLifecycle = mgr
 	d.log.Info("managed PostgreSQL started",
 		"runtime", runtime,
-		"container", lifecycleCfg.ContainerName,
+		"identifier", lifecycleCfg.ContainerName,
 	)
 
 	return nil
@@ -341,27 +350,68 @@ func (d *Daemon) openManagedPostgresStore(ctx context.Context, pgCfg storage.Pos
 
 	// Extract components from lifecycle manager
 	creds := d.pgLifecycle.Credentials()
-	if d.cfg.Database.Postgres.Network.UseUnixSocket {
-		modifiedCfg.Postgres.Advanced.Host = filepath.Join(d.cfg.Server.DataDir, "postgres", "run")
-	} else {
-		modifiedCfg.Postgres.Advanced.Host = d.cfg.Database.Postgres.Network.BindAddress
-		if modifiedCfg.Postgres.Advanced.Host == "" {
-			modifiedCfg.Postgres.Advanced.Host = "127.0.0.1"
+
+	// For Kubernetes, get connection info from the manager
+	runtime := d.pgLifecycle.Runtime()
+	if runtime == "kubernetes" {
+		// Use the connection string method which handles Kubernetes properly
+		connStr := d.pgLifecycle.ConnectionString()
+		d.log.Debug("using Kubernetes connection", "connection_string_format", "parsed")
+
+		// Parse the connection string to populate Advanced config
+		// This is a simple parser - in production you might want to use url.Parse
+		parts := make(map[string]string)
+		for _, part := range splitConnectionString(connStr) {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				parts[kv[0]] = kv[1]
+			}
 		}
-	}
-	modifiedCfg.Postgres.Advanced.Port = d.cfg.Database.Postgres.Port
-	if modifiedCfg.Postgres.Advanced.Port == 0 {
-		modifiedCfg.Postgres.Advanced.Port = 5432
-	}
-	modifiedCfg.Postgres.Advanced.User = "postgres"
-	modifiedCfg.Postgres.Advanced.Password = creds.SuperuserPassword
-	modifiedCfg.Postgres.Advanced.Database = "bibd"
-	modifiedCfg.Postgres.Advanced.SSLMode = d.cfg.Database.Postgres.SSLMode
-	if modifiedCfg.Postgres.Advanced.SSLMode == "" {
-		if d.cfg.Database.Postgres.TLS.Enabled {
-			modifiedCfg.Postgres.Advanced.SSLMode = "require"
+
+		if host, ok := parts["host"]; ok {
+			modifiedCfg.Postgres.Advanced.Host = host
+		}
+		if port, ok := parts["port"]; ok {
+			if p, err := strconv.Atoi(port); err == nil {
+				modifiedCfg.Postgres.Advanced.Port = p
+			}
+		}
+		if user, ok := parts["user"]; ok {
+			modifiedCfg.Postgres.Advanced.User = user
+		}
+		if password, ok := parts["password"]; ok {
+			modifiedCfg.Postgres.Advanced.Password = password
+		}
+		if dbname, ok := parts["dbname"]; ok {
+			modifiedCfg.Postgres.Advanced.Database = dbname
+		}
+		if sslmode, ok := parts["sslmode"]; ok {
+			modifiedCfg.Postgres.Advanced.SSLMode = sslmode
+		}
+	} else {
+		// For Docker/Podman, use the existing logic
+		if d.cfg.Database.Postgres.Network.UseUnixSocket {
+			modifiedCfg.Postgres.Advanced.Host = filepath.Join(d.cfg.Server.DataDir, "postgres", "run")
 		} else {
-			modifiedCfg.Postgres.Advanced.SSLMode = "disable"
+			modifiedCfg.Postgres.Advanced.Host = d.cfg.Database.Postgres.Network.BindAddress
+			if modifiedCfg.Postgres.Advanced.Host == "" {
+				modifiedCfg.Postgres.Advanced.Host = "127.0.0.1"
+			}
+		}
+		modifiedCfg.Postgres.Advanced.Port = d.cfg.Database.Postgres.Port
+		if modifiedCfg.Postgres.Advanced.Port == 0 {
+			modifiedCfg.Postgres.Advanced.Port = 5432
+		}
+		modifiedCfg.Postgres.Advanced.User = "postgres"
+		modifiedCfg.Postgres.Advanced.Password = creds.SuperuserPassword
+		modifiedCfg.Postgres.Advanced.Database = "bibd"
+		modifiedCfg.Postgres.Advanced.SSLMode = d.cfg.Database.Postgres.SSLMode
+		if modifiedCfg.Postgres.Advanced.SSLMode == "" {
+			if d.cfg.Database.Postgres.TLS.Enabled {
+				modifiedCfg.Postgres.Advanced.SSLMode = "require"
+			} else {
+				modifiedCfg.Postgres.Advanced.SSLMode = "disable"
+			}
 		}
 	}
 
@@ -372,6 +422,37 @@ func (d *Daemon) openManagedPostgresStore(ctx context.Context, pgCfg storage.Pos
 	}
 
 	return store, nil
+}
+
+// splitConnectionString splits a PostgreSQL connection string into parts.
+func splitConnectionString(connStr string) []string {
+	// Simple space-based split, respecting quoted values
+	var parts []string
+	var current strings.Builder
+	inQuote := false
+
+	for _, ch := range connStr {
+		switch ch {
+		case '\'':
+			inQuote = !inQuote
+			current.WriteRune(ch)
+		case ' ':
+			if inQuote {
+				current.WriteRune(ch)
+			} else if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteRune(ch)
+		}
+	}
+
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	return parts
 }
 
 // stopStorage shuts down the storage backend and lifecycle manager.
@@ -724,6 +805,9 @@ func (d *Daemon) convertToLifecycleConfig(pgCfg storage.PostgresConfig) pglifecy
 	if pgCfg.CredentialRotationInterval > 0 {
 		lifecycleCfg.Credentials.RotationInterval = pgCfg.CredentialRotationInterval
 	}
+
+	// Kubernetes configuration
+	lifecycleCfg.Kubernetes = pgCfg.Kubernetes
 
 	return lifecycleCfg
 }

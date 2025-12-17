@@ -200,14 +200,19 @@
   - Resource limits (memory, CPU) configurable
   - Automatic cleanup on `bibd cleanup` command
   
-- [ ] **DB-005**: Kubernetes PostgreSQL deployment
+- [x] **DB-005**: Kubernetes PostgreSQL deployment
   - bibd creates/manages PostgreSQL StatefulSet
-  - Runs in same namespace as bibd
+  - Runs in same namespace as bibd (configurable)
   - PersistentVolumeClaim for data durability
   - Pod anti-affinity with bibd for resilience
   - Automatic backup CronJob creation
   - NetworkPolicy restricting access to bibd pod only
   - ServiceAccount with minimal RBAC permissions
+  - In-cluster and out-of-cluster support with auto-detection
+  - Service type (ClusterIP/NodePort) auto-detection
+  - CloudNativePG operator support (planned)
+  - Automatic fallback to Docker/Podman if Kubernetes fails
+  - Comprehensive configuration options for security and resources
 
 ### 2.3 Database Security & Hardening
 

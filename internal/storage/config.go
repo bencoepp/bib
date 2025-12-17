@@ -99,6 +99,9 @@ type PostgresConfig struct {
 	// TLS configuration for PostgreSQL connections
 	TLS TLSConfig `mapstructure:"tls"`
 
+	// Kubernetes configuration (when ContainerRuntime is "kubernetes")
+	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
+
 	// Advanced allows manual connection configuration (for debugging only).
 	// When set, Managed must be false.
 	Advanced *AdvancedPostgresConfig `mapstructure:"advanced,omitempty"`
@@ -159,6 +162,246 @@ type ContainerResources struct {
 
 	// CPUCores is the CPU limit (can be fractional).
 	CPUCores float64 `mapstructure:"cpu_cores"`
+}
+
+// KubernetesConfig holds Kubernetes-specific configuration for PostgreSQL deployment.
+type KubernetesConfig struct {
+	// Namespace is the Kubernetes namespace to deploy PostgreSQL into.
+	// Defaults to the same namespace as bibd (if in-cluster) or "default".
+	Namespace string `mapstructure:"namespace"`
+
+	// UseCNPG enables CloudNativePG operator for PostgreSQL management.
+	// If true, creates a CNPG Cluster resource instead of StatefulSet.
+	// Requires CNPG operator to be installed in the cluster.
+	UseCNPG bool `mapstructure:"use_cnpg"`
+
+	// CNPGClusterVersion is the CNPG cluster version to use.
+	CNPGClusterVersion string `mapstructure:"cnpg_cluster_version"`
+
+	// StorageClassName is the StorageClass for PersistentVolumeClaims.
+	// Empty string uses the cluster's default StorageClass.
+	StorageClassName string `mapstructure:"storage_class_name"`
+
+	// StorageSize is the size of the PostgreSQL data volume.
+	// Examples: "10Gi", "50Gi", "100Gi"
+	StorageSize string `mapstructure:"storage_size"`
+
+	// BackupEnabled enables automatic backup CronJob creation.
+	BackupEnabled bool `mapstructure:"backup_enabled"`
+
+	// BackupSchedule is the cron schedule for backups.
+	// Example: "0 2 * * *" for 2 AM daily
+	BackupSchedule string `mapstructure:"backup_schedule"`
+
+	// BackupRetention is how many backups to keep.
+	BackupRetention int `mapstructure:"backup_retention"`
+
+	// BackupStorageSize is the size of the backup PVC.
+	BackupStorageSize string `mapstructure:"backup_storage_size"`
+
+	// BackupToS3 enables backup to S3-compatible storage instead of PVC.
+	BackupToS3 bool `mapstructure:"backup_to_s3"`
+
+	// BackupS3Config holds S3 backup configuration.
+	BackupS3 S3BackupConfig `mapstructure:"backup_s3"`
+
+	// NetworkPolicyEnabled creates a NetworkPolicy restricting access.
+	NetworkPolicyEnabled bool `mapstructure:"network_policy_enabled"`
+
+	// NetworkPolicyAllowedLabels are pod labels allowed to connect.
+	// Default: app=bibd
+	NetworkPolicyAllowedLabels map[string]string `mapstructure:"network_policy_allowed_labels"`
+
+	// ServiceType is the Kubernetes Service type.
+	// Options: "ClusterIP" (in-cluster), "NodePort" (external access)
+	// Default: "ClusterIP" if in-cluster, "NodePort" if out-of-cluster
+	ServiceType string `mapstructure:"service_type"`
+
+	// NodePort is the specific NodePort to use (if ServiceType is NodePort).
+	// Leave 0 for automatic assignment.
+	NodePort int `mapstructure:"node_port"`
+
+	// PodAntiAffinity enables anti-affinity with bibd pods.
+	PodAntiAffinity bool `mapstructure:"pod_anti_affinity"`
+
+	// PodAntiAffinityLabels are the labels to use for anti-affinity rules.
+	// Default: app=bibd
+	PodAntiAffinityLabels map[string]string `mapstructure:"pod_anti_affinity_labels"`
+
+	// SecurityContext holds pod security context configuration.
+	SecurityContext PodSecurityContext `mapstructure:"security_context"`
+
+	// ServiceAccountName is the ServiceAccount for the PostgreSQL pod.
+	// If empty, bibd creates a dedicated ServiceAccount.
+	ServiceAccountName string `mapstructure:"service_account_name"`
+
+	// CreateRBAC creates necessary RBAC resources (ServiceAccount, Role, RoleBinding).
+	CreateRBAC bool `mapstructure:"create_rbac"`
+
+	// ImagePullSecrets are secrets for pulling private images.
+	ImagePullSecrets []string `mapstructure:"image_pull_secrets"`
+
+	// Tolerations for pod scheduling.
+	Tolerations []Toleration `mapstructure:"tolerations"`
+
+	// NodeSelector for pod scheduling.
+	NodeSelector map[string]string `mapstructure:"node_selector"`
+
+	// PriorityClassName for pod priority.
+	PriorityClassName string `mapstructure:"priority_class_name"`
+
+	// Resources are the resource requests and limits for PostgreSQL pod.
+	Resources KubernetesResources `mapstructure:"resources"`
+
+	// LivenessProbe configuration.
+	LivenessProbe ProbeConfig `mapstructure:"liveness_probe"`
+
+	// ReadinessProbe configuration.
+	ReadinessProbe ProbeConfig `mapstructure:"readiness_probe"`
+
+	// StartupProbe configuration.
+	StartupProbe ProbeConfig `mapstructure:"startup_probe"`
+
+	// UpdateStrategy for StatefulSet updates.
+	// Options: "RollingUpdate", "OnDelete"
+	UpdateStrategy string `mapstructure:"update_strategy"`
+
+	// DeleteOnCleanup determines if resources are deleted on `bibd cleanup`.
+	// If false, StatefulSet is scaled to 0 but not deleted.
+	DeleteOnCleanup bool `mapstructure:"delete_on_cleanup"`
+
+	// Labels are additional labels to apply to all Kubernetes resources.
+	Labels map[string]string `mapstructure:"labels"`
+
+	// Annotations are additional annotations to apply to all Kubernetes resources.
+	Annotations map[string]string `mapstructure:"annotations"`
+}
+
+// S3BackupConfig holds S3 backup configuration.
+type S3BackupConfig struct {
+	// Endpoint is the S3 endpoint (e.g., s3.amazonaws.com or minio.example.com)
+	Endpoint string `mapstructure:"endpoint"`
+
+	// Region is the S3 region.
+	Region string `mapstructure:"region"`
+
+	// Bucket is the S3 bucket name.
+	Bucket string `mapstructure:"bucket"`
+
+	// Prefix is the key prefix for backups.
+	Prefix string `mapstructure:"prefix"`
+
+	// AccessKeyID is the AWS access key ID (stored in Secret).
+	AccessKeyID string `mapstructure:"access_key_id"`
+
+	// SecretAccessKey is the AWS secret access key (stored in Secret).
+	SecretAccessKey string `mapstructure:"secret_access_key"`
+
+	// UseIRSA enables IAM Roles for Service Accounts (AWS EKS).
+	UseIRSA bool `mapstructure:"use_irsa"`
+
+	// IAMRole is the IAM role ARN for IRSA.
+	IAMRole string `mapstructure:"iam_role"`
+}
+
+// PodSecurityContext holds pod security context configuration.
+type PodSecurityContext struct {
+	// RunAsNonRoot forces the container to run as a non-root user.
+	RunAsNonRoot bool `mapstructure:"run_as_non_root"`
+
+	// RunAsUser is the UID to run the container as.
+	RunAsUser int64 `mapstructure:"run_as_user"`
+
+	// RunAsGroup is the GID to run the container as.
+	RunAsGroup int64 `mapstructure:"run_as_group"`
+
+	// FSGroup is the group ID for volume ownership.
+	FSGroup int64 `mapstructure:"fs_group"`
+
+	// FSGroupChangePolicy controls how volume ownership is changed.
+	// Options: "OnRootMismatch", "Always"
+	FSGroupChangePolicy string `mapstructure:"fs_group_change_policy"`
+
+	// SeccompProfile is the seccomp profile to use.
+	SeccompProfile string `mapstructure:"seccomp_profile"`
+
+	// SELinuxOptions holds SELinux options.
+	SELinuxOptions SELinuxOptions `mapstructure:"selinux_options"`
+}
+
+// SELinuxOptions holds SELinux configuration.
+type SELinuxOptions struct {
+	// User is the SELinux user label.
+	User string `mapstructure:"user"`
+
+	// Role is the SELinux role label.
+	Role string `mapstructure:"role"`
+
+	// Type is the SELinux type label.
+	Type string `mapstructure:"type"`
+
+	// Level is the SELinux level label.
+	Level string `mapstructure:"level"`
+}
+
+// Toleration represents a Kubernetes toleration.
+type Toleration struct {
+	// Key is the taint key.
+	Key string `mapstructure:"key"`
+
+	// Operator is the operator (Exists or Equal).
+	Operator string `mapstructure:"operator"`
+
+	// Value is the taint value.
+	Value string `mapstructure:"value"`
+
+	// Effect is the taint effect (NoSchedule, PreferNoSchedule, NoExecute).
+	Effect string `mapstructure:"effect"`
+
+	// TolerationSeconds is the period before eviction.
+	TolerationSeconds *int64 `mapstructure:"toleration_seconds,omitempty"`
+}
+
+// KubernetesResources holds Kubernetes resource requests and limits.
+type KubernetesResources struct {
+	// Requests are the resource requests.
+	Requests ResourceQuantity `mapstructure:"requests"`
+
+	// Limits are the resource limits.
+	Limits ResourceQuantity `mapstructure:"limits"`
+}
+
+// ResourceQuantity holds resource quantity specifications.
+type ResourceQuantity struct {
+	// CPU in cores (e.g., "1", "500m").
+	CPU string `mapstructure:"cpu"`
+
+	// Memory in bytes (e.g., "1Gi", "512Mi").
+	Memory string `mapstructure:"memory"`
+
+	// EphemeralStorage in bytes (e.g., "10Gi").
+	EphemeralStorage string `mapstructure:"ephemeral_storage"`
+}
+
+// ProbeConfig holds Kubernetes probe configuration.
+type ProbeConfig struct {
+	// Enabled controls whether the probe is configured.
+	Enabled bool `mapstructure:"enabled"`
+
+	// InitialDelaySeconds is the delay before the first probe.
+	InitialDelaySeconds int32 `mapstructure:"initial_delay_seconds"`
+
+	// PeriodSeconds is how often to perform the probe.
+	PeriodSeconds int32 `mapstructure:"period_seconds"`
+
+	// TimeoutSeconds is the probe timeout.
+	TimeoutSeconds int32 `mapstructure:"timeout_seconds"`
+
+	// SuccessThreshold is the number of successes required.
+	SuccessThreshold int32 `mapstructure:"success_threshold"`
+
+	// FailureThreshold is the number of failures before taking action.
+	FailureThreshold int32 `mapstructure:"failure_threshold"`
 }
 
 // AdvancedPostgresConfig allows manual PostgreSQL configuration.
@@ -280,6 +523,73 @@ func DefaultConfig() Config {
 			TLS: TLSConfig{
 				Enabled:      true,
 				AutoGenerate: true,
+			},
+			Kubernetes: KubernetesConfig{
+				Namespace:            "",    // Auto-detect
+				UseCNPG:              false, // Use vanilla StatefulSet by default
+				CNPGClusterVersion:   "16",
+				StorageClassName:     "",     // Use cluster default
+				StorageSize:          "10Gi", // 10GB default
+				BackupEnabled:        true,
+				BackupSchedule:       "0 2 * * *", // 2 AM daily
+				BackupRetention:      7,           // Keep 7 backups
+				BackupStorageSize:    "20Gi",      // 20GB for backups
+				BackupToS3:           false,
+				NetworkPolicyEnabled: true,
+				NetworkPolicyAllowedLabels: map[string]string{
+					"app": "bibd",
+				},
+				ServiceType:     "", // Auto-detect based on in-cluster vs out-of-cluster
+				NodePort:        0,  // Auto-assign if NodePort
+				PodAntiAffinity: true,
+				PodAntiAffinityLabels: map[string]string{
+					"app": "bibd",
+				},
+				SecurityContext: PodSecurityContext{
+					RunAsNonRoot:        true,
+					RunAsUser:           999, // postgres user
+					RunAsGroup:          999, // postgres group
+					FSGroup:             999,
+					FSGroupChangePolicy: "OnRootMismatch",
+					SeccompProfile:      "runtime/default",
+				},
+				CreateRBAC:      true,
+				UpdateStrategy:  "RollingUpdate",
+				DeleteOnCleanup: true,
+				Resources: KubernetesResources{
+					Requests: ResourceQuantity{
+						CPU:    "500m",
+						Memory: "512Mi",
+					},
+					Limits: ResourceQuantity{
+						CPU:    "2",
+						Memory: "2Gi",
+					},
+				},
+				LivenessProbe: ProbeConfig{
+					Enabled:             true,
+					InitialDelaySeconds: 30,
+					PeriodSeconds:       10,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    3,
+				},
+				ReadinessProbe: ProbeConfig{
+					Enabled:             true,
+					InitialDelaySeconds: 5,
+					PeriodSeconds:       10,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    3,
+				},
+				StartupProbe: ProbeConfig{
+					Enabled:             true,
+					InitialDelaySeconds: 0,
+					PeriodSeconds:       10,
+					TimeoutSeconds:      5,
+					SuccessThreshold:    1,
+					FailureThreshold:    30, // Give 5 minutes for startup
+				},
 			},
 		},
 		Audit: AuditConfig{

@@ -74,6 +74,9 @@ type LifecycleConfig struct {
 	// TLS configuration
 	TLS TLSConfig `mapstructure:"tls"`
 
+	// Kubernetes configuration (for Kubernetes runtime)
+	Kubernetes storage.KubernetesConfig `mapstructure:"kubernetes"`
+
 	// Credentials configuration
 	Credentials CredentialsConfig `mapstructure:"credentials"`
 }
@@ -195,6 +198,9 @@ type Manager struct {
 	healthErrors int
 	shutdownCh   chan struct{}
 	credentials  *Credentials
+
+	// Kubernetes manager (if using Kubernetes runtime)
+	k8sManager *KubernetesManager
 }
 
 // Credentials holds PostgreSQL credentials.
@@ -702,8 +708,26 @@ func (m *Manager) startContainer(ctx context.Context, runtime string) error {
 
 // startKubernetes starts PostgreSQL in Kubernetes.
 func (m *Manager) startKubernetes(ctx context.Context) error {
-	// TODO: Implement Kubernetes StatefulSet creation
-	return fmt.Errorf("Kubernetes support not yet implemented")
+	// Create Kubernetes manager
+	k8sMgr, err := NewKubernetesManager(m.cfg, m.nodeID, m.credentials)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes manager: %w", err)
+	}
+
+	// Validate prerequisites
+	if err := k8sMgr.ValidatePrerequisites(ctx); err != nil {
+		return fmt.Errorf("Kubernetes prerequisites validation failed: %w", err)
+	}
+
+	// Deploy PostgreSQL
+	if err := k8sMgr.Deploy(ctx); err != nil {
+		return fmt.Errorf("failed to deploy PostgreSQL to Kubernetes: %w", err)
+	}
+
+	// Store manager for later use
+	m.k8sManager = k8sMgr
+
+	return nil
 }
 
 // waitForReady waits for PostgreSQL to be ready.
@@ -842,7 +866,9 @@ func (m *Manager) Stop(ctx context.Context) error {
 		cmd := exec.CommandContext(ctx, "podman", "stop", m.cfg.ContainerName)
 		return cmd.Run()
 	case RuntimeKubernetes:
-		// TODO: Implement Kubernetes shutdown
+		if m.k8sManager != nil {
+			return m.k8sManager.Cleanup(ctx)
+		}
 		return nil
 	case RuntimeManual:
 		// Nothing to stop
@@ -866,6 +892,32 @@ func (m *Manager) Runtime() RuntimeType {
 
 // ConnectionString returns the connection string for the store.
 func (m *Manager) ConnectionString() string {
+	// For Kubernetes, get connection info from the manager
+	if m.runtime == RuntimeKubernetes && m.k8sManager != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		host, port, err := m.k8sManager.GetConnectionInfo(ctx)
+		if err != nil {
+			// Fallback to service name
+			host = fmt.Sprintf("bibd-postgres-%s.%s.svc.cluster.local", m.nodeID[:8], m.k8sManager.namespace)
+			port = 5432
+		}
+
+		sslmode := "disable"
+		if m.cfg.TLS.Enabled {
+			sslmode = "require"
+		}
+
+		return fmt.Sprintf("host=%s port=%d user=postgres password=%s dbname=bibd sslmode=%s",
+			host,
+			port,
+			m.credentials.SuperuserPassword,
+			sslmode,
+		)
+	}
+
+	// For Docker/Podman
 	if m.cfg.Network.UseUnixSocket {
 		return fmt.Sprintf("host=%s port=%d user=postgres password=%s dbname=bibd sslmode=disable",
 			filepath.Join(m.cfg.DataDir, "run"),

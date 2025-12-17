@@ -1,0 +1,197 @@
+# Example bibd configuration for Kubernetes PostgreSQL deployment
+
+# Server configuration
+server:
+  listen: "0.0.0.0:8080"
+  data_dir: "/var/lib/bibd"
+  log_level: "info"
+
+# Database configuration
+database:
+  backend: postgres
+  
+  postgres:
+    # Enable managed PostgreSQL
+    managed: true
+    
+    # Use Kubernetes runtime (auto-detected if empty)
+    container_runtime: "kubernetes"
+    
+    # Optional: Path to kubeconfig (auto-detected if running in-cluster)
+    kubeconfig_path: ""
+    
+    # PostgreSQL configuration
+    image: "postgres:16-alpine"
+    port: 5432
+    max_connections: 100
+    
+    # Kubernetes-specific configuration
+    kubernetes:
+      # Namespace (empty = auto-detect)
+      namespace: ""
+      
+      # Storage configuration
+      storage_class_name: ""              # Use cluster default
+      storage_size: "10Gi"                # 10GB for PostgreSQL data
+      
+      # Service configuration
+      service_type: ""                    # Auto-detect: ClusterIP (in-cluster) or NodePort (out-of-cluster)
+      node_port: 0                        # Auto-assign if NodePort
+      
+      # Network isolation
+      network_policy_enabled: true
+      network_policy_allowed_labels:
+        app: bibd                         # Allow connections from bibd pods
+      
+      # Security context
+      security_context:
+        run_as_non_root: true
+        run_as_user: 999                  # postgres user
+        run_as_group: 999                 # postgres group
+        fs_group: 999                     # Volume ownership
+        seccomp_profile: "runtime/default"
+      
+      # Pod anti-affinity (avoid running on same node as bibd)
+      pod_anti_affinity: true
+      pod_anti_affinity_labels:
+        app: bibd
+      
+      # Resource requests and limits
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+        limits:
+          cpu: "2"
+          memory: "2Gi"
+      
+      # Health probes
+      liveness_probe:
+        enabled: true
+        initial_delay_seconds: 30
+        period_seconds: 10
+        timeout_seconds: 5
+        failure_threshold: 3
+      
+      readiness_probe:
+        enabled: true
+        initial_delay_seconds: 5
+        period_seconds: 10
+        timeout_seconds: 5
+        failure_threshold: 3
+      
+      startup_probe:
+        enabled: true
+        initial_delay_seconds: 0
+        period_seconds: 10
+        timeout_seconds: 5
+        failure_threshold: 30             # Allow 5 minutes for startup
+      
+      # Backup configuration
+      backup_enabled: true
+      backup_schedule: "0 2 * * *"        # 2 AM daily
+      backup_retention: 7                  # Keep 7 backups
+      backup_storage_size: "20Gi"         # 20GB for backups
+      
+      # Optional: S3 backup (instead of PVC)
+      backup_to_s3: false
+      # backup_s3:
+      #   endpoint: "s3.amazonaws.com"
+      #   region: "us-east-1"
+      #   bucket: "bibd-backups"
+      #   prefix: "postgres/"
+      #   access_key_id: "${AWS_ACCESS_KEY_ID}"
+      #   secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+      
+      # Update strategy
+      update_strategy: "RollingUpdate"
+      delete_on_cleanup: true             # Delete resources on cleanup
+      
+      # RBAC
+      create_rbac: true
+      service_account_name: ""            # Auto-generate
+      
+      # Optional: Custom labels and annotations
+      labels:
+        environment: "production"
+        managed-by: "bibd"
+      
+      # Optional: CloudNativePG support (requires CNPG operator installed)
+      use_cnpg: false
+      cnpg_cluster_version: "16"
+    
+    # TLS configuration
+    tls:
+      enabled: true
+      auto_generate: true
+    
+    # Network configuration (for non-Kubernetes runtimes)
+    network:
+      use_bridge_network: true
+      use_unix_socket: false
+      bind_address: "127.0.0.1"
+    
+    # Health check configuration
+    health:
+      interval: 5s
+      timeout: 5s
+      startup_timeout: 60s
+      action: "retry_limit"
+      max_retries: 5
+      retry_backoff: 10s
+
+# P2P configuration
+p2p:
+  enabled: true
+  mode: "selective"                      # full | selective | proxy
+  listen_addresses:
+    - "/ip4/0.0.0.0/tcp/4001"
+  
+  bootstrap:
+    peers:
+      - "/dns4/bootstrap.bib.dev/tcp/4001/p2p/12D3KooWBibExample"
+
+# Cluster configuration (optional)
+cluster:
+  enabled: false
+  node_id: ""                            # Auto-generated if empty
+
+# Audit logging
+audit:
+  enabled: true
+  retention_days: 90
+
+---
+# Example: Out-of-cluster development configuration
+
+server:
+  data_dir: "./data"
+  log_level: "debug"
+
+database:
+  postgres:
+    managed: true
+    container_runtime: "kubernetes"
+    kubeconfig_path: "~/.kube/config"    # Explicit kubeconfig path
+    
+    kubernetes:
+      namespace: "bibd-dev"              # Use specific namespace
+      service_type: "NodePort"           # Expose via NodePort for external access
+      node_port: 30432                   # Specific port for local access
+      
+      storage_size: "5Gi"                # Smaller for development
+      backup_enabled: false              # Disable backups for dev
+      
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+      
+      delete_on_cleanup: true            # Clean up when done
+
+p2p:
+  enabled: false                         # Disable P2P for local development
+
