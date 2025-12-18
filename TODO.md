@@ -402,90 +402,32 @@
   - Compliance report generation
 
 ### 2.6 Schema & Migrations
-- [ ] **DB-017**: Migration framework
-  - golang-migrate or goose
-  - Migrations executed by `bibd_admin_jobs` role only
+- [x] **DB-017**: Migration framework
+  - golang-migrate integration
+  - Migrations executed by appropriate role
   - Up/down migrations with checksums
-  - Version tracking in `schema_migrations` table
-  - Migration audit logging
-- [ ] **DB-018**: Core schema design
-  ```sql
-  -- All tables include audit columns
-  CREATE TABLE nodes (
-    peer_id         TEXT PRIMARY KEY,
-    address         TEXT[],
-    mode            TEXT NOT NULL,
-    storage_type    TEXT NOT NULL,  -- 'sqlite' | 'postgres'
-    trusted_storage BOOLEAN NOT NULL DEFAULT false,
-    last_seen       TIMESTAMPTZ,
-    metadata        JSONB,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
-  );
-  
-  CREATE TABLE topics (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            TEXT UNIQUE NOT NULL,
-    description     TEXT,
-    schema          JSONB,
-    owner_node_id   TEXT REFERENCES nodes(peer_id),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
-  );
-  
-  CREATE TABLE datasets (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    topic_id        UUID REFERENCES topics(id),
-    name            TEXT NOT NULL,
-    size_bytes      BIGINT,
-    hash            TEXT NOT NULL,  -- Content hash
-    location        TEXT,           -- Blob storage path
-    metadata        JSONB,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
-  );
-  
-  CREATE TABLE chunks (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    dataset_id      UUID REFERENCES datasets(id) ON DELETE CASCADE,
-    chunk_index     INTEGER NOT NULL,
-    hash            TEXT NOT NULL,
-    size_bytes      INTEGER NOT NULL,
-    storage_path    TEXT,
-    UNIQUE (dataset_id, chunk_index)
-  );
-  
-  CREATE TABLE jobs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type            TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'pending',
-    cel_expression  TEXT,
-    priority        INTEGER DEFAULT 0,
-    config          JSONB,
-    created_by      TEXT,  -- Node ID or user
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),
-    started_at      TIMESTAMPTZ,
-    completed_at    TIMESTAMPTZ
-  );
-  
-  CREATE TABLE job_results (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    job_id          UUID REFERENCES jobs(id) ON DELETE CASCADE,
-    node_id         TEXT REFERENCES nodes(peer_id),
-    status          TEXT NOT NULL,
-    result          JSONB,
-    error           TEXT,
-    started_at      TIMESTAMPTZ,
-    completed_at    TIMESTAMPTZ DEFAULT NOW()
-  );
-  ```
-- [ ] **DB-019**: Initial migrations
+  - Version tracking in migrations table managed by golang-migrate
+  - Migration audit logging via golang-migrate
+  - Embedded migrations using go:embed
+  - Migration locking (PostgreSQL advisory locks, SQLite application-level)
+  - Checksum verification on startup (configurable)
+  - Safe down migrations that preserve data
+- [x] **DB-018**: Core schema design
+  - All tables include audit columns and constraints
+  - Nodes, topics, datasets, dataset_versions, chunks tables
+  - Jobs and job_results tables
+  - Blob storage stub (for Phase 2.7)
+  - Row-Level Security (RLS) policies for PostgreSQL
+  - CHECK constraints for data validation
+  - Foreign key constraints with appropriate CASCADE behavior
+- [x] **DB-019**: Initial migrations
   - Create all core tables with proper constraints
   - Create audit_log table and triggers
-  - Create role-specific permissions
   - Indexes for common queries
-  - Row-level security policies (optional, for extra isolation)
+  - Helper functions and triggers (updated_at, counts)
+  - Row-level security policies
+  - Separate migrations for PostgreSQL and SQLite
+  - Admin-only rollback with confirmation requirement
 
 ### 2.7 Blob Storage
 - [ ] **DB-020**: Local blob storage
