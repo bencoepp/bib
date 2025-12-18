@@ -55,6 +55,29 @@ func runPostgresMigrations(ctx context.Context, store Store, cfg migrate.Config)
 	}
 	defer db.Close()
 
+	// Check for dirty state and clean it automatically
+	// This handles cases where a previous migration failed partway through
+	var version int64
+	var dirty bool
+	err = db.QueryRowContext(ctx, "SELECT version, dirty FROM bib_schema_migrations LIMIT 1").Scan(&version, &dirty)
+	if err == nil && dirty {
+		// Database is in dirty state - log warning and clean it
+		getLogger("migrations").Warn("detected dirty migration state, attempting automatic recovery",
+			"version", version,
+			"backend", "postgres")
+
+		// Reset dirty flag - this allows migration to continue from the failed version
+		_, err = db.ExecContext(ctx, "UPDATE bib_schema_migrations SET dirty = false WHERE version = $1", version)
+		if err != nil {
+			return fmt.Errorf("failed to clean dirty state: %w", err)
+		}
+
+		getLogger("migrations").Info("cleaned dirty migration state, will retry migration",
+			"version", version,
+			"backend", "postgres")
+	}
+	// Ignore error if table doesn't exist (first run)
+
 	// Create migration manager
 	mgr, err := migrate.NewPostgresManager(db, cfg)
 	if err != nil {
@@ -64,9 +87,23 @@ func runPostgresMigrations(ctx context.Context, store Store, cfg migrate.Config)
 
 	// Run migrations
 	if err := mgr.Up(ctx); err != nil {
+		// If migration failed, log detailed error information
+		getLogger("migrations").Error("migration execution failed",
+			"error", err,
+			"backend", "postgres",
+			"hint", "check that all SQL statements are valid and tables exist")
+
+		// Try to get current version to see how far we got
+		if v, dirty, verr := mgr.Version(); verr == nil {
+			getLogger("migrations").Info("current migration state after failure",
+				"version", v,
+				"dirty", dirty)
+		}
+
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	getLogger("migrations").Info("PostgreSQL migrations completed successfully")
 	return nil
 }
 
