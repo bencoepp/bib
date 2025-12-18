@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package bib.v1;
+
+option go_package = "bib/api/proto/bib/v1;bibv1";
+
+import "bib/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Jobs protocol messages for /bib/jobs/1.0.0
+// TODO: This is a placeholder for Phase 3 (Scheduler)
+
+// JobRequest is the request message for job operations
+message JobRequest {
+  string request_id = 1;
+
+  oneof request {
+    SubmitJobRequest submit_job = 2;
+    GetJobStatusRequest get_job_status = 3;
+    CancelJobRequest cancel_job = 4;
+    ListJobsRequest list_jobs = 5;
+  }
+}
+
+// JobResponse is the response message for job operations
+message JobResponse {
+  string request_id = 1;
+  bool success = 2;
+  Error error = 3;
+
+  oneof response {
+    SubmitJobResponse submit_job = 4;
+    GetJobStatusResponse get_job_status = 5;
+    CancelJobResponse cancel_job = 6;
+    ListJobsResponse list_jobs = 7;
+  }
+}
+
+// JobInfo contains job metadata
+message JobInfo {
+  string id = 1;
+  string type = 2;  // "scrape", "transform", "clean", "analyze", "ml", "etl", "custom"
+  string status = 3;  // "pending", "queued", "running", "completed", "failed", "cancelled"
+  string expression = 4;
+  string topic_id = 5;
+  string dataset_id = 6;
+  int32 priority = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp started_at = 9;
+  google.protobuf.Timestamp completed_at = 10;
+  string error = 11;
+  string node_id = 12;
+  map<string, string> metadata = 13;
+}
+
+// SubmitJobRequest submits a new job
+message SubmitJobRequest {
+  JobInfo job = 1;
+}
+
+// SubmitJobResponse returns the result of job submission
+message SubmitJobResponse {
+  string job_id = 1;
+  bool accepted = 2;
+}
+
+// GetJobStatusRequest requests job status
+message GetJobStatusRequest {
+  string job_id = 1;
+}
+
+// GetJobStatusResponse returns job status
+message GetJobStatusResponse {
+  JobInfo job = 1;
+}
+
+// CancelJobRequest requests job cancellation
+message CancelJobRequest {
+  string job_id = 1;
+}
+
+// CancelJobResponse returns cancellation result
+message CancelJobResponse {
+  bool cancelled = 1;
+}
+
+// ListJobsRequest requests job listing
+message ListJobsRequest {
+  string status_filter = 1;
+  string type_filter = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+// ListJobsResponse returns job listing
+message ListJobsResponse {
+  repeated JobInfo jobs = 1;
+  int32 total_count = 2;
+}
+

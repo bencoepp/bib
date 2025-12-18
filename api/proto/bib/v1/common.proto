@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package bib.v1;
+
+option go_package = "bib/api/proto/bib/v1;bibv1";
+
+import "google/protobuf/timestamp.proto";
+
+// Common message types used across protocols
+
+// PeerInfo contains information about a peer
+message PeerInfo {
+  string peer_id = 1;
+  repeated string addresses = 2;
+  string node_mode = 3;  // "proxy", "selective", "full"
+  string version = 4;
+  google.protobuf.Timestamp last_seen = 5;
+}
+
+// TopicInfo contains topic metadata
+message TopicInfo {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string schema = 4;
+  int32 dataset_count = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// DatasetInfo contains dataset metadata
+message DatasetInfo {
+  string id = 1;
+  string topic_id = 2;
+  string name = 3;
+  int64 size = 4;
+  string hash = 5;
+  int32 chunk_count = 6;
+  int64 chunk_size = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  map<string, string> metadata = 10;
+}
+
+// CatalogEntry is a lightweight catalog entry
+message CatalogEntry {
+  string topic_id = 1;
+  string topic_name = 2;
+  string dataset_id = 3;
+  string dataset_name = 4;
+  string hash = 5;
+  int64 size = 6;
+  int32 chunk_count = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// Catalog represents a peer's available data
+message Catalog {
+  string peer_id = 1;
+  repeated CatalogEntry entries = 2;
+  google.protobuf.Timestamp last_updated = 3;
+  uint64 version = 4;
+}
+
+// Error represents a protocol error
+message Error {
+  int32 code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
