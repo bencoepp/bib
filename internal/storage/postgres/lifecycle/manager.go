@@ -214,8 +214,32 @@ type Manager struct {
 	shutdownCh   chan struct{}
 	credentials  *Credentials
 
+	// New security components
+	credentialManager *CredentialManager
+	networkManager    *NetworkManager
+	configGenerator   *ConfigGenerator
+	securityReport    *SecurityReport
+
 	// Kubernetes manager (if using Kubernetes runtime)
 	k8sManager *KubernetesManager
+}
+
+// CredentialManager is a placeholder for the credentials.Manager integration.
+// The actual credentials.Manager is in the credentials package.
+type CredentialManager interface {
+	Initialize() (*Credentials, error)
+	Current() *Credentials
+	NeedsRotation() bool
+	TriggerRotation()
+	Close() error
+}
+
+// SecurityReport summarizes the security configuration.
+type SecurityReport struct {
+	Level           string            `json:"level"`
+	Warnings        []string          `json:"warnings,omitempty"`
+	Recommendations []string          `json:"recommendations,omitempty"`
+	Details         map[string]string `json:"details,omitempty"`
 }
 
 // Credentials holds PostgreSQL credentials.

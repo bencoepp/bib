@@ -15,6 +15,15 @@ type Config struct {
 	// Postgres configuration (used when Backend is "postgres")
 	Postgres PostgresConfig `mapstructure:"postgres"`
 
+	// Credentials configuration for PostgreSQL
+	Credentials CredentialsConfig `mapstructure:"credentials"`
+
+	// Encryption at rest configuration
+	EncryptionAtRest EncryptionAtRestConfig `mapstructure:"encryption_at_rest"`
+
+	// Security configuration
+	Security SecurityConfig `mapstructure:"security"`
+
 	// Audit configuration
 	Audit AuditConfig `mapstructure:"audit"`
 
@@ -470,6 +479,127 @@ type BreakGlassConfig struct {
 	NotificationEmail string `mapstructure:"notification_email,omitempty"`
 }
 
+// CredentialsConfig holds credential management configuration.
+type CredentialsConfig struct {
+	// EncryptionMethod is the algorithm for encrypting credentials.
+	// Options: "x25519", "hkdf", "hybrid"
+	EncryptionMethod string `mapstructure:"encryption_method"`
+
+	// RotationInterval is how often credentials should be rotated.
+	RotationInterval time.Duration `mapstructure:"rotation_interval"`
+
+	// RotationGracePeriod is how long old credentials remain valid after rotation.
+	RotationGracePeriod time.Duration `mapstructure:"rotation_grace_period"`
+
+	// EncryptedPath is where encrypted credentials are stored.
+	EncryptedPath string `mapstructure:"encrypted_path"`
+
+	// PasswordLength is the length of generated passwords.
+	PasswordLength int `mapstructure:"password_length"`
+}
+
+// EncryptionAtRestConfig holds encryption at rest configuration.
+type EncryptionAtRestConfig struct {
+	// Enabled controls whether encryption at rest is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Method is the primary encryption method.
+	// Options: "none", "luks", "tde", "application", "hybrid"
+	Method string `mapstructure:"method"`
+
+	// LUKS holds LUKS-specific configuration.
+	LUKS LUKSConfig `mapstructure:"luks"`
+
+	// TDE holds PostgreSQL TDE configuration.
+	TDE TDEConfig `mapstructure:"tde"`
+
+	// Application holds application-level encryption configuration.
+	Application ApplicationEncryptionConfig `mapstructure:"application"`
+
+	// Recovery holds key recovery configuration.
+	Recovery RecoveryConfig `mapstructure:"recovery"`
+}
+
+// LUKSConfig holds LUKS-specific configuration.
+type LUKSConfig struct {
+	// VolumeSize is the size of the encrypted volume (e.g., "50GB").
+	VolumeSize string `mapstructure:"volume_size"`
+
+	// Cipher is the encryption cipher (e.g., "aes-xts-plain64").
+	Cipher string `mapstructure:"cipher"`
+
+	// KeySize is the encryption key size in bits.
+	KeySize int `mapstructure:"key_size"`
+
+	// HashAlgorithm is the hash for key derivation.
+	HashAlgorithm string `mapstructure:"hash_algorithm"`
+}
+
+// TDEConfig holds PostgreSQL TDE configuration.
+type TDEConfig struct {
+	// Algorithm is the encryption algorithm.
+	Algorithm string `mapstructure:"algorithm"`
+
+	// EncryptWAL enables WAL encryption.
+	EncryptWAL bool `mapstructure:"encrypt_wal"`
+}
+
+// ApplicationEncryptionConfig holds application-level encryption configuration.
+type ApplicationEncryptionConfig struct {
+	// Algorithm is the encryption algorithm ("aes-256-gcm" or "chacha20-poly1305").
+	Algorithm string `mapstructure:"algorithm"`
+
+	// EncryptedFields defines which fields to encrypt.
+	EncryptedFields []EncryptedFieldConfig `mapstructure:"encrypted_fields"`
+}
+
+// EncryptedFieldConfig specifies a database field to encrypt.
+type EncryptedFieldConfig struct {
+	Table   string   `mapstructure:"table"`
+	Columns []string `mapstructure:"columns"`
+}
+
+// RecoveryConfig holds key recovery configuration.
+type RecoveryConfig struct {
+	// Method is the recovery method ("shamir" or "backup").
+	Method string `mapstructure:"method"`
+
+	// Shamir holds Shamir's Secret Sharing configuration.
+	Shamir ShamirConfig `mapstructure:"shamir"`
+}
+
+// ShamirConfig holds Shamir's Secret Sharing configuration.
+type ShamirConfig struct {
+	// TotalShares is the total number of shares to create.
+	TotalShares int `mapstructure:"total_shares"`
+
+	// Threshold is the minimum shares needed to recover.
+	Threshold int `mapstructure:"threshold"`
+
+	// ShareholderIDs are identifiers for each share.
+	ShareholderIDs []string `mapstructure:"shareholder_ids"`
+}
+
+// SecurityConfig holds database security configuration.
+type SecurityConfig struct {
+	// FallbackMode controls behavior when security requirements can't be met.
+	// Options: "strict", "warn", "permissive"
+	FallbackMode string `mapstructure:"fallback_mode"`
+
+	// MinimumLevel is the minimum acceptable security level.
+	// Options: "maximum", "high", "moderate", "reduced"
+	MinimumLevel string `mapstructure:"minimum_level"`
+
+	// LogSecurityReport logs a security report on startup.
+	LogSecurityReport bool `mapstructure:"log_security_report"`
+
+	// RequireClientCert requires client certificate authentication.
+	RequireClientCert bool `mapstructure:"require_client_cert"`
+
+	// AllowClientCertFallback allows password-only auth if cert fails.
+	AllowClientCertFallback bool `mapstructure:"allow_client_cert_fallback"`
+}
+
 // BreakGlassUser represents an allowed emergency access user.
 type BreakGlassUser struct {
 	// Name is the user name.
@@ -603,6 +733,48 @@ func DefaultConfig() Config {
 			RequireRestart: true,
 			MaxDuration:    1 * time.Hour,
 			AuditLevel:     "paranoid",
+		},
+		Credentials: CredentialsConfig{
+			EncryptionMethod:    "hybrid",
+			RotationInterval:    7 * 24 * time.Hour, // 7 days
+			RotationGracePeriod: 5 * time.Minute,
+			PasswordLength:      64,
+		},
+		EncryptionAtRest: EncryptionAtRestConfig{
+			Enabled: false, // Disabled by default
+			Method:  "application",
+			LUKS: LUKSConfig{
+				VolumeSize:    "50GB",
+				Cipher:        "aes-xts-plain64",
+				KeySize:       512,
+				HashAlgorithm: "sha512",
+			},
+			TDE: TDEConfig{
+				Algorithm:  "aes-256",
+				EncryptWAL: true,
+			},
+			Application: ApplicationEncryptionConfig{
+				Algorithm: "aes-256-gcm",
+				EncryptedFields: []EncryptedFieldConfig{
+					{Table: "datasets", Columns: []string{"content", "metadata"}},
+					{Table: "jobs", Columns: []string{"parameters", "result"}},
+					{Table: "nodes", Columns: []string{"metadata"}},
+				},
+			},
+			Recovery: RecoveryConfig{
+				Method: "shamir",
+				Shamir: ShamirConfig{
+					TotalShares: 5,
+					Threshold:   3,
+				},
+			},
+		},
+		Security: SecurityConfig{
+			FallbackMode:            "warn",
+			MinimumLevel:            "moderate",
+			LogSecurityReport:       true,
+			RequireClientCert:       true,
+			AllowClientCertFallback: false,
 		},
 	}
 }

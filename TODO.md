@@ -218,8 +218,10 @@
 
 > **Zero Trust Database Access**: The PostgreSQL instance is invisible to everything except bibd.
 > All credentials are generated, rotated, and never exposed. Every query is audited.
+>
+> 📋 **Implementation Outline**: See [docs/phase-2.3-implementation-outline.md](docs/phase-2.3-implementation-outline.md)
 
-- [ ] **DB-006**: Credential management
+- [x] **DB-006**: Credential management
   - bibd generates all PostgreSQL credentials at initialization
   - Superuser password: 64-char random, never logged, never exposed
   - Credentials stored encrypted in `<config_dir>/secrets/db.enc`
@@ -228,7 +230,7 @@
   - Rotation is zero-downtime (create new role, migrate, drop old)
   - Credentials never appear in config files, logs, or error messages
 
-- [ ] **DB-007**: Role-based database access (per job type)
+- [x] **DB-007**: Role-based database access (per job type)
   ```sql
   -- bibd creates these roles automatically
   -- Superuser (bibd internal only, never exposed)
@@ -256,7 +258,7 @@
   - Role selection based on job type at runtime
   - Connection pool per role for isolation
 
-- [ ] **DB-008**: Network isolation
+- [x] **DB-008**: Network isolation
   - **Docker/Podman:**
     - PostgreSQL binds to Unix socket only (no TCP by default)
     - If TCP required: bind to `127.0.0.1` only
@@ -269,7 +271,7 @@
     - Optional: Istio/Linkerd mTLS sidecar
   - Firewall rules managed by bibd where possible
 
-- [ ] **DB-009**: PostgreSQL hardening configuration
+- [x] **DB-009**: PostgreSQL hardening configuration
   ```ini
   # bibd generates and manages postgresql.conf
   listen_addresses = ''  # Unix socket only, or '127.0.0.1' if needed
@@ -294,7 +296,7 @@
   - No `trust` authentication ever
   - Certificate-based auth for all connections
 
-- [ ] **DB-010**: Encryption at rest
+- [x] **DB-010**: Encryption at rest
   - PostgreSQL data directory encryption
   - Option 1: LUKS/dm-crypt volume (Linux)
   - Option 2: PostgreSQL TDE extension (pgcrypto)
