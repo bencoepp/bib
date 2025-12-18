@@ -150,8 +150,10 @@ type CredentialsConfig struct {
 
 // DefaultLifecycleConfig returns sensible defaults.
 func DefaultLifecycleConfig() LifecycleConfig {
-	// On Windows, we can't use Unix sockets for PostgreSQL connections from host to Docker container
-	useUnixSocket := runtime.GOOS != "windows"
+	// On Windows and macOS, we can't use Unix sockets for PostgreSQL connections from host to Docker container.
+	// Docker Desktop on Windows/macOS runs containers in a Linux VM, so Unix sockets inside the container
+	// are not accessible from the host.
+	useUnixSocket := runtime.GOOS == "linux"
 
 	return LifecycleConfig{
 		Runtime:    "", // Auto-detect
@@ -230,8 +232,10 @@ type Credentials struct {
 
 // NewManager creates a new PostgreSQL lifecycle manager.
 func NewManager(cfg LifecycleConfig, nodeID, dataDir string) (*Manager, error) {
-	// On Windows, force Unix socket to false (cannot connect from host to Docker via Unix socket)
-	if runtime.GOOS == "windows" {
+	// On Windows and macOS, force Unix socket to false.
+	// Docker Desktop runs containers in a Linux VM, so Unix sockets inside the container
+	// are not accessible from the host. Only Linux can use Unix sockets reliably.
+	if runtime.GOOS != "linux" {
 		cfg.Network.UseUnixSocket = false
 	}
 
