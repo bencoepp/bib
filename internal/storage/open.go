@@ -89,7 +89,11 @@ func Open(ctx context.Context, cfg Config, dataDir, nodeID, nodeMode string) (St
 			return nil, fmt.Errorf("failed to create SQLite store: %w", err)
 		}
 		storageLog.Debug("running SQLite migrations")
-		if err := store.Migrate(ctx); err != nil {
+		migrationCfg := cfg.Migrations
+		if migrationCfg.LockTimeoutSeconds == 0 {
+			migrationCfg = DefaultMigrationsConfig()
+		}
+		if err := RunMigrations(ctx, store, migrationCfg); err != nil {
 			_ = store.Close()
 			storageLog.Error("failed to run SQLite migrations", "error", err)
 			return nil, fmt.Errorf("failed to run SQLite migrations: %w", err)
@@ -109,7 +113,11 @@ func Open(ctx context.Context, cfg Config, dataDir, nodeID, nodeMode string) (St
 			return nil, fmt.Errorf("failed to create PostgreSQL store: %w", err)
 		}
 		storageLog.Debug("running PostgreSQL migrations")
-		if err := store.Migrate(ctx); err != nil {
+		migrationCfg := cfg.Migrations
+		if migrationCfg.LockTimeoutSeconds == 0 {
+			migrationCfg = DefaultMigrationsConfig()
+		}
+		if err := RunMigrations(ctx, store, migrationCfg); err != nil {
 			_ = store.Close()
 			storageLog.Error("failed to run PostgreSQL migrations", "error", err)
 			return nil, fmt.Errorf("failed to run PostgreSQL migrations: %w", err)

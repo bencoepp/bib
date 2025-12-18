@@ -15,6 +15,9 @@ type Config struct {
 	// Postgres configuration (used when Backend is "postgres")
 	Postgres PostgresConfig `mapstructure:"postgres"`
 
+	// Migrations configuration
+	Migrations MigrationsConfig `mapstructure:"migrations"`
+
 	// Credentials configuration for PostgreSQL
 	Credentials CredentialsConfig `mapstructure:"credentials"`
 
@@ -1018,6 +1021,31 @@ func DefaultConfig() Config {
 			RequireClientCert:       true,
 			AllowClientCertFallback: false,
 		},
+	}
+}
+
+// MigrationsConfig holds migration configuration.
+type MigrationsConfig struct {
+	// VerifyChecksums determines if checksums should be verified on startup.
+	// Default: true
+	VerifyChecksums bool `mapstructure:"verify_checksums"`
+
+	// OnChecksumMismatch determines behavior when checksum verification fails.
+	// Options: "fail" (abort startup), "warn" (log warning), "ignore"
+	// Default: "fail"
+	OnChecksumMismatch string `mapstructure:"on_checksum_mismatch"`
+
+	// LockTimeoutSeconds is how long to wait for migration lock in seconds.
+	// Default: 15
+	LockTimeoutSeconds int `mapstructure:"lock_timeout_seconds"`
+}
+
+// DefaultMigrationsConfig returns default migration configuration.
+func DefaultMigrationsConfig() MigrationsConfig {
+	return MigrationsConfig{
+		VerifyChecksums:    true,
+		OnChecksumMismatch: "fail",
+		LockTimeoutSeconds: 15,
 	}
 }
 
