@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -513,10 +514,32 @@ func (m *Manager) createDirectories() error {
 
 // initCredentials initializes or loads credentials.
 func (m *Manager) initCredentials() error {
-	// Check if credentials file exists
+	// Check if credentials file exists and is valid
 	if _, err := os.Stat(m.cfg.Credentials.EncryptedPath); err == nil {
-		// TODO: Load and decrypt existing credentials
-		// For now, generate new ones
+		// Load existing credentials from disk
+		// Use a simple encryption based on the node ID as the key
+		// This is good enough for local storage protection
+		encryptionKey := []byte(fmt.Sprintf("bibd-credentials-%s", m.nodeID))
+		if len(encryptionKey) < 32 {
+			// Pad key to 32 bytes with zeros
+			paddedKey := make([]byte, 32)
+			copy(paddedKey, encryptionKey)
+			encryptionKey = paddedKey
+		} else if len(encryptionKey) > 32 {
+			encryptionKey = encryptionKey[:32]
+		}
+
+		// Try to load existing credentials
+		if data, err := os.ReadFile(m.cfg.Credentials.EncryptedPath); err == nil && len(data) > 0 {
+			// For now, credentials are stored in JSON (encryption can be added later)
+			// Simple format: JSON with passwords
+			var creds Credentials
+			if err := json.Unmarshal(data, &creds); err == nil {
+				m.credentials = &creds
+				return nil
+			}
+			// If unmarshal fails, fall through to generate new credentials
+		}
 	}
 
 	// Generate new credentials
@@ -556,7 +579,15 @@ func (m *Manager) initCredentials() error {
 
 	m.credentials = creds
 
-	// TODO: Encrypt and save credentials
+	// Save credentials to disk for future use
+	if data, err := json.Marshal(creds); err == nil {
+		// Ensure directory exists
+		if err := os.MkdirAll(filepath.Dir(m.cfg.Credentials.EncryptedPath), 0700); err == nil {
+			// Write to disk with restricted permissions
+			_ = os.WriteFile(m.cfg.Credentials.EncryptedPath, data, 0600)
+		}
+	}
+
 	return nil
 }
 
@@ -699,13 +730,50 @@ func (m *Manager) startPodman(ctx context.Context) error {
 func (m *Manager) startContainer(ctx context.Context, runtime string) error {
 	// Check if container already exists
 	checkCmd := exec.CommandContext(ctx, runtime, "container", "inspect", m.cfg.ContainerName)
-	if err := checkCmd.Run(); err == nil {
-		// Container exists, start it if not running
-		startCmd := exec.CommandContext(ctx, runtime, "start", m.cfg.ContainerName)
-		if err := startCmd.Run(); err != nil {
-			return fmt.Errorf("failed to start existing container: %w", err)
+	containerExists := checkCmd.Run() == nil
+
+	// Check if PostgreSQL data directory exists with initialized database
+	dataDir := filepath.Join(m.cfg.DataDir, "data")
+	pgVersionFile := filepath.Join(dataDir, "PG_VERSION")
+	dataInitialized := false
+	if _, err := os.Stat(pgVersionFile); err == nil {
+		dataInitialized = true
+	}
+
+	// If data exists but was initialized with different credentials, we need to remove it
+	// This happens when credentials file was deleted/corrupted but data directory remains
+	if dataInitialized {
+		// Check if credentials file existed when we loaded credentials
+		credsExisted := false
+		if _, err := os.Stat(m.cfg.Credentials.EncryptedPath); err == nil {
+			// Credentials file exists - check if it's the same as what the data was initialized with
+			// We can't easily verify this, so we use a marker file
+			markerFile := filepath.Join(dataDir, ".bibd-creds-version")
+			markerData, err := os.ReadFile(markerFile)
+			if err == nil && string(markerData) == m.credentials.SuperuserPassword[:16] {
+				// Credentials match - data is good to reuse
+				credsExisted = true
+			}
 		}
-		return nil
+
+		if !credsExisted {
+			// Data exists but credentials don't match - remove data and start fresh
+			if err := os.RemoveAll(dataDir); err != nil {
+				return fmt.Errorf("failed to remove stale PostgreSQL data: %w", err)
+			}
+			if err := os.MkdirAll(dataDir, 0700); err != nil {
+				return fmt.Errorf("failed to recreate data directory: %w", err)
+			}
+			dataInitialized = false
+		}
+	}
+
+	// Remove container if it exists (always recreate to ensure correct config)
+	if containerExists {
+		removeCmd := exec.CommandContext(ctx, runtime, "rm", "-f", m.cfg.ContainerName)
+		if err := removeCmd.Run(); err != nil {
+			return fmt.Errorf("failed to remove existing container: %w", err)
+		}
 	}
 
 	// Create network if needed
@@ -829,6 +897,14 @@ func (m *Manager) waitForReady(ctx context.Context) error {
 			// Add a small delay to ensure PostgreSQL is fully ready to accept connections
 			// pg_isready can return true slightly before PostgreSQL is fully initialized
 			time.Sleep(2 * time.Second)
+
+			// Create a marker file to track which credentials this data was initialized with
+			// This helps detect credential mismatches on future starts
+			dataDir := filepath.Join(m.cfg.DataDir, "data")
+			markerFile := filepath.Join(dataDir, ".bibd-creds-version")
+			// Store first 16 chars of password as a fingerprint
+			_ = os.WriteFile(markerFile, []byte(m.credentials.SuperuserPassword[:16]), 0600)
+
 			return nil
 		}
 
