@@ -170,6 +170,20 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			ShouldSkip:  func() bool { return !isDaemon || !data.ClusterEnabled },
 		},
 		{
+			ID:          "break-glass",
+			Title:       "Break Glass",
+			Description: "Emergency database access",
+			HelpText:    "Break glass provides controlled emergency access to the database for disaster recovery. Disabled by default for security.",
+			ShouldSkip:  func() bool { return !isDaemon },
+		},
+		{
+			ID:          "break-glass-user",
+			Title:       "Break Glass User",
+			Description: "Configure emergency user",
+			HelpText:    "Create an emergency access user with an Ed25519 SSH key. This user can enable break glass sessions when needed.",
+			ShouldSkip:  func() bool { return !isDaemon || !data.BreakGlassEnabled },
+		},
+		{
 			ID:          "confirm",
 			Title:       "Confirm",
 			Description: "Review and save",
@@ -451,6 +465,56 @@ func (m *SetupWizardModel) updateFormForCurrentStep() {
 					Affirmative("Yes, create new").
 					Negative("No, join existing").
 					Value(&m.data.Bootstrap),
+			),
+		).WithTheme(theme)
+
+	case "break-glass":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔓 Break Glass Emergency Access").
+					Description("Break glass provides controlled emergency access to the database for disaster recovery and debugging.\n\n⚠️  This bypasses normal security controls. Only enable if you need emergency access capabilities."),
+				huh.NewConfirm().
+					Title("Enable Break Glass").
+					Description("Allow emergency database access").
+					Affirmative("Yes, enable").
+					Negative("No, skip").
+					Value(&m.data.BreakGlassEnabled),
+			),
+		).WithTheme(theme)
+
+	case "break-glass-user":
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Emergency User Name").
+					Description("Username for emergency access").
+					Placeholder("emergency_admin").
+					Value(&m.data.BreakGlassUserName),
+				huh.NewText().
+					Title("SSH Public Key").
+					Description("Ed25519 SSH public key (ssh-ed25519 AAAA...)").
+					Placeholder("ssh-ed25519 AAAA...").
+					Value(&m.data.BreakGlassUserKey).
+					Lines(3),
+				huh.NewSelect[string]().
+					Title("Max Session Duration").
+					Description("Maximum duration for break glass sessions").
+					Options(
+						huh.NewOption("30 minutes", "30m"),
+						huh.NewOption("1 hour", "1h"),
+						huh.NewOption("2 hours", "2h"),
+						huh.NewOption("4 hours", "4h"),
+					).
+					Value(&m.data.BreakGlassMaxDuration),
+				huh.NewSelect[string]().
+					Title("Default Access Level").
+					Description("Default permission level for sessions").
+					Options(
+						huh.NewOption("Read-only (SELECT only)", "readonly"),
+						huh.NewOption("Read-write (full access except audit_log)", "readwrite"),
+					).
+					Value(&m.data.BreakGlassAccessLevel),
 			),
 		).WithTheme(theme)
 

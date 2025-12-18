@@ -365,7 +365,7 @@
 > **Emergency Access**: For disaster recovery and debugging, a controlled break-glass procedure 
 > exists. It requires explicit action, is heavily audited, and auto-expires.
 
-- [ ] **DB-014**: Break glass configuration
+- [x] **DB-014**: Break glass configuration
   ```yaml
   # config.yaml - disabled by default
   database:
@@ -382,7 +382,7 @@
         email: "security@..."
   ```
 
-- [ ] **DB-015**: Break glass procedure
+- [x] **DB-015**: Break glass procedure
   1. `bib admin break-glass enable --reason "description" --duration 1h`
   2. Requires confirmation with node admin key
   3. Creates time-limited PostgreSQL user with restricted access
@@ -394,7 +394,7 @@
   9. Summary report generated after session ends
   10. `bib admin break-glass disable` for manual early termination
 
-- [ ] **DB-016**: Break glass audit trail
+- [x] **DB-016**: Break glass audit trail
   - Separate audit category for break glass sessions
   - Full query logging (no redaction)
   - Terminal session recording (if applicable)

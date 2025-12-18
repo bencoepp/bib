@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"bib/internal/config"
 	"bib/internal/tui/component"
@@ -54,6 +55,13 @@ type SetupData struct {
 	IsVoter        bool
 	Bootstrap      bool
 	JoinToken      string
+
+	// Break Glass (bibd only)
+	BreakGlassEnabled     bool
+	BreakGlassMaxDuration string
+	BreakGlassAccessLevel string
+	BreakGlassUserName    string
+	BreakGlassUserKey     string
 }
 
 // DefaultSetupData returns setup data with sensible defaults
@@ -74,6 +82,10 @@ func DefaultSetupData() *SetupData {
 		ClusterName:    "bib-cluster",
 		ClusterAddr:    "0.0.0.0:4002",
 		IsVoter:        true,
+		// Break Glass defaults
+		BreakGlassEnabled:     false,
+		BreakGlassMaxDuration: "1h",
+		BreakGlassAccessLevel: "readonly",
 	}
 }
 
@@ -735,6 +747,34 @@ func (d *SetupData) ToBibdConfig() *config.BibdConfig {
 			IsVoter:       d.IsVoter,
 			Bootstrap:     d.Bootstrap,
 			JoinToken:     d.JoinToken,
+		}
+	}
+
+	if d.BreakGlassEnabled {
+		// Parse duration
+		maxDuration, err := time.ParseDuration(d.BreakGlassMaxDuration)
+		if err != nil {
+			maxDuration = 1 * time.Hour
+		}
+
+		cfg.Database.BreakGlass = config.BreakGlassConfig{
+			Enabled:               true,
+			RequireRestart:        true,
+			MaxDuration:           maxDuration,
+			DefaultAccessLevel:    d.BreakGlassAccessLevel,
+			AuditLevel:            "paranoid",
+			RequireAcknowledgment: true,
+			SessionRecording:      true,
+		}
+
+		// Add configured user if provided
+		if d.BreakGlassUserName != "" && d.BreakGlassUserKey != "" {
+			cfg.Database.BreakGlass.AllowedUsers = []config.BreakGlassUser{
+				{
+					Name:      d.BreakGlassUserName,
+					PublicKey: d.BreakGlassUserKey,
+				},
+			}
 		}
 	}
 

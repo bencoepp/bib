@@ -334,6 +334,9 @@ type DatabaseConfig struct {
 
 	// Audit configuration
 	Audit AuditDatabaseConfig `mapstructure:"audit"`
+
+	// BreakGlass holds emergency access configuration
+	BreakGlass BreakGlassConfig `mapstructure:"break_glass"`
 }
 
 // SQLiteDatabaseConfig holds SQLite-specific configuration
@@ -465,6 +468,70 @@ type AuditDatabaseConfig struct {
 
 	// HashChain enables hash chain for tamper detection
 	HashChain bool `mapstructure:"hash_chain"`
+}
+
+// BreakGlassConfig holds emergency access configuration.
+// Break glass provides controlled emergency access to the database
+// for disaster recovery and debugging scenarios.
+type BreakGlassConfig struct {
+	// Enabled controls whether break glass access is available.
+	// Must be explicitly enabled and requires bibd restart.
+	Enabled bool `mapstructure:"enabled"`
+
+	// RequireRestart requires bibd restart to enable/disable break glass.
+	// This prevents runtime configuration changes for security.
+	RequireRestart bool `mapstructure:"require_restart"`
+
+	// MaxDuration is the maximum allowed duration for a break glass session.
+	// Sessions auto-expire after this duration.
+	MaxDuration time.Duration `mapstructure:"max_duration"`
+
+	// DefaultAccessLevel is the default access level for break glass sessions.
+	// Can be "readonly" or "readwrite".
+	DefaultAccessLevel string `mapstructure:"default_access_level"`
+
+	// AllowedUsers is a list of pre-configured emergency access users.
+	AllowedUsers []BreakGlassUser `mapstructure:"allowed_users"`
+
+	// AuditLevel controls the verbosity of break glass audit logging.
+	// "normal" redacts sensitive values, "paranoid" logs everything.
+	AuditLevel string `mapstructure:"audit_level"`
+
+	// Notification holds notification configuration for break glass events.
+	Notification BreakGlassNotification `mapstructure:"notification"`
+
+	// RequireAcknowledgment requires admin acknowledgment after session ends.
+	RequireAcknowledgment bool `mapstructure:"require_acknowledgment"`
+
+	// SessionRecording enables terminal session recording.
+	SessionRecording bool `mapstructure:"session_recording"`
+
+	// RecordingPath is where session recordings are stored.
+	// Defaults to the same location as audit logs.
+	RecordingPath string `mapstructure:"recording_path"`
+}
+
+// BreakGlassUser represents a pre-configured emergency access user.
+type BreakGlassUser struct {
+	// Name is the username for the emergency user.
+	Name string `mapstructure:"name"`
+
+	// PublicKey is the SSH Ed25519 public key for authentication.
+	// Format: "ssh-ed25519 AAAA..."
+	PublicKey string `mapstructure:"public_key"`
+
+	// AccessLevel overrides the default access level for this user.
+	// Can be "readonly" or "readwrite". Empty means use default.
+	AccessLevel string `mapstructure:"access_level,omitempty"`
+}
+
+// BreakGlassNotification holds notification configuration for break glass events.
+type BreakGlassNotification struct {
+	// Webhook is the URL to send webhook notifications to.
+	Webhook string `mapstructure:"webhook"`
+
+	// Email is the email address to send notifications to.
+	Email string `mapstructure:"email"`
 }
 
 // DefaultBibConfig returns sensible defaults for bib CLI
@@ -654,6 +721,21 @@ func DefaultBibdConfig() BibdConfig {
 				Enabled:       true,
 				RetentionDays: 90,
 				HashChain:     true,
+			},
+			BreakGlass: BreakGlassConfig{
+				Enabled:               false, // Disabled by default for security
+				RequireRestart:        true,  // Must restart bibd to enable
+				MaxDuration:           1 * time.Hour,
+				DefaultAccessLevel:    "readonly",
+				AllowedUsers:          []BreakGlassUser{},
+				AuditLevel:            "paranoid", // Log everything during break glass
+				RequireAcknowledgment: true,
+				SessionRecording:      true,
+				RecordingPath:         "", // Defaults to audit log path
+				Notification: BreakGlassNotification{
+					Webhook: "",
+					Email:   "",
+				},
 			},
 		},
 	}
