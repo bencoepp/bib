@@ -2,6 +2,8 @@
 
 This document describes the break glass emergency access feature for bibd's PostgreSQL storage layer. Break glass provides controlled emergency access to the database for disaster recovery and debugging scenarios.
 
+---
+
 ## Overview
 
 Break glass is a security mechanism that allows authorized administrators to temporarily bypass normal access controls in emergency situations. The feature is:
@@ -286,4 +288,16 @@ Ensure you're using the correct private key that corresponds to the configured p
 ### "A break glass session is already active"
 
 Only one break glass session can be active at a time. Disable the current session first.
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Database Security](database-security.md) | Security architecture overview |
+| [Configuration](../getting-started/configuration.md) | Break glass configuration options |
+| [CLI Reference](../guides/cli-reference.md) | Admin commands reference |
+| [Storage Lifecycle](storage-lifecycle.md) | Database backend management |
+
 

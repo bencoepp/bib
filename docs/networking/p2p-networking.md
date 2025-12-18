@@ -1,6 +1,8 @@
 # P2P Networking
 
-This document describes the peer-to-peer networking layer of bib, built on libp2p.
+This document describes the peer-to-peer networking layer of Bib, built on libp2p.
+
+---
 
 ## Overview
 
@@ -457,4 +459,15 @@ Peers are identified by their libp2p Peer ID:
 - Derived from public key
 - Cryptographically verifiable
 - Consistent across connections
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Architecture Overview](../concepts/architecture.md) | System design and components |
+| [Protocols Reference](protocols.md) | Wire protocol specifications |
+| [Node Modes](../concepts/node-modes.md) | Proxy, Selective, and Full modes |
+| [Configuration](../getting-started/configuration.md) | P2P configuration options |
 

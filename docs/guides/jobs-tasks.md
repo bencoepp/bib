@@ -1,6 +1,8 @@
 # Jobs and Tasks Guide
 
-This document explains the job execution system in bib, including Tasks, Jobs, Pipelines, and the CEL-based instruction system.
+This document explains the job execution system in Bib, including Tasks, Jobs, Pipelines, and the CEL-based instruction system.
+
+---
 
 ## Overview
 
@@ -754,4 +756,15 @@ instructions:
 2. **No shell execution** - CEL operations are sandboxed
 3. **Secret management** - Use secret references, not inline values
 4. **Output verification** - Validate outputs before storing
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Domain Entities](../concepts/domain-entities.md) | Job, Task, and Instruction definitions |
+| [CLI Reference](cli-reference.md) | Job and task CLI commands |
+| [Configuration](../getting-started/configuration.md) | Job execution configuration |
+| [Architecture Overview](../concepts/architecture.md) | System components overview |
 

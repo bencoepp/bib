@@ -1,6 +1,8 @@
-# Bib Domain Entities Documentation
+# Domain Entities Reference
 
-This document provides a comprehensive overview of the domain entities in the `bib` distributed data management system. These entities form the core data model used across all layers of the system including P2P networking, storage, and gRPC APIs.
+This document provides a comprehensive reference for all domain entities in the Bib distributed data management system. These entities form the core data model used across P2P networking, storage, and gRPC APIs.
+
+---
 
 ## Table of Contents
 
@@ -673,7 +675,7 @@ All entities support JSON serialization and include validation methods for data 
 | - ExpiresAt      |       +-------------------+
 +------------------+
 
-+------------------+       +-------------------+
++------------------+       +-------------------+       +-------------------+
 |  QueryRequest    |       |   QueryResult     |
 +------------------+       +-------------------+
 | - ID             |       | - QueryID         |
@@ -713,4 +715,15 @@ The bib domain model is designed around these key concepts:
 9. **Flexible Scheduling**: Jobs and instructions support one-time, cron, interval, and repeat scheduling.
 
 10. **SQL Querying**: Read-only SQL queries can span multiple datasets with streaming support.
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Architecture Overview](architecture.md) | System design and components |
+| [Jobs & Tasks](../guides/jobs-tasks.md) | Job execution system |
+| [P2P Networking](../networking/p2p-networking.md) | Data discovery and sync |
+| [Developer Guide](../development/developer-guide.md) | Implementation patterns |
 

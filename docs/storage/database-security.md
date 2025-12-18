@@ -2,6 +2,8 @@
 
 This document describes the security architecture for bibd's PostgreSQL storage layer, covering credential management, role-based access, network isolation, configuration hardening, and encryption at rest.
 
+---
+
 ## Overview
 
 The bibd daemon implements a **Zero Trust Database Access** model where:
@@ -602,10 +604,13 @@ The audit log is:
 
 ---
 
-## See Also
+## Related Documentation
 
-- [Storage Lifecycle Management](storage-lifecycle.md) - Container lifecycle
-- [Configuration Guide](configuration.md) - Complete configuration reference
-- [Clustering](clustering.md) - High-availability security considerations
-- [Phase 2.3 Implementation Outline](phase-2.3-implementation-outline.md) - Technical details
+| Document | Topic |
+|----------|-------|
+| [Storage Lifecycle](storage-lifecycle.md) | Container lifecycle management |
+| [Configuration](../getting-started/configuration.md) | Complete configuration reference |
+| [Clustering](../guides/clustering.md) | High-availability security |
+| [Break Glass Access](break-glass.md) | Emergency database access |
+| [Architecture Overview](../concepts/architecture.md) | System security model |
 

@@ -1,6 +1,8 @@
 # Developer Guide
 
-This guide provides a comprehensive overview of the bib codebase for new developers and AI coding agents. It covers project structure, code patterns, and how to effectively work with the codebase.
+This guide provides a comprehensive overview of the Bib codebase for new developers and AI coding agents. It covers project structure, code patterns, and best practices for working with the codebase.
+
+---
 
 ## Project Overview
 
@@ -639,11 +641,15 @@ GOLOG_LOG_LEVEL=debug bibd
 GOLOG_LOG_LEVEL=pubsub=debug,dht=warn bibd
 ```
 
-## See Also
+---
 
-- [Architecture](architecture.md) - System design overview
-- [TUI Component System](tui-components.md) - Complete TUI documentation
-- [CLI Reference](cli-reference.md) - Command documentation
-- [Configuration](configuration.md) - Config options
-- [Domain Entities](domain-entities.md) - Data model
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Architecture Overview](../concepts/architecture.md) | System design overview |
+| [TUI Components](tui-components.md) | Terminal UI documentation |
+| [CLI Reference](../guides/cli-reference.md) | Command documentation |
+| [Configuration](../getting-started/configuration.md) | Configuration options |
+| [Domain Entities](../concepts/domain-entities.md) | Data model reference |
 

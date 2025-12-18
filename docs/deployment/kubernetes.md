@@ -1,6 +1,8 @@
-# Kubernetes PostgreSQL Deployment
+# Kubernetes Deployment Guide
 
 This document describes how bibd manages PostgreSQL deployments in Kubernetes environments.
+
+---
 
 ## Overview
 
@@ -513,11 +515,14 @@ kubectl exec bibd-postgres-<node-id>-0 -- pg_isready -U postgres
 kubectl get pod bibd-postgres-<node-id>-0 -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
 ```
 
-## See Also
+---
 
-- [Storage Lifecycle Management](storage-lifecycle.md)
-- [Configuration Guide](configuration.md)
-- [Architecture Overview](architecture.md)
-- [PostgreSQL Lifecycle Manager](../internal/storage/postgres/lifecycle/manager.go)
-- [Kubernetes Manager](../internal/storage/postgres/lifecycle/kubernetes.go)
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Storage Lifecycle](../storage/storage-lifecycle.md) | Database backend management |
+| [Configuration](../getting-started/configuration.md) | Kubernetes configuration options |
+| [Architecture Overview](../concepts/architecture.md) | System design overview |
+| [Database Security](../storage/database-security.md) | Security hardening |
 

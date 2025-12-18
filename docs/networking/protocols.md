@@ -1,6 +1,8 @@
 # Protocols Reference
 
-This document describes the wire protocols used for P2P communication in bib.
+This document describes the wire protocols used for P2P communication in Bib.
+
+---
 
 ## Overview
 
@@ -592,4 +594,15 @@ Protocol IDs include version numbers for compatibility:
 - `/bib/discovery/1.1.0` - Version 1.1.0 (future)
 
 Nodes advertise supported protocol versions. During connection, the highest mutually supported version is negotiated.
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Architecture Overview](../concepts/architecture.md) | System design and components |
+| [P2P Networking](p2p-networking.md) | Networking layer overview |
+| [Domain Entities](../concepts/domain-entities.md) | Data model definitions |
+| [Developer Guide](../development/developer-guide.md) | Implementation details |
 

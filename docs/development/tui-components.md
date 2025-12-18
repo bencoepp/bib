@@ -1,6 +1,8 @@
 # TUI Component System
 
-This document provides comprehensive documentation for the Terminal User Interface (TUI) component system used in bib and bibd. This guide is intended for developers and coding agents working with the codebase.
+This document provides comprehensive documentation for the Terminal User Interface (TUI) component system used in Bib. This guide is intended for developers and coding agents working with the codebase.
+
+---
 
 ## Overview
 
@@ -801,12 +803,21 @@ func TestTableNavigation(t *testing.T) {
 }
 ```
 
-## See Also
+---
 
-- [CLI Reference](cli-reference.md) - Command-line interface documentation
-- [Configuration](configuration.md) - Configuration options
-- [Architecture](architecture.md) - System architecture overview
-- [Bubble Tea Documentation](https://github.com/charmbracelet/bubbletea)
-- [Lip Gloss Documentation](https://github.com/charmbracelet/lipgloss)
-- [Huh Documentation](https://github.com/charmbracelet/huh)
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [CLI Reference](../guides/cli-reference.md) | Command-line interface |
+| [Configuration](../getting-started/configuration.md) | Configuration options |
+| [Developer Guide](developer-guide.md) | Development patterns |
+| [Architecture Overview](../concepts/architecture.md) | System architecture |
+
+### External Resources
+
+- [Bubble Tea Documentation](https://github.com/charmbracelet/bubbletea) - TUI framework
+- [Lip Gloss Documentation](https://github.com/charmbracelet/lipgloss) - Styling library
+- [Huh Documentation](https://github.com/charmbracelet/huh) - Form library
+
 

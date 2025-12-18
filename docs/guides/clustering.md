@@ -2,6 +2,8 @@
 
 This document explains how to set up a high-availability (HA) cluster of bibd nodes using Raft consensus.
 
+---
+
 ## Overview
 
 Bib supports optional HA clustering using the Raft consensus algorithm. A cluster provides:
@@ -502,4 +504,15 @@ bib cluster status
 # - 1 leader, 2 followers
 # - Quorum: 2/3
 ```
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Architecture Overview](../concepts/architecture.md) | System design and HA overview |
+| [Configuration](../getting-started/configuration.md) | Cluster configuration options |
+| [Quick Start](../getting-started/quickstart.md) | Getting started guide |
+| [Node Modes](../concepts/node-modes.md) | Node operational modes |
 

@@ -1,42 +1,68 @@
 # Configuration Guide
 
-This document describes all configuration options for both `bib` (CLI) and `bibd` (daemon).
+This comprehensive guide covers all configuration options for both the `bib` CLI and `bibd` daemon. Configuration can be set via YAML files, environment variables, or command-line flags.
+
+---
+
+## Table of Contents
+
+1. [Configuration Files](#configuration-files)
+2. [bib CLI Configuration](#bib-cli-configuration)
+3. [bibd Daemon Configuration](#bibd-daemon-configuration)
+4. [Environment Variables](#environment-variables)
+5. [Command-Line Flags](#command-line-flags)
+6. [Configuration Precedence](#configuration-precedence)
+7. [Configuration Examples](#configuration-examples)
+
+---
 
 ## Configuration Files
 
-### Locations
+### File Locations
 
 Configuration files are stored in platform-specific locations:
 
 | Platform | bib CLI | bibd Daemon |
 |----------|---------|-------------|
-| macOS | `~/.config/bib/config.yaml` | `~/.config/bibd/config.yaml` |
-| Linux | `~/.config/bib/config.yaml` | `~/.config/bibd/config.yaml` |
-| Windows | `%APPDATA%\bib\config.yaml` | `%APPDATA%\bibd\config.yaml` |
+| **macOS** | `~/.config/bib/config.yaml` | `~/.config/bibd/config.yaml` |
+| **Linux** | `~/.config/bib/config.yaml` | `~/.config/bibd/config.yaml` |
+| **Windows** | `%APPDATA%\bib\config.yaml` | `%APPDATA%\bibd\config.yaml` |
 
 ### Supported Formats
 
-- YAML (`.yaml`, `.yml`) - Recommended
-- TOML (`.toml`)
-- JSON (`.json`)
+| Format | Extensions | Recommended |
+|--------|------------|-------------|
+| YAML | `.yaml`, `.yml` | ✅ Yes |
+| TOML | `.toml` | No |
+| JSON | `.json` | No |
 
 ### Auto-Generation
 
-Both `bib` and `bibd` automatically generate default configuration files on first run. Use the `setup` command for interactive configuration:
+Both `bib` and `bibd` automatically generate default configuration files on first run. For interactive configuration, use the setup wizard:
 
 ```bash
-# Configure bib CLI
+# Configure bib CLI interactively
 bib setup
 
-# Configure bibd daemon
+# Configure bibd daemon interactively
 bib setup --daemon
+```
+
+### Viewing Configuration
+
+```bash
+# Show current CLI configuration
+bib config show
+
+# Show configuration file path
+bib config path
 ```
 
 ---
 
 ## bib CLI Configuration
 
-The `bib` CLI configuration (`BibConfig`) controls client behavior.
+The `bib` CLI configuration controls client behavior when interacting with the bibd daemon.
 
 ### Complete Example
 
@@ -49,16 +75,16 @@ log:
   format: text                   # text, json, pretty
   output: stderr                 # stdout, stderr, or file path
   file_path: ""                  # Additional log file (optional)
-  enable_caller: false           # Include source file:line
+  enable_caller: false           # Include source file:line in logs
   audit_path: ""                 # Audit log file path
-  audit_max_age_days: 365        # Audit log retention
+  audit_max_age_days: 365        # Audit log retention period
   redact_fields:                 # Fields to redact from logs
     - password
     - token
     - key
     - secret
 
-# User identity
+# User identity (for attribution)
 identity:
   name: "Your Name"
   email: "you@example.com"
@@ -79,45 +105,45 @@ server: "localhost:8080"
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `level` | string | `info` | Minimum log level: debug, info, warn, error |
-| `format` | string | `text` | Output format: text, json, pretty |
-| `output` | string | `stderr` | Output destination: stdout, stderr, or file path |
+| `level` | string | `info` | Minimum log level: `debug`, `info`, `warn`, `error` |
+| `format` | string | `text` | Output format: `text`, `json`, `pretty` |
+| `output` | string | `stderr` | Output destination: `stdout`, `stderr`, or file path |
 | `file_path` | string | `""` | Additional log file (in addition to output) |
 | `max_size_mb` | int | `100` | Max log file size before rotation |
 | `max_backups` | int | `3` | Number of old log files to keep |
 | `max_age_days` | int | `28` | Days to retain old log files |
 | `enable_caller` | bool | `false` | Include source file/line in logs |
-| `no_color` | bool | `false` | Disable colored output (pretty format) |
+| `no_color` | bool | `false` | Disable colored output (for pretty format) |
 | `audit_path` | string | `""` | Path to audit log file |
 | `audit_max_age_days` | int | `365` | Days to retain audit logs |
-| `redact_fields` | []string | `[password, token, ...]` | Field names to redact |
+| `redact_fields` | []string | See above | Field names to automatically redact |
 
 #### Identity Section
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | `""` | Your display name |
+| `name` | string | `""` | Your display name (for dataset attribution) |
 | `email` | string | `""` | Your email address |
-| `key` | string | `""` | Path to private key file or secret reference |
+| `key` | string | `""` | Path to Ed25519 private key file |
 
 #### Output Section
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `format` | string | `text` | Default output format: text, json, yaml, table |
+| `format` | string | `text` | Default output format: `text`, `json`, `yaml`, `table` |
 | `color` | bool | `true` | Enable colored output |
 
 #### Server
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `server` | string | `localhost:8080` | bibd server address to connect to |
+| `server` | string | `localhost:8080` | bibd server address (`host:port`) |
 
 ---
 
 ## bibd Daemon Configuration
 
-The `bibd` daemon configuration (`BibdConfig`) controls all daemon behavior.
+The `bibd` daemon configuration controls all aspects of the server's behavior.
 
 ### Complete Example
 
@@ -189,6 +215,7 @@ p2p:
   peer_store:
     path: ""                     # Defaults to config dir + /peers.db
   
+  # Mode-specific settings
   full_replica:
     sync_interval: 5m
   
@@ -227,7 +254,7 @@ database:
       interval: 5s
       timeout: 5s
       startup_timeout: 60s
-      action: "retry_limit"
+      action: "retry_limit"      # shutdown, retry_always, retry_limit
       max_retries: 5
     
     tls:
@@ -307,22 +334,27 @@ cluster:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `host` | string | `0.0.0.0` | Listen address |
-| `port` | int | `8080` | Listen port |
+| `host` | string | `0.0.0.0` | Listen address for gRPC server |
+| `port` | int | `8080` | Listen port for gRPC server |
 | `data_dir` | string | `~/.local/share/bibd` | Data storage directory |
 | `pid_file` | string | `/var/run/bibd.pid` | PID file location |
-| `tls.enabled` | bool | `false` | Enable TLS |
-| `tls.cert_file` | string | `""` | TLS certificate file |
-| `tls.key_file` | string | `""` | TLS private key file |
+
+##### TLS Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `tls.enabled` | bool | `false` | Enable TLS for gRPC connections |
+| `tls.cert_file` | string | `""` | Path to TLS certificate file |
+| `tls.key_file` | string | `""` | Path to TLS private key file |
 
 #### P2P Section
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Enable P2P networking |
-| `mode` | string | `proxy` | Node mode: proxy, selective, full |
-| `identity.key_path` | string | `""` | Path to identity key file |
-| `listen_addresses` | []string | TCP+QUIC on 4001 | Multiaddr listen addresses |
+| `mode` | string | `proxy` | Node mode: `proxy`, `selective`, `full` |
+| `identity.key_path` | string | `""` | Path to Ed25519 identity key file |
+| `listen_addresses` | []string | TCP+QUIC on 4001 | libp2p multiaddr listen addresses |
 
 ##### Connection Manager
 
@@ -337,99 +369,127 @@ cluster:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `peers` | []string | bib.dev | Bootstrap peer multiaddrs |
-| `min_peers` | int | `1` | Minimum bootstrap peers before continuing |
+| `min_peers` | int | `1` | Minimum bootstrap peers required |
 | `retry_interval` | duration | `5s` | Initial retry interval |
-| `max_retry_interval` | duration | `1h` | Maximum retry interval (backoff cap) |
+| `max_retry_interval` | duration | `1h` | Maximum retry interval (exponential backoff cap) |
 
-##### mDNS
+##### mDNS (Local Discovery)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `true` | Enable mDNS discovery |
+| `enabled` | bool | `true` | Enable mDNS discovery for local network |
 | `service_name` | string | `bib.local` | mDNS service name |
 
-##### DHT
+##### DHT (Global Discovery)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Enable Kademlia DHT |
-| `mode` | string | `auto` | DHT mode: auto, server, client |
+| `mode` | string | `auto` | DHT mode: `auto`, `server`, `client` |
+
+**DHT Modes:**
+- `auto` — libp2p decides based on network reachability
+- `server` — Full DHT participant (requires public IP)
+- `client` — Query-only, doesn't store records (works behind NAT)
 
 ##### Mode-Specific Settings
 
-**Full Replica Mode:**
+**Full Replica Mode (`p2p.full_replica`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `sync_interval` | duration | `5m` | Poll interval for new data |
 
-**Selective Mode:**
+**Selective Mode (`p2p.selective`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `subscriptions` | []string | `[]` | Topic patterns to subscribe to |
 | `subscription_store_path` | string | `""` | Subscription persistence file |
 
-**Proxy Mode:**
+**Proxy Mode (`p2p.proxy`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `cache_ttl` | duration | `2m` | Cache entry TTL |
+| `cache_ttl` | duration | `2m` | Cache entry time-to-live |
 | `max_cache_size` | int | `1000` | Maximum cache entries |
-| `favorite_peers` | []string | `[]` | Preferred forwarding peers |
+| `favorite_peers` | []string | `[]` | Preferred peers for forwarding |
 
 #### Database Section
 
-> 📖 For detailed security documentation, see [Database Security](database-security.md).
-
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `backend` | string | `sqlite` | Storage backend: sqlite, postgres |
+| `backend` | string | `sqlite` | Storage backend: `sqlite` or `postgres` |
 
-##### SQLite
+##### SQLite Configuration
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `path` | string | `""` | Database path (defaults to `<data_dir>/cache.db`) |
 | `max_open_conns` | int | `10` | Maximum open connections |
 
-##### PostgreSQL
+##### PostgreSQL Configuration
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `managed` | bool | `true` | bibd manages PostgreSQL container |
-| `container_runtime` | string | `""` | Runtime: docker, podman (auto-detect) |
+| `managed` | bool | `true` | bibd manages PostgreSQL container lifecycle |
+| `container_runtime` | string | `""` | Container runtime: `docker`, `podman` (auto-detect if empty) |
 | `image` | string | `postgres:16-alpine` | PostgreSQL container image |
+| `data_dir` | string | `""` | PostgreSQL data directory |
 | `port` | int | `5432` | PostgreSQL port |
 | `max_connections` | int | `100` | Maximum database connections |
 
-##### Network
+**Network Settings (`postgres.network`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `use_bridge_network` | bool | `true` | Create isolated Docker network |
-| `bridge_network_name` | string | `bibd-network` | Network name |
+| `bridge_network_name` | string | `bibd-network` | Docker network name |
 | `use_unix_socket` | bool | `true` | Use Unix socket (Linux only) |
 | `bind_address` | string | `127.0.0.1` | TCP bind address |
+
+**Health Check Settings (`postgres.health`):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `interval` | duration | `5s` | Health check interval |
+| `timeout` | duration | `5s` | Health check timeout |
+| `startup_timeout` | duration | `60s` | Maximum startup wait time |
+| `action` | string | `retry_limit` | Action on failure: `shutdown`, `retry_always`, `retry_limit` |
+| `max_retries` | int | `5` | Maximum retries (for `retry_limit` action) |
+
+**TLS Settings (`postgres.tls`):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable TLS for database connections |
+| `auto_generate` | bool | `true` | Auto-generate TLS certificates |
+
+> 📖 For detailed database security documentation, see [Database Security](database-security.md).
 
 #### Credentials Section
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `encryption_method` | string | `hybrid` | Encryption: x25519, hkdf, hybrid |
-| `rotation_interval` | duration | `168h` | Credential rotation interval |
+| `encryption_method` | string | `hybrid` | Encryption method: `x25519`, `hkdf`, `hybrid` |
+| `rotation_interval` | duration | `168h` | Credential rotation interval (default: 7 days) |
 | `rotation_grace_period` | duration | `5m` | Grace period during rotation |
-| `password_length` | int | `64` | Generated password length |
+| `password_length` | int | `64` | Generated password length (minimum 32) |
 | `encrypted_path` | string | `""` | Credential storage path |
+
+**Encryption Methods:**
+- `x25519` — XSalsa20-Poly1305 (NaCl), well-audited
+- `hkdf` — AES-256-GCM with HKDF-SHA256, FIPS-compatible
+- `hybrid` — Both methods for maximum compatibility (default)
 
 #### Encryption at Rest Section
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `false` | Enable encryption at rest |
-| `method` | string | `application` | Method: none, luks, tde, application, hybrid |
+| `method` | string | `application` | Method: `none`, `luks`, `tde`, `application`, `hybrid` |
 
-##### LUKS (Linux only)
+**LUKS Settings (`encryption_at_rest.luks`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -437,18 +497,18 @@ cluster:
 | `cipher` | string | `aes-xts-plain64` | Encryption cipher |
 | `key_size` | int | `512` | Key size in bits |
 
-##### Application-Level Encryption
+**Application-Level Settings (`encryption_at_rest.application`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `algorithm` | string | `aes-256-gcm` | Encryption algorithm |
-| `encrypted_fields` | []object | See default | Fields to encrypt |
+| `encrypted_fields` | []object | See config | Fields to encrypt |
 
-##### Recovery (Shamir's Secret Sharing)
+**Recovery Settings (`encryption_at_rest.recovery`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `method` | string | `shamir` | Recovery method |
+| `method` | string | `shamir` | Recovery method (Shamir's Secret Sharing) |
 | `total_shares` | int | `5` | Total shares to generate |
 | `threshold` | int | `3` | Minimum shares for recovery |
 
@@ -456,8 +516,8 @@ cluster:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `fallback_mode` | string | `warn` | Behavior when requirements unmet: strict, warn, permissive |
-| `minimum_level` | string | `moderate` | Minimum security level: maximum, high, moderate, reduced |
+| `fallback_mode` | string | `warn` | Behavior when requirements unmet: `strict`, `warn`, `permissive` |
+| `minimum_level` | string | `moderate` | Minimum security level: `maximum`, `high`, `moderate`, `reduced` |
 | `log_security_report` | bool | `true` | Log security report on startup |
 | `require_client_cert` | bool | `true` | Require mTLS client certificates |
 | `allow_client_cert_fallback` | bool | `false` | Allow password auth if cert fails |
@@ -466,7 +526,7 @@ cluster:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable HA clustering |
+| `enabled` | bool | `false` | Enable high-availability clustering |
 | `node_id` | string | `""` | Unique node identifier (auto-generated) |
 | `cluster_name` | string | `bib-cluster` | Cluster name for discovery |
 | `data_dir` | string | `""` | Raft data directory |
@@ -476,8 +536,9 @@ cluster:
 | `bootstrap` | bool | `false` | Is initial cluster node |
 | `join_token` | string | `""` | Token for joining existing cluster |
 | `join_addrs` | []string | `[]` | Addresses of existing cluster members |
+| `enable_dht_discovery` | bool | `false` | Discover cluster via DHT (experimental) |
 
-##### Raft Settings
+**Raft Settings (`cluster.raft`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -486,40 +547,62 @@ cluster:
 | `commit_timeout` | duration | `50ms` | Log commit timeout |
 | `max_append_entries` | int | `64` | Max entries per append RPC |
 | `trailing_logs` | uint64 | `10000` | Logs to keep after snapshot |
+| `max_inflight` | int | `256` | Maximum in-flight append entries |
 
-##### Snapshot Settings
+**Snapshot Settings (`cluster.snapshot`):**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `interval` | duration | `30m` | Automatic snapshot interval |
-| `threshold` | uint64 | `8192` | Log entries before snapshot |
-| `retain_count` | int | `3` | Snapshots to retain |
+| `threshold` | uint64 | `8192` | Log entries before triggering snapshot |
+| `retain_count` | int | `3` | Number of snapshots to retain |
+
+> 📖 For detailed clustering documentation, see [Clustering Guide](clustering.md).
 
 ---
 
 ## Environment Variables
 
-Configuration can also be set via environment variables:
+Configuration can be set via environment variables using the pattern:
+- CLI: `BIB_<SECTION>_<FIELD>`
+- Daemon: `BIBD_<SECTION>_<FIELD>`
+
+### Examples
 
 ```bash
-# bib CLI
+# bib CLI environment variables
 export BIB_LOG_LEVEL=debug
 export BIB_SERVER=localhost:8080
 export BIB_OUTPUT_FORMAT=json
+export BIB_IDENTITY_NAME="Your Name"
 
-# bibd
+# bibd environment variables
 export BIBD_LOG_LEVEL=debug
 export BIBD_SERVER_PORT=9090
 export BIBD_P2P_MODE=full
+export BIBD_P2P_ENABLED=true
+export BIBD_DATABASE_BACKEND=postgres
 ```
 
-Environment variables use the pattern `BIB_<SECTION>_<FIELD>` or `BIBD_<SECTION>_<FIELD>`.
+### Nested Fields
+
+For nested configuration, use underscores:
+
+```bash
+# p2p.bootstrap.min_peers = 3
+export BIBD_P2P_BOOTSTRAP_MIN_PEERS=3
+
+# database.postgres.managed = true
+export BIBD_DATABASE_POSTGRES_MANAGED=true
+```
 
 ---
 
 ## Command-Line Flags
 
-Flags override configuration file and environment variables:
+Command-line flags override both configuration files and environment variables.
+
+### bib CLI Flags
 
 ```bash
 # Specify config file
@@ -528,30 +611,143 @@ bib --config /path/to/config.yaml command
 # Override output format
 bib --output json query ...
 
-# bibd with custom config
+# Enable verbose logging
+bib --verbose command
+```
+
+### bibd Flags
+
+```bash
+# Specify config file
 bibd -config /path/to/config.yaml
+
+# Print version and exit
+bibd -version
 ```
 
 ---
 
 ## Configuration Precedence
 
-Configuration is loaded in this order (later overrides earlier):
+Configuration is loaded in the following order (later sources override earlier ones):
 
-1. Default values
-2. Configuration file
-3. Environment variables
-4. Command-line flags
+```
+1. Default values (built-in)
+        ↓
+2. Configuration file (~/.config/bib/config.yaml)
+        ↓
+3. Environment variables (BIB_*, BIBD_*)
+        ↓
+4. Command-line flags (--config, --output, etc.)
+```
 
 ---
 
-## Viewing Current Configuration
+## Configuration Examples
 
-```bash
-# Show current configuration
-bib config show
+### Minimal Development Setup
 
-# Show configuration file path
-bib config path
+```yaml
+# ~/.config/bibd/config.yaml
+log:
+  level: debug
+
+p2p:
+  enabled: true
+  mode: proxy
+
+database:
+  backend: sqlite
 ```
 
+### Production Full Node
+
+```yaml
+# ~/.config/bibd/config.yaml
+log:
+  level: info
+  format: json
+  audit_path: "/var/log/bibd/audit.log"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  tls:
+    enabled: true
+    cert_file: "/etc/bibd/server.crt"
+    key_file: "/etc/bibd/server.key"
+
+p2p:
+  enabled: true
+  mode: full
+  full_replica:
+    sync_interval: 5m
+
+database:
+  backend: postgres
+  postgres:
+    managed: true
+    max_connections: 200
+
+credentials:
+  rotation_interval: 72h  # 3 days
+```
+
+### High-Availability Cluster Node
+
+```yaml
+# ~/.config/bibd/config.yaml
+log:
+  level: info
+  format: json
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+p2p:
+  enabled: true
+  mode: full
+
+database:
+  backend: postgres
+  postgres:
+    managed: true
+
+cluster:
+  enabled: true
+  cluster_name: "prod-cluster"
+  listen_addr: "0.0.0.0:4002"
+  advertise_addr: "10.0.1.10:4002"
+  is_voter: true
+```
+
+### Selective Sync Node
+
+```yaml
+# ~/.config/bibd/config.yaml
+p2p:
+  enabled: true
+  mode: selective
+  selective:
+    subscriptions:
+      - "weather/*"
+      - "finance/stocks"
+      - "research/papers/2024"
+
+database:
+  backend: postgres
+  postgres:
+    managed: true
+```
+
+---
+
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Quick Start](quickstart.md) | Getting started with configuration |
+| [Node Modes](../concepts/node-modes.md) | Detailed mode configuration |
+| [Database Security](../storage/database-security.md) | Database security options |
+| [Clustering Guide](../guides/clustering.md) | HA cluster configuration |

@@ -2,6 +2,8 @@
 
 This document describes how the bibd daemon manages storage backends (SQLite and PostgreSQL) through their complete lifecycle.
 
+---
+
 ## Overview
 
 The bibd daemon supports two storage backends:
@@ -359,11 +361,15 @@ Planned features:
 - Backup to S3/object storage
 - Backup encryption
 
-## See Also
+---
 
-- [Database Security & Hardening](database-security.md) - Comprehensive security documentation
-- [Configuration Guide](configuration.md) - Complete configuration reference
-- [Node Modes](node-modes.md) - Understanding mode/storage requirements
-- [Developer Guide](developer-guide.md) - Storage package development guide
-- [Phase 2.3 Implementation Outline](phase-2.3-implementation-outline.md) - Technical implementation details
+## Related Documentation
+
+| Document | Topic |
+|----------|-------|
+| [Database Security](database-security.md) | Security architecture |
+| [Configuration](../getting-started/configuration.md) | Storage configuration options |
+| [Node Modes](../concepts/node-modes.md) | Mode and storage requirements |
+| [Kubernetes Deployment](../deployment/kubernetes.md) | Kubernetes storage management |
+| [Developer Guide](../development/developer-guide.md) | Storage package development |
 
