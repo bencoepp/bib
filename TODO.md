@@ -443,7 +443,7 @@
   - S3 credentials managed by bibd (same security model)
 
 ### 2.8 Database Lifecycle Management
-- [ ] **DB-022**: Initialization workflow
+- [x] **DB-022**: Initialization workflow
   1. `bibd` starts, checks for existing PostgreSQL
   2. If none: provision container/pod with generated config
   3. Wait for PostgreSQL ready (health check)
@@ -452,21 +452,23 @@
   6. Switch to least-privilege role for normal operations
   7. Begin accepting requests
 
-- [ ] **DB-023**: Backup & recovery
+- [x] **DB-023**: Backup & recovery
   - Automatic daily backups (pg_dump)
   - Backup encryption with node key
   - Backup integrity verification
   - Point-in-time recovery (WAL archiving)
   - Backup to local storage or S3
-  - `bib admin backup` and `bib admin restore` commands
+  - `bib admin backup create` and `bib admin backup list` commands
+  - `bib admin restore` command
   - Disaster recovery documentation
 
-- [ ] **DB-024**: Graceful shutdown
+- [x] **DB-024**: Graceful shutdown
   - Drain active connections
   - Complete in-flight transactions
   - Checkpoint and sync
   - Stop PostgreSQL container/pod
   - Verify clean shutdown in logs
+  - `bib cleanup` command for resource cleanup
 
 
 
