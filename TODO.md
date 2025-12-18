@@ -430,13 +430,13 @@
   - Admin-only rollback with confirmation requirement
 
 ### 2.7 Blob Storage
-- [ ] **DB-020**: Local blob storage
+- [x] **DB-020**: Local blob storage
   - Content-addressed storage (CAS)
   - Directory structure: `<data_dir>/blobs/<hash[0:2]>/<hash[2:4]>/<hash>`
   - Integrity verification on read
   - Garbage collection for orphaned blobs
   - Blob access logged to audit trail
-- [ ] **DB-021**: Optional S3-compatible storage
+- [x] **DB-021**: Optional S3-compatible storage
   - MinIO/S3 integration
   - Configurable backend
   - Tiered storage (hot/cold)

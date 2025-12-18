@@ -32,6 +32,9 @@ type Config struct {
 
 	// BreakGlass emergency access configuration
 	BreakGlass BreakGlassConfig `mapstructure:"break_glass"`
+
+	// Blob storage configuration
+	Blob BlobConfig `mapstructure:"blob"`
 }
 
 // SQLiteConfig holds SQLite-specific configuration.
@@ -1021,6 +1024,7 @@ func DefaultConfig() Config {
 			RequireClientCert:       true,
 			AllowClientCertFallback: false,
 		},
+		Blob: DefaultBlobConfig(),
 	}
 }
 
@@ -1046,6 +1050,152 @@ func DefaultMigrationsConfig() MigrationsConfig {
 		VerifyChecksums:    true,
 		OnChecksumMismatch: "fail",
 		LockTimeoutSeconds: 15,
+	}
+}
+
+// BlobConfig holds blob storage configuration.
+type BlobConfig struct {
+	// Mode determines storage behavior: local, s3, or hybrid.
+	Mode string `mapstructure:"mode"`
+
+	// Local configuration.
+	Local BlobLocalConfig `mapstructure:"local"`
+
+	// S3 configuration.
+	S3 BlobS3Config `mapstructure:"s3"`
+
+	// Tiering configuration (for hybrid mode).
+	Tiering BlobTieringConfig `mapstructure:"tiering"`
+
+	// GC configuration.
+	GC BlobGCConfig `mapstructure:"gc"`
+
+	// Audit configuration.
+	BlobAudit BlobAuditConfig `mapstructure:"audit"`
+}
+
+// BlobLocalConfig holds local filesystem storage configuration.
+type BlobLocalConfig struct {
+	Enabled     bool                  `mapstructure:"enabled"`
+	Path        string                `mapstructure:"path"`
+	MaxSizeGB   int64                 `mapstructure:"max_size_gb"`
+	Encryption  BlobEncryptionConfig  `mapstructure:"encryption"`
+	Compression BlobCompressionConfig `mapstructure:"compression"`
+}
+
+// BlobS3Config holds S3-compatible storage configuration.
+type BlobS3Config struct {
+	Enabled              bool                  `mapstructure:"enabled"`
+	Endpoint             string                `mapstructure:"endpoint"`
+	Region               string                `mapstructure:"region"`
+	Bucket               string                `mapstructure:"bucket"`
+	Prefix               string                `mapstructure:"prefix"`
+	AccessKeyID          string                `mapstructure:"access_key_id"`
+	SecretAccessKey      string                `mapstructure:"secret_access_key"`
+	UseIAM               bool                  `mapstructure:"use_iam"`
+	ServerSideEncryption string                `mapstructure:"server_side_encryption"`
+	ClientSideEncryption BlobEncryptionConfig  `mapstructure:"client_side_encryption"`
+	Compression          BlobCompressionConfig `mapstructure:"compression"`
+}
+
+// BlobEncryptionConfig holds encryption configuration.
+type BlobEncryptionConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`
+	Algorithm     string `mapstructure:"algorithm"`
+	KeyDerivation string `mapstructure:"key_derivation"`
+	CustomKeyPath string `mapstructure:"custom_key_path"`
+}
+
+// BlobCompressionConfig holds compression configuration.
+type BlobCompressionConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`
+	Algorithm string `mapstructure:"algorithm"`
+	Level     int    `mapstructure:"level"`
+}
+
+// BlobTieringConfig holds tiering configuration for hybrid mode.
+type BlobTieringConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`
+	Strategy      string `mapstructure:"strategy"`
+	HotMaxSizeGB  int64  `mapstructure:"hot_max_size_gb"`
+	HotMaxAgeDays int    `mapstructure:"hot_max_age_days"`
+	ColdBackend   string `mapstructure:"cold_backend"`
+}
+
+// BlobGCConfig holds garbage collection configuration.
+type BlobGCConfig struct {
+	Enabled                  bool   `mapstructure:"enabled"`
+	Method                   string `mapstructure:"method"`
+	Schedule                 string `mapstructure:"schedule"`
+	StoragePressureThreshold int    `mapstructure:"storage_pressure_threshold"`
+	MinAgeDays               int    `mapstructure:"min_age_days"`
+	TrashRetentionDays       int    `mapstructure:"trash_retention_days"`
+	TrashPath                string `mapstructure:"trash_path"`
+}
+
+// BlobAuditConfig holds audit logging configuration for blob operations.
+type BlobAuditConfig struct {
+	LogReads   bool `mapstructure:"log_reads"`
+	LogWrites  bool `mapstructure:"log_writes"`
+	LogDeletes bool `mapstructure:"log_deletes"`
+}
+
+// DefaultBlobConfig returns the default blob storage configuration.
+func DefaultBlobConfig() BlobConfig {
+	return BlobConfig{
+		Mode: "local",
+		Local: BlobLocalConfig{
+			Enabled:   true,
+			Path:      "", // defaults to <data_dir>/blobs
+			MaxSizeGB: 0,  // unlimited
+			Encryption: BlobEncryptionConfig{
+				Enabled:       false,
+				Algorithm:     "aes256-gcm",
+				KeyDerivation: "node-identity",
+			},
+			Compression: BlobCompressionConfig{
+				Enabled:   true,
+				Algorithm: "zstd",
+				Level:     3,
+			},
+		},
+		S3: BlobS3Config{
+			Enabled:              false,
+			Region:               "us-east-1",
+			Prefix:               "blobs/",
+			ServerSideEncryption: "AES256",
+			ClientSideEncryption: BlobEncryptionConfig{
+				Enabled:       false,
+				Algorithm:     "aes256-gcm",
+				KeyDerivation: "node-identity",
+			},
+			Compression: BlobCompressionConfig{
+				Enabled:   true,
+				Algorithm: "zstd",
+				Level:     3,
+			},
+		},
+		Tiering: BlobTieringConfig{
+			Enabled:       false,
+			Strategy:      "lru",
+			HotMaxSizeGB:  100,
+			HotMaxAgeDays: 30,
+			ColdBackend:   "s3",
+		},
+		GC: BlobGCConfig{
+			Enabled:                  true,
+			Method:                   "mark-and-sweep",
+			Schedule:                 "0 2 * * *", // 2 AM daily
+			StoragePressureThreshold: 90,
+			MinAgeDays:               7,
+			TrashRetentionDays:       30,
+			TrashPath:                "", // defaults to <data_dir>/blobs/.trash
+		},
+		BlobAudit: BlobAuditConfig{
+			LogReads:   false,
+			LogWrites:  true,
+			LogDeletes: true,
+		},
 	}
 }
 
