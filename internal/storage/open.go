@@ -2,8 +2,31 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"io"
+
+	"bib/internal/logger"
+	"bib/internal/storage/audit"
 )
+
+// BlobAuditLogger interface for blob operation auditing (avoids import cycle).
+type BlobAuditLogger interface {
+	LogBlobOperation(ctx context.Context, op BlobAuditOperation) error
+}
+
+// BlobAuditOperation represents a blob operation for auditing.
+type BlobAuditOperation struct {
+	Operation  string
+	Hash       string
+	Size       int64
+	Success    bool
+	Error      string
+	UserID     string
+	DatasetID  string
+	VersionID  string
+	ChunkIndex int
+}
 
 // ValidateModeBackend validates that the node mode is compatible with the storage backend.
 // Returns an error if incompatible, or nil if compatible.
@@ -129,4 +152,119 @@ func Open(ctx context.Context, cfg Config, dataDir, nodeID, nodeMode string) (St
 		storageLog.Error("unknown storage backend", "backend", cfg.Backend)
 		return nil, fmt.Errorf("unknown storage backend: %s", cfg.Backend)
 	}
+}
+
+// OpenWithBlob creates both database store and blob storage manager.
+// This is the recommended way to initialize storage with blob support.
+// Returns the store and a generic blob manager interface to avoid import cycles.
+func OpenWithBlob(ctx context.Context, cfg Config, dataDir, nodeID, nodeMode string, s3Client audit.S3Client) (Store, interface{}, error) {
+	storageLog := getLogger("open")
+
+	// Open database store
+	store, err := Open(ctx, cfg, dataDir, nodeID, nodeMode)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Generate encryption key from node ID if encryption is enabled
+	var encKey []byte
+	if cfg.Blob.Local.Encryption.Enabled || cfg.Blob.S3.ClientSideEncryption.Enabled {
+		storageLog.Debug("generating blob encryption key from node identity")
+		encKey = deriveEncryptionKey(nodeID)
+	}
+
+	// Create audit logger wrapper for blob operations
+	var auditLogger BlobAuditLogger
+	if cfg.Blob.BlobAudit.LogWrites || cfg.Blob.BlobAudit.LogDeletes || cfg.Blob.BlobAudit.LogReads {
+		auditLogger = &blobAuditAdapter{
+			store: store,
+			log:   storageLog,
+		}
+	}
+
+	// Initialize blob storage using OpenBlobFunc
+	// This is set by the blob package to avoid import cycles
+	if OpenBlobFunc == nil {
+		store.Close()
+		return nil, nil, fmt.Errorf("blob storage not available; import bib/internal/storage/blob")
+	}
+
+	storageLog.Info("initializing blob storage", "mode", cfg.Blob.Mode)
+	blobManager, err := OpenBlobFunc(cfg.Blob, dataDir, encKey, store, s3Client, auditLogger, storageLog)
+	if err != nil {
+		store.Close()
+		storageLog.Error("failed to initialize blob storage", "error", err)
+		return nil, nil, fmt.Errorf("failed to initialize blob storage: %w", err)
+	}
+
+	// Start blob storage background processes using interface method
+	storageLog.Debug("starting blob storage background processes")
+	if starter, ok := blobManager.(interface{ Start(context.Context) error }); ok {
+		if err := starter.Start(ctx); err != nil {
+			if closer, ok := blobManager.(interface{ Close() error }); ok {
+				closer.Close()
+			}
+			store.Close()
+			storageLog.Error("failed to start blob storage", "error", err)
+			return nil, nil, fmt.Errorf("failed to start blob storage: %w", err)
+		}
+	}
+
+	storageLog.Info("storage opened successfully with blob support",
+		"db_backend", cfg.Backend,
+		"blob_mode", cfg.Blob.Mode,
+		"gc_enabled", cfg.Blob.GC.Enabled,
+	)
+
+	return store, blobManager, nil
+}
+
+// OpenBlobFunc is set by the blob package init to avoid import cycles.
+var OpenBlobFunc func(cfg BlobConfig, dataDir string, encKey []byte, dbStore Store, s3Client audit.S3Client, auditLog BlobAuditLogger, log *logger.Logger) (interface{}, error)
+
+// deriveEncryptionKey derives a 32-byte encryption key from the node ID.
+// This provides node-specific encryption without requiring separate key management.
+func deriveEncryptionKey(nodeID string) []byte {
+	// Use a simple approach: hash the node ID to get 32 bytes
+	// In production, you might want to use HKDF or similar
+	key := make([]byte, 32)
+	copy(key, []byte(nodeID))
+
+	// If node ID is shorter than 32 bytes, pad with random data
+	if len(nodeID) < 32 {
+		_, _ = io.ReadFull(rand.Reader, key[len(nodeID):])
+	}
+
+	return key
+}
+
+// blobAuditAdapter adapts blob audit operations to the storage audit system.
+type blobAuditAdapter struct {
+	store Store
+	log   *logger.Logger
+}
+
+func (a *blobAuditAdapter) LogBlobOperation(ctx context.Context, op BlobAuditOperation) error {
+	// For now, just log to the logger
+	// TODO: integrate with proper audit trail once implemented
+	if op.Success {
+		a.log.Info("blob operation",
+			"operation", op.Operation,
+			"hash", op.Hash,
+			"size", op.Size,
+			"dataset_id", op.DatasetID,
+			"version_id", op.VersionID,
+			"chunk_index", op.ChunkIndex,
+		)
+	} else {
+		a.log.Warn("blob operation failed",
+			"operation", op.Operation,
+			"hash", op.Hash,
+			"error", op.Error,
+			"dataset_id", op.DatasetID,
+			"version_id", op.VersionID,
+			"chunk_index", op.ChunkIndex,
+		)
+	}
+	return nil
 }

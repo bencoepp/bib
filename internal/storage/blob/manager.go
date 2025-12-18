@@ -9,6 +9,38 @@ import (
 	"bib/internal/storage/audit"
 )
 
+func init() {
+	// Register the blob Open function to avoid import cycles
+	storage.OpenBlobFunc = func(cfg storage.BlobConfig, dataDir string, encKey []byte, dbStore storage.Store, s3Client audit.S3Client, auditLog storage.BlobAuditLogger, log *logger.Logger) (interface{}, error) {
+		// Adapt the audit logger
+		var adaptedAuditLog AuditLogger
+		if auditLog != nil {
+			adaptedAuditLog = &auditLoggerAdapter{inner: auditLog}
+		}
+
+		return Open(cfg, dataDir, encKey, dbStore, s3Client, adaptedAuditLog, log)
+	}
+}
+
+// auditLoggerAdapter adapts storage.BlobAuditLogger to blob.AuditLogger
+type auditLoggerAdapter struct {
+	inner storage.BlobAuditLogger
+}
+
+func (a *auditLoggerAdapter) LogBlobOperation(ctx context.Context, op AuditOperation) error {
+	return a.inner.LogBlobOperation(ctx, storage.BlobAuditOperation{
+		Operation:  op.Operation,
+		Hash:       op.Hash,
+		Size:       op.Size,
+		Success:    op.Success,
+		Error:      op.Error,
+		UserID:     op.UserID,
+		DatasetID:  op.DatasetID,
+		VersionID:  op.VersionID,
+		ChunkIndex: op.ChunkIndex,
+	})
+}
+
 // Manager manages blob storage lifecycle and operations.
 type Manager struct {
 	cfg       Config
