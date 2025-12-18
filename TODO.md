@@ -305,7 +305,7 @@
 
 ### 2.4 Database Audit & Monitoring
 
-- [ ] **DB-011**: Comprehensive audit logging
+- [X] **DB-011**: Comprehensive audit logging
   - Every query logged with:
     - Timestamp (UTC, microsecond precision)
     - Job ID / Operation ID
@@ -319,7 +319,7 @@
   - Tamper detection via hash chains
   - Retention policy (configurable, default 90 days)
 
-- [ ] **DB-012**: Audit log schema
+- [X] **DB-012**: Audit log schema
   ```sql
   CREATE TABLE audit_log (
     id              BIGSERIAL PRIMARY KEY,
@@ -351,7 +351,7 @@
     FOR EACH ROW EXECUTE FUNCTION audit_no_modify();
   ```
 
-- [ ] **DB-013**: Real-time audit streaming
+- [X] **DB-013**: Real-time audit streaming
   - Audit events published to internal channel
   - Optional export to external SIEM (Splunk, ELK, etc.)
   - Alerts for suspicious patterns:
