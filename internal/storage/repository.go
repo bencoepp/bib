@@ -362,6 +362,9 @@ type AuditRepository interface {
 
 	// VerifyChain verifies the hash chain integrity.
 	VerifyChain(ctx context.Context, from, to int64) (bool, error)
+
+	// GetLastHash returns the hash of the last entry.
+	GetLastHash(ctx context.Context) (string, error)
 }
 
 // AuditEntry represents a single audit log entry.
@@ -390,6 +393,9 @@ type AuditEntry struct {
 	// TableName is the affected table.
 	TableName string `json:"table_name,omitempty"`
 
+	// Query is the SQL query (with sensitive values redacted).
+	Query string `json:"query,omitempty"`
+
 	// QueryHash is a hash of the query for grouping.
 	QueryHash string `json:"query_hash,omitempty"`
 
@@ -402,6 +408,9 @@ type AuditEntry struct {
 	// SourceComponent is the component that initiated the operation.
 	SourceComponent string `json:"source_component"`
 
+	// Actor is the user/node that initiated the operation.
+	Actor string `json:"actor,omitempty"`
+
 	// Metadata holds additional context.
 	Metadata map[string]any `json:"metadata,omitempty"`
 
@@ -410,6 +419,24 @@ type AuditEntry struct {
 
 	// EntryHash is the hash of this entry.
 	EntryHash string `json:"entry_hash"`
+
+	// Flags contains additional flags for this entry.
+	Flags AuditEntryFlags `json:"flags,omitempty"`
+}
+
+// AuditEntryFlags contains additional flags for audit entries.
+type AuditEntryFlags struct {
+	// BreakGlass indicates this was a break-glass session operation.
+	BreakGlass bool `json:"break_glass,omitempty"`
+
+	// RateLimited indicates this operation triggered rate limiting.
+	RateLimited bool `json:"rate_limited,omitempty"`
+
+	// Suspicious indicates this operation matched a suspicious pattern.
+	Suspicious bool `json:"suspicious,omitempty"`
+
+	// AlertTriggered indicates an alert was triggered for this operation.
+	AlertTriggered bool `json:"alert_triggered,omitempty"`
 }
 
 // AuditFilter defines filtering options for audit queries.
@@ -432,11 +459,17 @@ type AuditFilter struct {
 	// RoleUsed filters by role
 	RoleUsed string
 
+	// Actor filters by actor
+	Actor string
+
 	// After filters by timestamp
 	After *time.Time
 
 	// Before filters by timestamp
 	Before *time.Time
+
+	// Suspicious filters for suspicious entries only
+	Suspicious *bool
 
 	// Limit is the maximum number of results
 	Limit int

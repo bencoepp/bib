@@ -10,31 +10,47 @@ import (
 	"bib/internal/storage"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // AuditRepository implements storage.AuditRepository for PostgreSQL.
 type AuditRepository struct {
+	pool      *pgxpool.Pool
 	store     *Store
-	lastHash  string
+	nodeID    string
 	hashChain bool
+	lastHash  string
 }
 
-// Log records an audit entry.
+// Log persists an audit entry.
 func (r *AuditRepository) Log(ctx context.Context, entry *storage.AuditEntry) error {
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now().UTC()
 	}
 
-	// Calculate hash chain
-	if r.hashChain {
-		entry.PrevHash = r.lastHash
+	if entry.NodeID == "" {
+		entry.NodeID = r.nodeID
 	}
-	entry.EntryHash = r.calculateHash(entry)
 
-	// Use direct pool to avoid recursive audit logging
-	row := r.store.pool.QueryRow(ctx, `
-		INSERT INTO audit_log (timestamp, node_id, job_id, operation_id, role_used, action, table_name, query_hash, rows_affected, duration_ms, source_component, metadata, prev_hash, entry_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+	// Calculate hash chain if enabled
+	if r.hashChain && entry.EntryHash == "" {
+		entry.PrevHash = r.lastHash
+		entry.EntryHash = calculateEntryHash(entry)
+	}
+
+	pool := r.pool
+	if pool == nil && r.store != nil {
+		pool = r.store.pool
+	}
+
+	row := pool.QueryRow(ctx, `
+		INSERT INTO audit_log (
+			timestamp, node_id, job_id, operation_id, role_used, action,
+			table_name, query, query_hash, rows_affected, duration_ms,
+			source_component, actor, metadata, prev_hash, entry_hash,
+			flag_break_glass, flag_rate_limited, flag_suspicious, flag_alert_triggered
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		RETURNING id
 	`,
 		entry.Timestamp,
@@ -44,13 +60,19 @@ func (r *AuditRepository) Log(ctx context.Context, entry *storage.AuditEntry) er
 		entry.RoleUsed,
 		entry.Action,
 		nullableString(entry.TableName),
+		nullableString(entry.Query),
 		nullableString(entry.QueryHash),
 		entry.RowsAffected,
 		entry.DurationMS,
 		entry.SourceComponent,
+		nullableString(entry.Actor),
 		entry.Metadata,
 		nullableString(entry.PrevHash),
 		entry.EntryHash,
+		entry.Flags.BreakGlass,
+		entry.Flags.RateLimited,
+		entry.Flags.Suspicious,
+		entry.Flags.AlertTriggered,
 	)
 
 	var id int64
@@ -67,10 +89,13 @@ func (r *AuditRepository) Log(ctx context.Context, entry *storage.AuditEntry) er
 	return nil
 }
 
-// Query retrieves audit entries matching the filter.
+// Query retrieves entries matching a filter.
 func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter) ([]*storage.AuditEntry, error) {
 	query := `
-		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action, table_name, query_hash, rows_affected, duration_ms, source_component, metadata, prev_hash, entry_hash
+		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action,
+			table_name, query, query_hash, rows_affected, duration_ms,
+			source_component, actor, metadata, prev_hash, entry_hash,
+			flag_break_glass, flag_rate_limited, flag_suspicious, flag_alert_triggered
 		FROM audit_log WHERE 1=1
 	`
 	args := []any{}
@@ -112,6 +137,12 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 		argNum++
 	}
 
+	if filter.Actor != "" {
+		query += fmt.Sprintf(" AND actor = $%d", argNum)
+		args = append(args, filter.Actor)
+		argNum++
+	}
+
 	if filter.After != nil {
 		query += fmt.Sprintf(" AND timestamp >= $%d", argNum)
 		args = append(args, *filter.After)
@@ -124,6 +155,10 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 		argNum++
 	}
 
+	if filter.Suspicious != nil && *filter.Suspicious {
+		query += " AND flag_suspicious = true"
+	}
+
 	query += " ORDER BY id DESC"
 
 	if filter.Limit > 0 {
@@ -134,10 +169,14 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 	if filter.Offset > 0 {
 		query += fmt.Sprintf(" OFFSET $%d", argNum)
 		args = append(args, filter.Offset)
-		argNum++
 	}
 
-	rows, err := r.store.pool.Query(ctx, query, args...)
+	pool := r.pool
+	if pool == nil && r.store != nil {
+		pool = r.store.pool
+	}
+
+	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query audit log: %w", err)
 	}
@@ -155,7 +194,7 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 	return entries, rows.Err()
 }
 
-// Count returns the number of entries matching the filter.
+// Count returns the number of matching entries.
 func (r *AuditRepository) Count(ctx context.Context, filter storage.AuditFilter) (int64, error) {
 	query := "SELECT COUNT(*) FROM audit_log WHERE 1=1"
 	args := []any{}
@@ -188,20 +227,17 @@ func (r *AuditRepository) Count(ctx context.Context, filter storage.AuditFilter)
 	if filter.Before != nil {
 		query += fmt.Sprintf(" AND timestamp <= $%d", argNum)
 		args = append(args, *filter.Before)
-		argNum++
 	}
 
-	rows, err := r.store.pool.Query(ctx, query, args...)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count audit entries: %w", err)
+	pool := r.pool
+	if pool == nil && r.store != nil {
+		pool = r.store.pool
 	}
-	defer rows.Close()
 
 	var count int64
-	if rows.Next() {
-		if err := rows.Scan(&count); err != nil {
-			return 0, err
-		}
+	err := pool.QueryRow(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count audit entries: %w", err)
 	}
 
 	return count, nil
@@ -217,11 +253,14 @@ func (r *AuditRepository) GetByJobID(ctx context.Context, jobID string) ([]*stor
 	return r.Query(ctx, storage.AuditFilter{JobID: jobID})
 }
 
-// Purge removes entries older than the specified time.
+// Purge removes entries older than the given time.
 func (r *AuditRepository) Purge(ctx context.Context, before time.Time) (int64, error) {
-	// This will fail due to the append-only trigger
-	// In production, implement archival to cold storage before purging
-	result, err := r.store.pool.Exec(ctx, `
+	pool := r.pool
+	if pool == nil && r.store != nil {
+		pool = r.store.pool
+	}
+
+	result, err := pool.Exec(ctx, `
 		DELETE FROM audit_log WHERE timestamp < $1
 	`, before)
 
@@ -232,10 +271,18 @@ func (r *AuditRepository) Purge(ctx context.Context, before time.Time) (int64, e
 	return result.RowsAffected(), nil
 }
 
-// VerifyChain verifies the hash chain integrity between two entry IDs.
+// VerifyChain verifies hash chain integrity.
 func (r *AuditRepository) VerifyChain(ctx context.Context, from, to int64) (bool, error) {
-	rows, err := r.store.pool.Query(ctx, `
-		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action, table_name, query_hash, rows_affected, duration_ms, source_component, metadata, prev_hash, entry_hash
+	pool := r.pool
+	if pool == nil && r.store != nil {
+		pool = r.store.pool
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action,
+			table_name, query, query_hash, rows_affected, duration_ms,
+			source_component, actor, metadata, prev_hash, entry_hash,
+			flag_break_glass, flag_rate_limited, flag_suspicious, flag_alert_triggered
 		FROM audit_log WHERE id >= $1 AND id <= $2 ORDER BY id ASC
 	`, from, to)
 	if err != nil {
@@ -250,13 +297,11 @@ func (r *AuditRepository) VerifyChain(ctx context.Context, from, to int64) (bool
 			return false, err
 		}
 
-		// Verify previous hash matches
 		if entry.PrevHash != prevHash {
 			return false, nil
 		}
 
-		// Verify entry hash
-		calculatedHash := r.calculateHash(entry)
+		calculatedHash := calculateEntryHash(entry)
 		if entry.EntryHash != calculatedHash {
 			return false, nil
 		}
@@ -267,9 +312,35 @@ func (r *AuditRepository) VerifyChain(ctx context.Context, from, to int64) (bool
 	return true, rows.Err()
 }
 
-// calculateHash calculates the hash for an audit entry.
-func (r *AuditRepository) calculateHash(entry *storage.AuditEntry) string {
-	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s",
+// GetLastHash returns the hash of the last entry.
+func (r *AuditRepository) GetLastHash(ctx context.Context) (string, error) {
+	pool := r.pool
+	if pool == nil && r.store != nil {
+		pool = r.store.pool
+	}
+
+	var entryHash *string
+	err := pool.QueryRow(ctx, `
+		SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1
+	`).Scan(&entryHash)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get last hash: %w", err)
+	}
+
+	if entryHash == nil {
+		return "", nil
+	}
+	return *entryHash, nil
+}
+
+// Helper functions
+
+func calculateEntryHash(entry *storage.AuditEntry) string {
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s",
 		entry.Timestamp.UTC().Format(time.RFC3339Nano),
 		entry.NodeID,
 		entry.OperationID,
@@ -281,36 +352,42 @@ func (r *AuditRepository) calculateHash(entry *storage.AuditEntry) string {
 		entry.DurationMS,
 		entry.PrevHash,
 		entry.JobID,
+		entry.QueryHash,
 	)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
 
-// Helper functions
-
 func scanAuditEntry(rows pgx.Rows) (*storage.AuditEntry, error) {
 	var (
-		id              int64
-		timestamp       interface{}
-		nodeID          string
-		jobID           *string
-		operationID     string
-		roleUsed        string
-		action          string
-		tableName       *string
-		queryHash       *string
-		rowsAffected    *int
-		durationMS      *int
-		sourceComponent string
-		metadata        map[string]any
-		prevHash        *string
-		entryHash       string
+		id                 int64
+		timestamp          interface{}
+		nodeID             string
+		jobID              *string
+		operationID        string
+		roleUsed           string
+		action             string
+		tableName          *string
+		query              *string
+		queryHash          *string
+		rowsAffected       *int
+		durationMS         *int
+		sourceComponent    string
+		actor              *string
+		metadata           map[string]any
+		prevHash           *string
+		entryHash          string
+		flagBreakGlass     bool
+		flagRateLimited    bool
+		flagSuspicious     bool
+		flagAlertTriggered bool
 	)
 
 	err := rows.Scan(
 		&id, &timestamp, &nodeID, &jobID, &operationID, &roleUsed,
-		&action, &tableName, &queryHash, &rowsAffected, &durationMS,
-		&sourceComponent, &metadata, &prevHash, &entryHash,
+		&action, &tableName, &query, &queryHash, &rowsAffected, &durationMS,
+		&sourceComponent, &actor, &metadata, &prevHash, &entryHash,
+		&flagBreakGlass, &flagRateLimited, &flagSuspicious, &flagAlertTriggered,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan audit entry: %w", err)
@@ -325,6 +402,12 @@ func scanAuditEntry(rows pgx.Rows) (*storage.AuditEntry, error) {
 		SourceComponent: sourceComponent,
 		Metadata:        metadata,
 		EntryHash:       entryHash,
+		Flags: storage.AuditEntryFlags{
+			BreakGlass:     flagBreakGlass,
+			RateLimited:    flagRateLimited,
+			Suspicious:     flagSuspicious,
+			AlertTriggered: flagAlertTriggered,
+		},
 	}
 
 	entry.Timestamp = parseTime(timestamp)
@@ -332,23 +415,24 @@ func scanAuditEntry(rows pgx.Rows) (*storage.AuditEntry, error) {
 	if jobID != nil {
 		entry.JobID = *jobID
 	}
-
 	if tableName != nil {
 		entry.TableName = *tableName
 	}
-
+	if query != nil {
+		entry.Query = *query
+	}
 	if queryHash != nil {
 		entry.QueryHash = *queryHash
 	}
-
 	if rowsAffected != nil {
 		entry.RowsAffected = *rowsAffected
 	}
-
 	if durationMS != nil {
 		entry.DurationMS = *durationMS
 	}
-
+	if actor != nil {
+		entry.Actor = *actor
+	}
 	if prevHash != nil {
 		entry.PrevHash = *prevHash
 	}

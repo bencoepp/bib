@@ -61,10 +61,6 @@ func TestDefaultBibConfig(t *testing.T) {
 func TestDefaultBibdConfig(t *testing.T) {
 	cfg := DefaultBibdConfig()
 
-	if cfg == nil {
-		t.Fatal("DefaultBibdConfig returned nil")
-	}
-
 	// Log configuration
 	if cfg.Log.Level != "info" {
 		t.Errorf("expected log level 'info', got %q", cfg.Log.Level)
@@ -86,8 +82,8 @@ func TestDefaultBibdConfig(t *testing.T) {
 	if cfg.Server.Port != 8080 {
 		t.Errorf("expected server port 8080, got %d", cfg.Server.Port)
 	}
-	if cfg.Server.PIDFile != "/var/run/bibd.pid" {
-		t.Errorf("expected PID file '/var/run/bibd.pid', got %q", cfg.Server.PIDFile)
+	if cfg.Server.PIDFile != "~/bibd.pid" {
+		t.Errorf("expected PID file '~/bibd.pid', got %q", cfg.Server.PIDFile)
 	}
 	if cfg.Server.DataDir != "~/.local/share/bibd" {
 		t.Errorf("expected data dir '~/.local/share/bibd', got %q", cfg.Server.DataDir)

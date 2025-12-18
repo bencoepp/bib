@@ -15,67 +15,81 @@ import (
 // AuditRepository implements storage.AuditRepository for SQLite.
 type AuditRepository struct {
 	store     *Store
-	lastHash  string
+	nodeID    string
 	hashChain bool
+	lastHash  string
 }
 
-// Log records an audit entry.
+// Log persists an audit entry.
 func (r *AuditRepository) Log(ctx context.Context, entry *storage.AuditEntry) error {
-	// Set timestamp if not set
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now().UTC()
 	}
 
-	metadataJSON, _ := json.Marshal(entry.Metadata)
-
-	// Calculate hash chain
-	if r.hashChain {
-		entry.PrevHash = r.lastHash
-		entry.EntryHash = r.calculateHash(entry)
-	} else {
-		entry.EntryHash = r.calculateHash(entry)
+	if entry.NodeID == "" {
+		entry.NodeID = r.nodeID
 	}
 
-	// Use direct exec to avoid recursive audit logging
+	// Calculate hash chain if enabled
+	if r.hashChain && entry.EntryHash == "" {
+		entry.PrevHash = r.lastHash
+		entry.EntryHash = r.calculateEntryHash(entry)
+	}
+
+	metadataJSON, _ := json.Marshal(entry.Metadata)
+
 	result, err := r.store.db.ExecContext(ctx, `
-		INSERT INTO audit_log (timestamp, node_id, job_id, operation_id, role_used, action, table_name, query_hash, rows_affected, duration_ms, source_component, metadata, prev_hash, entry_hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO audit_log (
+			timestamp, node_id, job_id, operation_id, role_used, action,
+			table_name, query, query_hash, rows_affected, duration_ms,
+			source_component, actor, metadata, prev_hash, entry_hash,
+			flag_break_glass, flag_rate_limited, flag_suspicious, flag_alert_triggered
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		entry.Timestamp.UTC().Format(time.RFC3339Nano),
 		entry.NodeID,
-		nullString(entry.JobID),
+		nullStr(entry.JobID),
 		entry.OperationID,
 		entry.RoleUsed,
 		entry.Action,
-		nullString(entry.TableName),
-		nullString(entry.QueryHash),
+		nullStr(entry.TableName),
+		nullStr(entry.Query),
+		nullStr(entry.QueryHash),
 		entry.RowsAffected,
 		entry.DurationMS,
 		entry.SourceComponent,
+		nullStr(entry.Actor),
 		string(metadataJSON),
-		nullString(entry.PrevHash),
+		nullStr(entry.PrevHash),
 		entry.EntryHash,
+		entry.Flags.BreakGlass,
+		entry.Flags.RateLimited,
+		entry.Flags.Suspicious,
+		entry.Flags.AlertTriggered,
 	)
 
 	if err != nil {
 		return fmt.Errorf("failed to log audit entry: %w", err)
 	}
 
-	// Update last hash and get the ID
+	id, _ := result.LastInsertId()
+	entry.ID = id
+
 	if r.hashChain {
 		r.lastHash = entry.EntryHash
 	}
 
-	id, _ := result.LastInsertId()
-	entry.ID = id
-
 	return nil
 }
 
-// Query retrieves audit entries matching the filter.
+// Query retrieves entries matching a filter.
 func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter) ([]*storage.AuditEntry, error) {
 	query := `
-		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action, table_name, query_hash, rows_affected, duration_ms, source_component, metadata, prev_hash, entry_hash
+		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action,
+			table_name, query, query_hash, rows_affected, duration_ms,
+			source_component, actor, metadata, prev_hash, entry_hash,
+			flag_break_glass, flag_rate_limited, flag_suspicious, flag_alert_triggered
 		FROM audit_log WHERE 1=1
 	`
 	args := []any{}
@@ -110,6 +124,11 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 		args = append(args, filter.RoleUsed)
 	}
 
+	if filter.Actor != "" {
+		query += " AND actor = ?"
+		args = append(args, filter.Actor)
+	}
+
 	if filter.After != nil {
 		query += " AND timestamp >= ?"
 		args = append(args, filter.After.UTC().Format(time.RFC3339Nano))
@@ -118,6 +137,10 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 	if filter.Before != nil {
 		query += " AND timestamp <= ?"
 		args = append(args, filter.Before.UTC().Format(time.RFC3339Nano))
+	}
+
+	if filter.Suspicious != nil && *filter.Suspicious {
+		query += " AND flag_suspicious = 1"
 	}
 
 	query += " ORDER BY id DESC"
@@ -139,7 +162,7 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 
 	var entries []*storage.AuditEntry
 	for rows.Next() {
-		entry, err := scanAuditEntry(rows)
+		entry, err := r.scanAuditEntry(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +172,7 @@ func (r *AuditRepository) Query(ctx context.Context, filter storage.AuditFilter)
 	return entries, rows.Err()
 }
 
-// Count returns the number of entries matching the filter.
+// Count returns the number of matching entries.
 func (r *AuditRepository) Count(ctx context.Context, filter storage.AuditFilter) (int64, error) {
 	query := "SELECT COUNT(*) FROM audit_log WHERE 1=1"
 	args := []any{}
@@ -179,17 +202,10 @@ func (r *AuditRepository) Count(ctx context.Context, filter storage.AuditFilter)
 		args = append(args, filter.Before.UTC().Format(time.RFC3339Nano))
 	}
 
-	rows, err := r.store.db.QueryContext(ctx, query, args...)
+	var count int64
+	err := r.store.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count audit entries: %w", err)
-	}
-	defer rows.Close()
-
-	var count int64
-	if rows.Next() {
-		if err := rows.Scan(&count); err != nil {
-			return 0, err
-		}
 	}
 
 	return count, nil
@@ -205,28 +221,27 @@ func (r *AuditRepository) GetByJobID(ctx context.Context, jobID string) ([]*stor
 	return r.Query(ctx, storage.AuditFilter{JobID: jobID})
 }
 
-// Purge removes entries older than the specified time.
+// Purge removes entries older than the given time.
 func (r *AuditRepository) Purge(ctx context.Context, before time.Time) (int64, error) {
-	// Note: This bypasses the append-only trigger by dropping and recreating the trigger
-	// In production, you might want to handle this differently (e.g., archive to cold storage)
-
 	result, err := r.store.db.ExecContext(ctx, `
 		DELETE FROM audit_log WHERE timestamp < ?
 	`, before.UTC().Format(time.RFC3339Nano))
 
 	if err != nil {
-		// If delete fails due to trigger, we need a different approach
-		// For now, just return the error
 		return 0, fmt.Errorf("failed to purge audit log: %w", err)
 	}
 
-	return result.RowsAffected()
+	count, _ := result.RowsAffected()
+	return count, nil
 }
 
-// VerifyChain verifies the hash chain integrity between two entry IDs.
+// VerifyChain verifies hash chain integrity.
 func (r *AuditRepository) VerifyChain(ctx context.Context, from, to int64) (bool, error) {
 	rows, err := r.store.db.QueryContext(ctx, `
-		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action, table_name, query_hash, rows_affected, duration_ms, source_component, metadata, prev_hash, entry_hash
+		SELECT id, timestamp, node_id, job_id, operation_id, role_used, action,
+			table_name, query, query_hash, rows_affected, duration_ms,
+			source_component, actor, metadata, prev_hash, entry_hash,
+			flag_break_glass, flag_rate_limited, flag_suspicious, flag_alert_triggered
 		FROM audit_log WHERE id >= ? AND id <= ? ORDER BY id ASC
 	`, from, to)
 	if err != nil {
@@ -236,18 +251,16 @@ func (r *AuditRepository) VerifyChain(ctx context.Context, from, to int64) (bool
 
 	var prevHash string
 	for rows.Next() {
-		entry, err := scanAuditEntry(rows)
+		entry, err := r.scanAuditEntry(rows)
 		if err != nil {
 			return false, err
 		}
 
-		// Verify previous hash matches
 		if entry.PrevHash != prevHash {
 			return false, nil
 		}
 
-		// Verify entry hash
-		calculatedHash := r.calculateHash(entry)
+		calculatedHash := r.calculateEntryHash(entry)
 		if entry.EntryHash != calculatedHash {
 			return false, nil
 		}
@@ -258,9 +271,27 @@ func (r *AuditRepository) VerifyChain(ctx context.Context, from, to int64) (bool
 	return true, rows.Err()
 }
 
-// calculateHash calculates the hash for an audit entry.
-func (r *AuditRepository) calculateHash(entry *storage.AuditEntry) string {
-	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s",
+// GetLastHash returns the hash of the last entry.
+func (r *AuditRepository) GetLastHash(ctx context.Context) (string, error) {
+	var entryHash sql.NullString
+	err := r.store.db.QueryRowContext(ctx, `
+		SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1
+	`).Scan(&entryHash)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get last hash: %w", err)
+	}
+
+	return entryHash.String, nil
+}
+
+// Helper functions
+
+func (r *AuditRepository) calculateEntryHash(entry *storage.AuditEntry) string {
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%d|%s|%s|%s",
 		entry.Timestamp.UTC().Format(time.RFC3339Nano),
 		entry.NodeID,
 		entry.OperationID,
@@ -272,39 +303,50 @@ func (r *AuditRepository) calculateHash(entry *storage.AuditEntry) string {
 		entry.DurationMS,
 		entry.PrevHash,
 		entry.JobID,
+		entry.QueryHash,
 	)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
 
-// Helper functions
-
-func scanAuditEntry(rows *sql.Rows) (*storage.AuditEntry, error) {
+func (r *AuditRepository) scanAuditEntry(rows *sql.Rows) (*storage.AuditEntry, error) {
 	var (
-		id              int64
-		timestamp       string
-		nodeID          string
-		jobID           sql.NullString
-		operationID     string
-		roleUsed        string
-		action          string
-		tableName       sql.NullString
-		queryHash       sql.NullString
-		rowsAffected    sql.NullInt64
-		durationMS      sql.NullInt64
-		sourceComponent string
-		metadataJSON    sql.NullString
-		prevHash        sql.NullString
-		entryHash       string
+		id                 int64
+		timestamp          string
+		nodeID             string
+		jobID              sql.NullString
+		operationID        string
+		roleUsed           string
+		action             string
+		tableName          sql.NullString
+		query              sql.NullString
+		queryHash          sql.NullString
+		rowsAffected       sql.NullInt64
+		durationMS         sql.NullInt64
+		sourceComponent    string
+		actor              sql.NullString
+		metadataJSON       string
+		prevHash           sql.NullString
+		entryHash          string
+		flagBreakGlass     bool
+		flagRateLimited    bool
+		flagSuspicious     bool
+		flagAlertTriggered bool
 	)
 
 	err := rows.Scan(
 		&id, &timestamp, &nodeID, &jobID, &operationID, &roleUsed,
-		&action, &tableName, &queryHash, &rowsAffected, &durationMS,
-		&sourceComponent, &metadataJSON, &prevHash, &entryHash,
+		&action, &tableName, &query, &queryHash, &rowsAffected, &durationMS,
+		&sourceComponent, &actor, &metadataJSON, &prevHash, &entryHash,
+		&flagBreakGlass, &flagRateLimited, &flagSuspicious, &flagAlertTriggered,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan audit entry: %w", err)
+	}
+
+	var metadata map[string]any
+	if metadataJSON != "" {
+		_ = json.Unmarshal([]byte(metadataJSON), &metadata)
 	}
 
 	entry := &storage.AuditEntry{
@@ -314,7 +356,14 @@ func scanAuditEntry(rows *sql.Rows) (*storage.AuditEntry, error) {
 		RoleUsed:        roleUsed,
 		Action:          action,
 		SourceComponent: sourceComponent,
+		Metadata:        metadata,
 		EntryHash:       entryHash,
+		Flags: storage.AuditEntryFlags{
+			BreakGlass:     flagBreakGlass,
+			RateLimited:    flagRateLimited,
+			Suspicious:     flagSuspicious,
+			AlertTriggered: flagAlertTriggered,
+		},
 	}
 
 	if t, err := time.Parse(time.RFC3339Nano, timestamp); err == nil {
@@ -324,35 +373,36 @@ func scanAuditEntry(rows *sql.Rows) (*storage.AuditEntry, error) {
 	if jobID.Valid {
 		entry.JobID = jobID.String
 	}
-
 	if tableName.Valid {
 		entry.TableName = tableName.String
 	}
-
+	if query.Valid {
+		entry.Query = query.String
+	}
 	if queryHash.Valid {
 		entry.QueryHash = queryHash.String
 	}
-
 	if rowsAffected.Valid {
 		entry.RowsAffected = int(rowsAffected.Int64)
 	}
-
 	if durationMS.Valid {
 		entry.DurationMS = int(durationMS.Int64)
 	}
-
+	if actor.Valid {
+		entry.Actor = actor.String
+	}
 	if prevHash.Valid {
 		entry.PrevHash = prevHash.String
 	}
 
-	if metadataJSON.Valid && metadataJSON.String != "" {
-		var metadata map[string]any
-		if err := json.Unmarshal([]byte(metadataJSON.String), &metadata); err == nil {
-			entry.Metadata = metadata
-		}
-	}
-
 	return entry, nil
+}
+
+func nullStr(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // Ensure interface compliance

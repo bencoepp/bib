@@ -370,29 +370,38 @@ const auditSQL = `-- PostgreSQL Audit Configuration
 
 -- Create audit log table
 CREATE TABLE IF NOT EXISTS audit_log (
-    id              BIGSERIAL PRIMARY KEY,
-    timestamp       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    node_id         TEXT NOT NULL,
-    job_id          UUID,
-    operation_id    UUID NOT NULL,
-    role_used       TEXT NOT NULL,
-    action          TEXT NOT NULL,
-    table_name      TEXT,
-    query_hash      TEXT,
-    rows_affected   INTEGER,
-    duration_ms     INTEGER,
-    source_component TEXT,
-    metadata        JSONB,
-    prev_hash       TEXT,
-    entry_hash      TEXT NOT NULL
+    id                   BIGSERIAL PRIMARY KEY,
+    timestamp            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    node_id              TEXT NOT NULL,
+    job_id               UUID,
+    operation_id         UUID NOT NULL,
+    role_used            TEXT NOT NULL,
+    action               TEXT NOT NULL,
+    table_name           TEXT,
+    query                TEXT,
+    query_hash           TEXT,
+    rows_affected        INTEGER,
+    duration_ms          INTEGER,
+    source_component     TEXT,
+    actor                TEXT,
+    metadata             JSONB,
+    prev_hash            TEXT,
+    entry_hash           TEXT NOT NULL,
+    flag_break_glass     BOOLEAN NOT NULL DEFAULT FALSE,
+    flag_rate_limited    BOOLEAN NOT NULL DEFAULT FALSE,
+    flag_suspicious      BOOLEAN NOT NULL DEFAULT FALSE,
+    flag_alert_triggered BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Create index for common queries
+-- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_log_node_id ON audit_log(node_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_job_id ON audit_log(job_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_operation_id ON audit_log(operation_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor);
+CREATE INDEX IF NOT EXISTS idx_audit_log_suspicious ON audit_log(flag_suspicious) WHERE flag_suspicious = TRUE;
+CREATE INDEX IF NOT EXISTS idx_audit_log_query_hash ON audit_log(query_hash);
 
 -- Append-only trigger
 CREATE OR REPLACE FUNCTION audit_no_modify()

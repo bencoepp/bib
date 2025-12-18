@@ -450,8 +450,167 @@ type AuditConfig struct {
 	// StreamToExternal enables streaming to external SIEM.
 	StreamToExternal bool `mapstructure:"stream_to_external"`
 
-	// ExternalEndpoint is the endpoint for external streaming.
+	// ExternalEndpoint is the endpoint for external streaming (deprecated, use Syslog).
 	ExternalEndpoint string `mapstructure:"external_endpoint,omitempty"`
+
+	// SensitiveFields are field names to redact from audit logs.
+	SensitiveFields []string `mapstructure:"sensitive_fields"`
+
+	// Syslog holds syslog export configuration.
+	Syslog SyslogExportConfig `mapstructure:"syslog"`
+
+	// FileExport holds file export configuration.
+	FileExport FileExportConfig `mapstructure:"file_export"`
+
+	// S3Export holds S3 export configuration.
+	S3Export S3ExportConfig `mapstructure:"s3_export"`
+
+	// Alerts holds alert detection configuration.
+	Alerts AlertDetectionConfig `mapstructure:"alerts"`
+
+	// RateLimit holds rate limiting configuration.
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
+}
+
+// SyslogExportConfig holds syslog export configuration.
+type SyslogExportConfig struct {
+	// Enabled controls whether syslog export is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Network is the network type: "tcp", "udp", or "unix".
+	Network string `mapstructure:"network"`
+
+	// Address is the syslog server address.
+	Address string `mapstructure:"address"`
+
+	// TLS enables TLS for TCP connections.
+	TLS bool `mapstructure:"tls"`
+
+	// Facility is the syslog facility (0-23).
+	Facility int `mapstructure:"facility"`
+
+	// Tag is the syslog tag/program name.
+	Tag string `mapstructure:"tag"`
+}
+
+// FileExportConfig holds file export configuration.
+type FileExportConfig struct {
+	// Enabled controls whether file export is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Directory is the base directory for export files.
+	Directory string `mapstructure:"directory"`
+
+	// MaxFileSizeMB is the maximum file size before rotation.
+	MaxFileSizeMB int `mapstructure:"max_file_size_mb"`
+
+	// Compress enables gzip compression.
+	Compress bool `mapstructure:"compress"`
+}
+
+// S3ExportConfig holds S3 export configuration.
+type S3ExportConfig struct {
+	// Enabled controls whether S3 export is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Endpoint is the S3 endpoint URL.
+	Endpoint string `mapstructure:"endpoint"`
+
+	// Region is the AWS region.
+	Region string `mapstructure:"region"`
+
+	// Bucket is the S3 bucket name.
+	Bucket string `mapstructure:"bucket"`
+
+	// Prefix is the key prefix for objects.
+	Prefix string `mapstructure:"prefix"`
+
+	// UseIAM uses IAM role for authentication.
+	UseIAM bool `mapstructure:"use_iam"`
+
+	// BatchSize is the number of entries per batch upload.
+	BatchSize int `mapstructure:"batch_size"`
+
+	// Compress enables gzip compression.
+	Compress bool `mapstructure:"compress"`
+}
+
+// AlertDetectionConfig holds alert detection configuration.
+type AlertDetectionConfig struct {
+	// Enabled controls whether alert detection is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// ThresholdRules are simple threshold-based rules.
+	ThresholdRules []ThresholdRuleConfig `mapstructure:"threshold_rules"`
+
+	// CELRules are CEL expression-based rules.
+	CELRules []CELRuleConfig `mapstructure:"cel_rules"`
+
+	// WindowDuration is the default time window for detection.
+	WindowDuration time.Duration `mapstructure:"window_duration"`
+}
+
+// ThresholdRuleConfig defines a threshold-based alert rule.
+type ThresholdRuleConfig struct {
+	// Name is the unique rule name.
+	Name string `mapstructure:"name"`
+
+	// Description describes what this rule detects.
+	Description string `mapstructure:"description"`
+
+	// Enabled controls whether this rule is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Action filters by action type.
+	Action string `mapstructure:"action"`
+
+	// Threshold is the count that triggers an alert.
+	Threshold int `mapstructure:"threshold"`
+
+	// WindowSeconds is the time window in seconds.
+	WindowSeconds int `mapstructure:"window_seconds"`
+
+	// GroupBy determines how to group counts.
+	GroupBy string `mapstructure:"group_by"`
+
+	// TriggerRateLimit triggers rate limiting when exceeded.
+	TriggerRateLimit bool `mapstructure:"trigger_rate_limit"`
+}
+
+// CELRuleConfig holds configuration for a CEL-based rule.
+type CELRuleConfig struct {
+	// Name is the unique rule name.
+	Name string `mapstructure:"name"`
+
+	// Description describes what this rule detects.
+	Description string `mapstructure:"description"`
+
+	// Enabled controls whether this rule is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Expression is the CEL expression to evaluate.
+	Expression string `mapstructure:"expression"`
+
+	// TriggerRateLimit triggers rate limiting when matched.
+	TriggerRateLimit bool `mapstructure:"trigger_rate_limit"`
+}
+
+// RateLimitConfig holds rate limiting configuration.
+type RateLimitConfig struct {
+	// Enabled controls whether rate limiting is active.
+	Enabled bool `mapstructure:"enabled"`
+
+	// DefaultLimit is the default rate limit per window.
+	DefaultLimit int `mapstructure:"default_limit"`
+
+	// WindowSeconds is the default time window in seconds.
+	WindowSeconds int `mapstructure:"window_seconds"`
+
+	// BlockDurationSeconds is how long to block after limit is reached.
+	BlockDurationSeconds int `mapstructure:"block_duration_seconds"`
+
+	// BypassRoles are roles that bypass rate limiting.
+	BypassRoles []string `mapstructure:"bypass_roles"`
 }
 
 // BreakGlassConfig holds emergency access configuration.
@@ -723,10 +882,93 @@ func DefaultConfig() Config {
 			},
 		},
 		Audit: AuditConfig{
-			Enabled:          true,
-			RetentionDays:    90,
-			HashChain:        true,
-			StreamToExternal: false,
+			Enabled:       true,
+			RetentionDays: 90,
+			HashChain:     true,
+			SensitiveFields: []string{
+				"password", "token", "key", "secret", "credential", "auth",
+				"api_key", "apikey", "access_token", "refresh_token",
+				"private_key", "encryption_key", "session", "cookie", "bearer",
+			},
+			Syslog: SyslogExportConfig{
+				Enabled:  false,
+				Network:  "udp",
+				Address:  "localhost:514",
+				Facility: 16, // LOG_LOCAL0
+				Tag:      "bibd",
+			},
+			FileExport: FileExportConfig{
+				Enabled:       false,
+				Directory:     "./audit-logs",
+				MaxFileSizeMB: 100,
+				Compress:      true,
+			},
+			S3Export: S3ExportConfig{
+				Enabled:   false,
+				Region:    "us-east-1",
+				Prefix:    "audit/",
+				BatchSize: 1000,
+				Compress:  true,
+			},
+			Alerts: AlertDetectionConfig{
+				Enabled:        true,
+				WindowDuration: 5 * time.Minute,
+				ThresholdRules: []ThresholdRuleConfig{
+					{
+						Name:             "bulk_select",
+						Description:      "Large number of SELECT queries in short time",
+						Enabled:          true,
+						Action:           "SELECT",
+						Threshold:        100,
+						WindowSeconds:    300,
+						GroupBy:          "actor",
+						TriggerRateLimit: true,
+					},
+					{
+						Name:             "bulk_delete",
+						Description:      "Large number of DELETE queries in short time",
+						Enabled:          true,
+						Action:           "DELETE",
+						Threshold:        50,
+						WindowSeconds:    300,
+						GroupBy:          "actor",
+						TriggerRateLimit: true,
+					},
+					{
+						Name:             "ddl_operations",
+						Description:      "Schema modification attempts",
+						Enabled:          true,
+						Action:           "DDL",
+						Threshold:        5,
+						WindowSeconds:    60,
+						GroupBy:          "role",
+						TriggerRateLimit: true,
+					},
+				},
+				CELRules: []CELRuleConfig{
+					{
+						Name:             "large_result_set",
+						Description:      "Query returned unusually large number of rows",
+						Enabled:          true,
+						Expression:       `entry.rows_affected > 10000`,
+						TriggerRateLimit: true,
+					},
+					{
+						Name:             "slow_query",
+						Description:      "Query took unusually long to execute",
+						Enabled:          true,
+						Expression:       `entry.duration_ms > 30000`,
+						TriggerRateLimit: false,
+					},
+				},
+			},
+			RateLimit: RateLimitConfig{
+				Enabled:              true,
+				DefaultLimit:         1000,
+				WindowSeconds:        60,
+				BlockDurationSeconds: 300,
+				BypassRoles:          []string{"bibd_admin"},
+			},
 		},
 		BreakGlass: BreakGlassConfig{
 			Enabled:        false,

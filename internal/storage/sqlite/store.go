@@ -85,7 +85,7 @@ func New(cfg storage.SQLiteConfig, dataDir, nodeID string) (*Store, error) {
 	s.datasets = &DatasetRepository{store: s}
 	s.jobs = &JobRepository{store: s}
 	s.nodes = &NodeRepository{store: s}
-	s.audit = &AuditRepository{store: s}
+	s.audit = &AuditRepository{store: s, nodeID: nodeID, hashChain: true}
 
 	return s, nil
 }
@@ -416,13 +416,19 @@ CREATE TABLE IF NOT EXISTS audit_log (
 	role_used TEXT NOT NULL,
 	action TEXT NOT NULL,
 	table_name TEXT,
+	query TEXT,
 	query_hash TEXT,
 	rows_affected INTEGER,
 	duration_ms INTEGER,
 	source_component TEXT,
+	actor TEXT,
 	metadata TEXT, -- JSON object
 	prev_hash TEXT,
-	entry_hash TEXT NOT NULL
+	entry_hash TEXT NOT NULL,
+	flag_break_glass INTEGER NOT NULL DEFAULT 0,
+	flag_rate_limited INTEGER NOT NULL DEFAULT 0,
+	flag_suspicious INTEGER NOT NULL DEFAULT 0,
+	flag_alert_triggered INTEGER NOT NULL DEFAULT 0
 );
 
 -- Trigger to prevent modifications (append-only)
@@ -478,6 +484,10 @@ CREATE INDEX IF NOT EXISTS idx_nodes_seen ON nodes(last_seen);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_job ON audit_log(job_id);
 CREATE INDEX IF NOT EXISTS idx_audit_operation ON audit_log(operation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor);
+CREATE INDEX IF NOT EXISTS idx_audit_suspicious ON audit_log(flag_suspicious);
+CREATE INDEX IF NOT EXISTS idx_audit_query_hash ON audit_log(query_hash);
 
 CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache_metadata(expires_at);
 `

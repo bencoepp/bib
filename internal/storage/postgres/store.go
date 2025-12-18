@@ -93,7 +93,7 @@ func New(ctx context.Context, cfg storage.PostgresConfig, dataDir, nodeID string
 	s.datasets = &DatasetRepository{store: s}
 	s.jobs = &JobRepository{store: s}
 	s.nodes = &NodeRepository{store: s}
-	s.audit = &AuditRepository{store: s}
+	s.audit = &AuditRepository{store: s, nodeID: nodeID, hashChain: true}
 
 	return s, nil
 }
@@ -110,7 +110,7 @@ func NewWithPool(pool *pgxpool.Pool, nodeID string) *Store {
 	s.datasets = &DatasetRepository{store: s}
 	s.jobs = &JobRepository{store: s}
 	s.nodes = &NodeRepository{store: s}
-	s.audit = &AuditRepository{store: s}
+	s.audit = &AuditRepository{store: s, nodeID: nodeID, hashChain: true}
 
 	return s
 }
