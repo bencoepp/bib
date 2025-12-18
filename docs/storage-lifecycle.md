@@ -231,26 +231,51 @@ stopStorage()
 
 ## Security
 
+> 📖 For comprehensive security documentation, see [Database Security & Hardening](database-security.md).
+
 ### Credential Management
 
 For managed PostgreSQL:
 - Passwords are generated with 64 bytes of cryptographic randomness
-- Separate roles for different permissions (admin, query, audit, etc.)
-- Automatic credential rotation (configurable interval)
-- Credentials encrypted at rest (planned)
+- Separate roles for different permissions (admin, scrape, query, transform, audit, readonly)
+- Automatic credential rotation (configurable interval, default 7 days)
+- Credentials encrypted at rest using node identity key
+- Three encryption methods: X25519, HKDF, or Hybrid (default)
+- Zero-downtime rotation with dual credential sets
+
+### Role-Based Access Control
+
+bibd uses per-transaction role switching for minimal privilege:
+
+| Role | Purpose | Key Permissions |
+|------|---------|-----------------|
+| `bibd_admin` | Connection pool | Can SET ROLE to all others |
+| `bibd_scrape` | Data ingestion | INSERT on datasets, chunks |
+| `bibd_query` | Read operations | SELECT on all tables |
+| `bibd_transform` | Data transformation | SELECT, INSERT, UPDATE |
+| `bibd_audit` | Audit logging | INSERT, SELECT on audit_log |
+| `bibd_readonly` | Cache/proxy | SELECT only |
 
 ### Network Security
 
-- **Unix Socket Mode** (default): No network exposure, socket-only access
-- **TCP Mode**: Binds to localhost only, no external exposure
-- **Bridge Network**: Isolated container network
-- **TLS**: Mutual TLS for all connections (auto-generated certificates)
+- **Unix Socket Mode** (default on Linux): No network exposure, socket-only access
+- **TCP Mode** (macOS/Windows): Binds to localhost only, mTLS required
+- **Bridge Network**: Isolated Docker network with `--internal` flag
+- **Kubernetes**: NetworkPolicy restricts access to bibd pods only
+
+### Encryption at Rest
+
+Multiple encryption options supported:
+- **Application-level**: AES-256-GCM encryption of sensitive fields
+- **LUKS** (Linux): Full disk encryption with dm-crypt
+- **Shamir's Secret Sharing**: Key recovery with threshold shares
 
 ### Certificate Management
 
 When `tls.auto_generate: true`:
 - CA certificate generated from node identity
 - Server certificates signed by CA
+- Client certificates for mTLS authentication
 - Automatic rotation before expiry
 - Certificates stored in `<data_dir>/postgres/certs`
 
@@ -304,12 +329,27 @@ Planned support for Kubernetes StatefulSets:
 - Rolling updates with zero downtime
 - Integration with Kubernetes secrets
 
-### Credential Encryption
+### ~~Credential Encryption~~ ✅ Implemented
 
-Planned enhancement to encrypt credentials at rest:
-- Use node identity key for encryption
-- Support external KMS (AWS KMS, HashiCorp Vault)
-- Automatic key rotation
+~~Planned enhancement to encrypt credentials at rest:~~
+- ✅ Use node identity key for encryption
+- ✅ Support multiple encryption methods (X25519, HKDF, Hybrid)
+- ✅ Automatic credential rotation
+- 🔄 External KMS support (AWS KMS, HashiCorp Vault) - Future
+
+### ~~Role-Based Access~~ ✅ Implemented
+
+~~Planned enhancement for fine-grained access control:~~
+- ✅ Per-transaction role switching
+- ✅ Minimal privilege roles (scrape, query, transform, audit, readonly)
+- ✅ SET LOCAL ROLE per transaction
+
+### ~~Encryption at Rest~~ ✅ Implemented
+
+~~Planned enhancement for data protection:~~
+- ✅ Application-level field encryption (AES-256-GCM)
+- ✅ LUKS volume encryption (Linux)
+- ✅ Shamir's Secret Sharing for key recovery
 
 ### Backup and Recovery
 
@@ -321,8 +361,9 @@ Planned features:
 
 ## See Also
 
-- [Configuration Guide](configuration.md)
-- [Node Modes](node-modes.md)
-- [PostgreSQL Lifecycle Manager](../internal/storage/postgres/lifecycle/manager.go)
-- [Storage Implementation](../internal/storage/)
+- [Database Security & Hardening](database-security.md) - Comprehensive security documentation
+- [Configuration Guide](configuration.md) - Complete configuration reference
+- [Node Modes](node-modes.md) - Understanding mode/storage requirements
+- [Developer Guide](developer-guide.md) - Storage package development guide
+- [Phase 2.3 Implementation Outline](phase-2.3-implementation-outline.md) - Technical implementation details
 

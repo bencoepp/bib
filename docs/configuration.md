@@ -201,6 +201,78 @@ p2p:
     max_cache_size: 1000
     favorite_peers: []
 
+# Database configuration
+database:
+  backend: postgres              # sqlite or postgres
+  
+  sqlite:
+    path: ""                     # Defaults to <data_dir>/cache.db
+    max_open_conns: 10
+  
+  postgres:
+    managed: true                # bibd manages PostgreSQL container
+    container_runtime: ""        # Auto-detect: docker, podman
+    image: "postgres:16-alpine"
+    data_dir: ""                 # Defaults to <data_dir>/postgres
+    port: 5432
+    max_connections: 100
+    
+    network:
+      use_bridge_network: true
+      bridge_network_name: "bibd-network"
+      use_unix_socket: true      # Linux only
+      bind_address: "127.0.0.1"
+    
+    health:
+      interval: 5s
+      timeout: 5s
+      startup_timeout: 60s
+      action: "retry_limit"
+      max_retries: 5
+    
+    tls:
+      enabled: true
+      auto_generate: true
+
+# Credential management
+credentials:
+  encryption_method: "hybrid"    # x25519, hkdf, hybrid
+  rotation_interval: 168h        # 7 days
+  rotation_grace_period: 5m
+  password_length: 64
+
+# Encryption at rest
+encryption_at_rest:
+  enabled: false
+  method: "application"          # none, luks, tde, application, hybrid
+  
+  luks:
+    volume_size: "50GB"
+    cipher: "aes-xts-plain64"
+    key_size: 512
+  
+  application:
+    algorithm: "aes-256-gcm"
+    encrypted_fields:
+      - table: datasets
+        columns: [content, metadata]
+      - table: jobs
+        columns: [parameters, result]
+  
+  recovery:
+    method: "shamir"
+    shamir:
+      total_shares: 5
+      threshold: 3
+
+# Security configuration
+security:
+  fallback_mode: "warn"          # strict, warn, permissive
+  minimum_level: "moderate"      # maximum, high, moderate, reduced
+  log_security_report: true
+  require_client_cert: true
+  allow_client_cert_fallback: false
+
 # Cluster configuration (HA mode)
 cluster:
   enabled: false
@@ -305,6 +377,90 @@ cluster:
 | `cache_ttl` | duration | `2m` | Cache entry TTL |
 | `max_cache_size` | int | `1000` | Maximum cache entries |
 | `favorite_peers` | []string | `[]` | Preferred forwarding peers |
+
+#### Database Section
+
+> 📖 For detailed security documentation, see [Database Security](database-security.md).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `backend` | string | `sqlite` | Storage backend: sqlite, postgres |
+
+##### SQLite
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `path` | string | `""` | Database path (defaults to `<data_dir>/cache.db`) |
+| `max_open_conns` | int | `10` | Maximum open connections |
+
+##### PostgreSQL
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `managed` | bool | `true` | bibd manages PostgreSQL container |
+| `container_runtime` | string | `""` | Runtime: docker, podman (auto-detect) |
+| `image` | string | `postgres:16-alpine` | PostgreSQL container image |
+| `port` | int | `5432` | PostgreSQL port |
+| `max_connections` | int | `100` | Maximum database connections |
+
+##### Network
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `use_bridge_network` | bool | `true` | Create isolated Docker network |
+| `bridge_network_name` | string | `bibd-network` | Network name |
+| `use_unix_socket` | bool | `true` | Use Unix socket (Linux only) |
+| `bind_address` | string | `127.0.0.1` | TCP bind address |
+
+#### Credentials Section
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `encryption_method` | string | `hybrid` | Encryption: x25519, hkdf, hybrid |
+| `rotation_interval` | duration | `168h` | Credential rotation interval |
+| `rotation_grace_period` | duration | `5m` | Grace period during rotation |
+| `password_length` | int | `64` | Generated password length |
+| `encrypted_path` | string | `""` | Credential storage path |
+
+#### Encryption at Rest Section
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable encryption at rest |
+| `method` | string | `application` | Method: none, luks, tde, application, hybrid |
+
+##### LUKS (Linux only)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `volume_size` | string | `50GB` | Encrypted volume size |
+| `cipher` | string | `aes-xts-plain64` | Encryption cipher |
+| `key_size` | int | `512` | Key size in bits |
+
+##### Application-Level Encryption
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `algorithm` | string | `aes-256-gcm` | Encryption algorithm |
+| `encrypted_fields` | []object | See default | Fields to encrypt |
+
+##### Recovery (Shamir's Secret Sharing)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `method` | string | `shamir` | Recovery method |
+| `total_shares` | int | `5` | Total shares to generate |
+| `threshold` | int | `3` | Minimum shares for recovery |
+
+#### Security Section
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `fallback_mode` | string | `warn` | Behavior when requirements unmet: strict, warn, permissive |
+| `minimum_level` | string | `moderate` | Minimum security level: maximum, high, moderate, reduced |
+| `log_security_report` | bool | `true` | Log security report on startup |
+| `require_client_cert` | bool | `true` | Require mTLS client certificates |
+| `allow_client_cert_fallback` | bool | `false` | Allow password auth if cert fails |
 
 #### Cluster Section
 

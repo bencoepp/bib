@@ -219,7 +219,7 @@
 > **Zero Trust Database Access**: The PostgreSQL instance is invisible to everything except bibd.
 > All credentials are generated, rotated, and never exposed. Every query is audited.
 >
-> 📋 **Implementation Outline**: See [docs/phase-2.3-implementation-outline.md](docs/phase-2.3-implementation-outline.md)
+> 📋 **Documentation**: See [docs/database-security.md](docs/database-security.md)
 
 - [x] **DB-006**: Credential management
   - bibd generates all PostgreSQL credentials at initialization

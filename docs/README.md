@@ -20,6 +20,7 @@ Together, they enable researchers and data engineers to organize, share, version
 - **CEL-Based Jobs** - Safe, sandboxed data processing using CEL instructions
 - **High Availability** - Optional Raft-based clustering for fault tolerance
 - **Cryptographic Identity** - Ed25519-based user authentication
+- **Zero Trust Security** - Encrypted credentials, role-based access, full audit logging
 
 ## Documentation Index
 
@@ -32,6 +33,10 @@ Together, they enable researchers and data engineers to organize, share, version
 - [Domain Entities](domain-entities.md) - Core data model documentation
 - [P2P Networking](p2p-networking.md) - Peer-to-peer networking layer
 - [Protocols](protocols.md) - Wire protocols and message formats
+
+### Storage & Security
+- [Storage Lifecycle](storage-lifecycle.md) - Database container management
+- [Database Security](database-security.md) - Credentials, roles, encryption, and hardening
 
 ### User Guides
 - [CLI Reference](cli-reference.md) - Complete bib command reference

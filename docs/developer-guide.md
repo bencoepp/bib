@@ -38,6 +38,10 @@ bib/
 │   ├── p2p/                  # libp2p networking
 │   ├── storage/              # Database layer
 │   │   ├── postgres/         # PostgreSQL implementation
+│   │   │   ├── credentials/  # Credential encryption & rotation
+│   │   │   ├── encryption/   # Encryption at rest
+│   │   │   ├── lifecycle/    # Container lifecycle management
+│   │   │   └── pool/         # Role-aware connection pool
 │   │   └── sqlite/           # SQLite implementation
 │   └── tui/                  # Terminal UI components
 │       ├── component/        # Reusable components
@@ -185,6 +189,84 @@ type Store interface {
     GetDataset(ctx, id) (*Dataset, error)
     // ... etc
 }
+```
+
+### internal/storage/postgres/credentials
+
+Secure credential management for PostgreSQL.
+
+**Key components:**
+- `Manager` - Credential lifecycle management
+- `Encryptor` - X25519/HKDF/Hybrid encryption
+- `Rotator` - Zero-downtime credential rotation
+- `Storage` - Encrypted file persistence
+
+```go
+import "bib/internal/storage/postgres/credentials"
+
+// Create credential manager
+cfg := credentials.DefaultConfig()
+manager, err := credentials.NewManager(cfg, nodeID, identityKey)
+
+// Initialize (loads or generates credentials)
+creds, err := manager.Initialize()
+
+// Access credentials
+adminCred, err := creds.GetRoleCredential(storage.RoleAdmin)
+```
+
+### internal/storage/postgres/pool
+
+Role-aware connection pool with per-transaction role switching.
+
+```go
+import "bib/internal/storage/postgres/pool"
+
+// Create pool (connects as bibd_admin)
+p, err := pool.New(ctx, connString, pool.DefaultConfig(), nodeID, creds)
+
+// Execute with role from OperationContext
+opCtx := storage.NewOperationContext(storage.RoleScrape, "ingestion")
+ctx := storage.WithOperationContext(ctx, opCtx)
+
+err := p.Execute(ctx, func(tx pgx.Tx) error {
+    // Operations run as bibd_scrape
+    _, err := tx.Exec(ctx, "INSERT INTO datasets ...")
+    return err
+})
+
+// Or explicitly specify role
+conn, err := p.AcquireWithRole(ctx, storage.RoleQuery)
+defer conn.Release()
+rows, err := conn.Query(ctx, "SELECT * FROM datasets")
+```
+
+### internal/storage/postgres/encryption
+
+Encryption at rest with multiple methods.
+
+```go
+import "bib/internal/storage/postgres/encryption"
+
+// Application-level encryption
+config := encryption.ApplicationConfig{Algorithm: "aes-256-gcm"}
+enc, err := encryption.NewApplicationEncryption(config, key)
+
+// Encrypt/decrypt
+ciphertext, err := enc.Encrypt(plaintext)
+plaintext, err := enc.Decrypt(ciphertext)
+
+// Field encryptor for automatic column encryption
+fe := encryption.NewFieldEncryptor(enc, config)
+encrypted, err := fe.EncryptField("datasets", "content", data)
+
+// Shamir's Secret Sharing for key recovery
+shamir := encryption.NewShamirManager(encryption.ShamirConfig{
+    TotalShares: 5,
+    Threshold:   3,
+})
+shares, err := shamir.SplitKey(masterKey)
+recovered, err := shamir.RecoverKey(shares[:3])
 ```
 
 ### internal/p2p

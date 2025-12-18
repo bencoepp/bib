@@ -203,6 +203,50 @@ Peer A receives announcement and updates local catalog
 - Role-based access control (Owner, Admin, Contributor, Reader)
 - Resource-level permissions for Topics, Datasets, Tasks
 
+### Database Security
+
+The storage layer implements a **Zero Trust Database Access** model:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Database Security Stack                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌────────────────┐    ┌────────────────────────────────┐   │
+│  │  Credential    │    │     Role-Aware Pool            │   │
+│  │  Manager       │    │     (SET LOCAL ROLE)           │   │
+│  │                │    │                                │   │
+│  │ • X25519/HKDF  │    │ • Per-transaction roles        │   │
+│  │ • Auto-rotate  │    │ • Minimal privilege            │   │
+│  │ • Zero-downtime│    │ • Audit logging               │   │
+│  └────────────────┘    └────────────────────────────────┘   │
+│                                                              │
+│  ┌────────────────┐    ┌────────────────────────────────┐   │
+│  │  Network       │    │     Encryption at Rest         │   │
+│  │  Isolation     │    │                                │   │
+│  │                │    │ • Application-level AES-GCM    │   │
+│  │ • Unix sockets │    │ • LUKS volume (Linux)          │   │
+│  │ • mTLS         │    │ • Shamir key recovery          │   │
+│  │ • Internal net │    │                                │   │
+│  └────────────────┘    └────────────────────────────────┘   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key security features:**
+
+| Feature | Description |
+|---------|-------------|
+| Credential Encryption | Passwords encrypted with node identity key |
+| Credential Rotation | Zero-downtime rotation every 7 days (configurable) |
+| Role-Based Access | 6 roles with minimal required permissions |
+| Network Isolation | Unix sockets (Linux) or localhost-only TCP + mTLS |
+| Encryption at Rest | AES-256-GCM field encryption, optional LUKS |
+| Audit Logging | All queries logged with role, duration, row count |
+| Key Recovery | Shamir's Secret Sharing (3-of-5 threshold) |
+
+See [Database Security & Hardening](database-security.md) for complete documentation.
+
 ## Scalability
 
 ### Horizontal Scaling
