@@ -104,7 +104,9 @@ func runSQLiteMigrations(ctx context.Context, store Store, cfg migrate.Config) e
 	if err != nil {
 		return fmt.Errorf("failed to create migration manager: %w", err)
 	}
-	defer mgr.Close()
+	// Note: We don't defer mgr.Close() here because it would close the database
+	// connection that the store is still using. The store owns the connection
+	// and will close it when the store is closed.
 
 	if err := mgr.Up(ctx); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
@@ -160,7 +162,12 @@ func RollbackMigration(ctx context.Context, store Store, cfg MigrationsConfig) e
 	if err != nil {
 		return fmt.Errorf("failed to create migration manager: %w", err)
 	}
-	defer mgr.Close()
+
+	// Only close if we created a new connection (PostgreSQL)
+	// Don't close for SQLite as we're using the store's connection
+	if store.Backend() == BackendPostgres {
+		defer mgr.Close()
+	}
 
 	if err := mgr.Down(ctx); err != nil {
 		return fmt.Errorf("failed to rollback migration: %w", err)
@@ -214,7 +221,11 @@ func GetMigrationStatus(ctx context.Context, store Store, cfg MigrationsConfig) 
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to create migration manager: %w", err)
 	}
-	defer mgr.Close()
+
+	// Only close if we created a new connection (PostgreSQL)
+	if store.Backend() == BackendPostgres {
+		defer mgr.Close()
+	}
 
 	return mgr.Version()
 }
@@ -265,7 +276,11 @@ func ListMigrations(ctx context.Context, store Store, cfg MigrationsConfig) ([]m
 	if err != nil {
 		return nil, fmt.Errorf("failed to create migration manager: %w", err)
 	}
-	defer mgr.Close()
+
+	// Only close if we created a new connection (PostgreSQL)
+	if store.Backend() == BackendPostgres {
+		defer mgr.Close()
+	}
 
 	return mgr.List(ctx)
 }
