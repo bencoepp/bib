@@ -1,0 +1,39 @@
+-- Drop all indexes for SQLite
+
+DROP INDEX IF EXISTS idx_blobs_cached;
+DROP INDEX IF EXISTS idx_blobs_accessed;
+DROP INDEX IF EXISTS idx_cache_table;
+DROP INDEX IF EXISTS idx_cache_expires;
+DROP INDEX IF EXISTS idx_results_cached;
+DROP INDEX IF EXISTS idx_results_status;
+DROP INDEX IF EXISTS idx_results_node;
+DROP INDEX IF EXISTS idx_results_job;
+DROP INDEX IF EXISTS idx_jobs_cached;
+DROP INDEX IF EXISTS idx_jobs_dataset;
+DROP INDEX IF EXISTS idx_jobs_topic;
+DROP INDEX IF EXISTS idx_jobs_created;
+DROP INDEX IF EXISTS idx_jobs_priority;
+DROP INDEX IF EXISTS idx_jobs_type;
+DROP INDEX IF EXISTS idx_jobs_status;
+DROP INDEX IF EXISTS idx_chunks_cached;
+DROP INDEX IF EXISTS idx_chunks_hash;
+DROP INDEX IF EXISTS idx_chunks_status;
+DROP INDEX IF EXISTS idx_chunks_version;
+DROP INDEX IF EXISTS idx_chunks_dataset;
+DROP INDEX IF EXISTS idx_versions_cached;
+DROP INDEX IF EXISTS idx_versions_created;
+DROP INDEX IF EXISTS idx_versions_dataset;
+DROP INDEX IF EXISTS idx_datasets_cached;
+DROP INDEX IF EXISTS idx_datasets_created;
+DROP INDEX IF EXISTS idx_datasets_name;
+DROP INDEX IF EXISTS idx_datasets_status;
+DROP INDEX IF EXISTS idx_datasets_topic;
+DROP INDEX IF EXISTS idx_topics_cached;
+DROP INDEX IF EXISTS idx_topics_created;
+DROP INDEX IF EXISTS idx_topics_name;
+DROP INDEX IF EXISTS idx_topics_parent;
+DROP INDEX IF EXISTS idx_topics_status;
+DROP INDEX IF EXISTS idx_nodes_cached;
+DROP INDEX IF EXISTS idx_nodes_seen;
+DROP INDEX IF EXISTS idx_nodes_mode;
+
