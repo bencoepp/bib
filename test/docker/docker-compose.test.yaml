@@ -1,0 +1,147 @@
+# Docker Compose configuration for integration and e2e testing
+# Usage: docker-compose -f test/docker/docker-compose.test.yaml up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL for integration tests
+  postgres:
+    image: postgres:16-alpine
+    container_name: bib-test-postgres
+    environment:
+      POSTGRES_DB: bib_test
+      POSTGRES_USER: bib_test
+      POSTGRES_PASSWORD: bib_test_password
+    ports:
+      - "5433:5432"  # Use 5433 to avoid conflicts with local postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bib_test -d bib_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL for e2e tests (separate instance)
+  postgres-e2e:
+    image: postgres:16-alpine
+    container_name: bib-test-postgres-e2e
+    environment:
+      POSTGRES_DB: bib_e2e
+      POSTGRES_USER: bib_e2e
+      POSTGRES_PASSWORD: bib_e2e_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-e2e-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bib_e2e -d bib_e2e"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Single bibd node for e2e testing
+  bibd-node1:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    container_name: bib-test-bibd-node1
+    environment:
+      BIB_DATA_DIR: /data
+      BIB_LOG_LEVEL: debug
+      BIB_STORAGE_BACKEND: postgres
+      BIB_POSTGRES_HOST: postgres-e2e
+      BIB_POSTGRES_PORT: 5432
+      BIB_POSTGRES_DB: bib_e2e
+      BIB_POSTGRES_USER: bib_e2e
+      BIB_POSTGRES_PASSWORD: bib_e2e_password
+      BIB_P2P_ENABLED: "true"
+      BIB_P2P_LISTEN: /ip4/0.0.0.0/tcp/4001
+      BIB_CLUSTER_ENABLED: "true"
+      BIB_CLUSTER_NODE_ID: node1
+      BIB_CLUSTER_LISTEN: 0.0.0.0:7001
+    ports:
+      - "4001:4001"  # P2P
+      - "7001:7001"  # Raft
+      - "8001:8080"  # gRPC
+    volumes:
+      - bibd-node1-data:/data
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+    networks:
+      - bib-test-network
+    profiles:
+      - cluster
+
+  # Second bibd node for cluster testing
+  bibd-node2:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    container_name: bib-test-bibd-node2
+    environment:
+      BIB_DATA_DIR: /data
+      BIB_LOG_LEVEL: debug
+      BIB_STORAGE_BACKEND: sqlite
+      BIB_P2P_ENABLED: "true"
+      BIB_P2P_LISTEN: /ip4/0.0.0.0/tcp/4001
+      BIB_P2P_BOOTSTRAP: /dns4/bibd-node1/tcp/4001
+      BIB_CLUSTER_ENABLED: "true"
+      BIB_CLUSTER_NODE_ID: node2
+      BIB_CLUSTER_LISTEN: 0.0.0.0:7001
+      BIB_CLUSTER_JOIN: bibd-node1:7001
+    ports:
+      - "4002:4001"
+      - "7002:7001"
+      - "8002:8080"
+    volumes:
+      - bibd-node2-data:/data
+    depends_on:
+      - bibd-node1
+    networks:
+      - bib-test-network
+    profiles:
+      - cluster
+
+  # Third bibd node for cluster testing
+  bibd-node3:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.test
+    container_name: bib-test-bibd-node3
+    environment:
+      BIB_DATA_DIR: /data
+      BIB_LOG_LEVEL: debug
+      BIB_STORAGE_BACKEND: sqlite
+      BIB_P2P_ENABLED: "true"
+      BIB_P2P_LISTEN: /ip4/0.0.0.0/tcp/4001
+      BIB_P2P_BOOTSTRAP: /dns4/bibd-node1/tcp/4001
+      BIB_CLUSTER_ENABLED: "true"
+      BIB_CLUSTER_NODE_ID: node3
+      BIB_CLUSTER_LISTEN: 0.0.0.0:7001
+      BIB_CLUSTER_JOIN: bibd-node1:7001
+    ports:
+      - "4003:4001"
+      - "7003:7001"
+      - "8003:8080"
+    volumes:
+      - bibd-node3-data:/data
+    depends_on:
+      - bibd-node1
+    networks:
+      - bib-test-network
+    profiles:
+      - cluster
+
+volumes:
+  postgres-data:
+  postgres-e2e-data:
+  bibd-node1-data:
+  bibd-node2-data:
+  bibd-node3-data:
+
+networks:
+  bib-test-network:
+    driver: bridge
+
