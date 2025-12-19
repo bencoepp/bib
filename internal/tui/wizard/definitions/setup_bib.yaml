@@ -1,0 +1,159 @@
+wizard:
+  id: setup_bib
+  title:
+    key: wizard.setup_bib.title
+    default: "Bib Setup Wizard"
+
+  steps:
+    # Welcome step
+    - id: welcome
+      type: info
+      title:
+        key: wizard.setup_bib.welcome.title
+        default: "Welcome"
+      description:
+        key: wizard.setup_bib.welcome.description
+        default: "Let's configure bib for your environment"
+      content:
+        key: wizard.setup_bib.welcome.content
+        default: |
+          This wizard will guide you through the initial setup of bib.
+          
+          You will configure:
+          • Your identity (name and email)
+          • Output preferences
+          • Connection to bibd
+          
+          Press Enter to continue, or Esc to cancel.
+      help:
+        key: wizard.setup_bib.welcome.help
+        default: "You can press Esc at any time to go back, or Ctrl+C to cancel the wizard."
+
+    # Identity step
+    - id: identity
+      type: form
+      title:
+        key: wizard.setup_bib.identity.title
+        default: "Identity"
+      description:
+        key: wizard.setup_bib.identity.description
+        default: "Configure your identity for signing and attribution"
+      help:
+        key: wizard.setup_bib.identity.help
+        default: "Your identity is used for signing changes and attribution. This information may be visible to others in a collaborative environment."
+      fields:
+        - id: name
+          type: text
+          label:
+            key: wizard.setup_bib.identity.name.label
+            default: "Name"
+          placeholder: "John Doe"
+          required: true
+          validation:
+            - rule: minLength(2)
+              message:
+                key: validation.min_length
+                default: "Must be at least 2 characters"
+
+        - id: email
+          type: text
+          label:
+            key: wizard.setup_bib.identity.email.label
+            default: "Email"
+          placeholder: "john@example.com"
+          required: true
+          validation:
+            - rule: email
+              message:
+                key: validation.email
+                default: "Must be a valid email address"
+
+    # Output preferences step
+    - id: output
+      type: form
+      title:
+        key: wizard.setup_bib.output.title
+        default: "Output Settings"
+      description:
+        key: wizard.setup_bib.output.description
+        default: "Configure how bib displays information"
+      help:
+        key: wizard.setup_bib.output.help
+        default: "Table format is recommended for interactive use. JSON or YAML format is better for scripting and automation."
+      fields:
+        - id: output_format
+          type: select
+          label:
+            key: wizard.setup_bib.output.format.label
+            default: "Output Format"
+          default: "table"
+          options:
+            - value: "table"
+              label:
+                key: wizard.setup_bib.output.format.options.table
+                default: "Table"
+            - value: "json"
+              label:
+                key: wizard.setup_bib.output.format.options.json
+                default: "JSON"
+            - value: "yaml"
+              label:
+                key: wizard.setup_bib.output.format.options.yaml
+                default: "YAML"
+            - value: "text"
+              label:
+                key: wizard.setup_bib.output.format.options.text
+                default: "Text"
+
+        - id: color_enabled
+          type: confirm
+          label:
+            key: wizard.setup_bib.output.color.label
+            default: "Enable Colors"
+          default: true
+
+    # Connection step
+    - id: connection
+      type: form
+      title:
+        key: wizard.setup_bib.connection.title
+        default: "Connection"
+      description:
+        key: wizard.setup_bib.connection.description
+        default: "Configure connection to bibd"
+      help:
+        key: wizard.setup_bib.connection.help
+        default: "Specify the address of the bibd daemon you want to connect to. Default is localhost:8080."
+      fields:
+        - id: server_addr
+          type: text
+          label:
+            key: wizard.setup_bib.connection.server_addr.label
+            default: "Server Address"
+          placeholder: "localhost:8080"
+          default: "localhost:8080"
+          required: true
+          validation:
+            - rule: hostport
+              message:
+                key: validation.hostport
+                default: "Must be a valid host:port address"
+
+    # Complete step
+    - id: complete
+      type: info
+      title:
+        key: wizard.setup_bib.complete.title
+        default: "Setup Complete"
+      content:
+        key: wizard.setup_bib.complete.content
+        default: |
+          ✓ Your configuration has been saved.
+          
+          Next steps:
+          • Run 'bib version' to verify your setup
+          • Run 'bib tui' to launch the dashboard
+          • Run 'bib help' for available commands
+          
+          Press Enter to finish.
+

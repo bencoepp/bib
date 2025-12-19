@@ -1,0 +1,244 @@
+# English translations for bib TUI
+# Default locale
+
+# Common UI elements
+common:
+  ok: "OK"
+  cancel: "Cancel"
+  confirm: "Confirm"
+  save: "Save"
+  delete: "Delete"
+  edit: "Edit"
+  create: "Create"
+  back: "Back"
+  next: "Next"
+  finish: "Finish"
+  skip: "Skip"
+  retry: "Retry"
+  close: "Close"
+  loading: "Loading..."
+  search: "Search..."
+  no_results: "No results found"
+  yes: "Yes"
+  no: "No"
+
+# Status messages
+status:
+  success: "Success"
+  error: "Error"
+  warning: "Warning"
+  info: "Info"
+  connecting: "Connecting..."
+  connected: "Connected"
+  disconnected: "Disconnected"
+  saving: "Saving..."
+  saved: "Saved"
+
+# Wizard general
+wizard:
+  step: "Step {{ .current }} of {{ .total }}"
+  progress: "{{ .percent }}% complete"
+  skip_step: "Skip this step"
+  required_field: "This field is required"
+
+  # Setup wizard for bib CLI
+  setup_bib:
+    title: "Bib Setup Wizard"
+    welcome:
+      title: "Welcome"
+      content: "Let's configure bib for your environment. This wizard will guide you through the initial setup."
+      help: "You can press Esc to go back or Ctrl+C to cancel at any time."
+    identity:
+      title: "Identity"
+      description: "Configure your identity"
+      help: "Your identity is used for signing and attributing changes. This information may be visible to others in a collaborative environment."
+      name:
+        label: "Name"
+        placeholder: "John Doe"
+        help: "Your display name"
+      email:
+        label: "Email"
+        placeholder: "john@example.com"
+        help: "Your email address"
+    output:
+      title: "Output Settings"
+      description: "Configure output settings"
+      help: "These settings control how bib displays information. Table format is recommended for interactive use, JSON/YAML for scripting."
+      format:
+        label: "Output Format"
+        help: "Default output format for commands"
+        options:
+          table: "Table"
+          json: "JSON"
+          yaml: "YAML"
+          text: "Text"
+      color:
+        label: "Enable Colors"
+        help: "Use colored output in the terminal"
+    connection:
+      title: "Connection"
+      description: "Configure connection to bibd"
+      help: "Specify the address of the bibd daemon you want to connect to."
+      server_addr:
+        label: "Server Address"
+        placeholder: "localhost:8080"
+        help: "Address of the bibd daemon"
+    complete:
+      title: "Setup Complete"
+      content: "Your configuration has been saved to {{ .path }}."
+      next_steps: "Next steps:"
+
+  # Setup wizard for bibd daemon
+  setup_bibd:
+    title: "Bibd Daemon Setup"
+    server:
+      title: "Server Settings"
+      description: "Configure server settings"
+      help: "These settings control how the daemon listens for connections. Use 0.0.0.0 to accept connections from any interface."
+      host:
+        label: "Bind Address"
+        placeholder: "0.0.0.0"
+        help: "Address to bind the server to"
+      port:
+        label: "Port"
+        placeholder: "8080"
+        help: "Port number for the server"
+      data_dir:
+        label: "Data Directory"
+        placeholder: "~/.local/share/bibd"
+        help: "Directory for storing data"
+    tls:
+      title: "TLS Encryption"
+      description: "Configure TLS encryption"
+      help: "TLS encrypts connections between clients and the daemon. Recommended for production use."
+      enabled:
+        label: "Enable TLS"
+        help: "Enable TLS encryption for all connections"
+      cert_file:
+        label: "Certificate File"
+        placeholder: "/path/to/cert.pem"
+        help: "Path to the TLS certificate file"
+      key_file:
+        label: "Key File"
+        placeholder: "/path/to/key.pem"
+        help: "Path to the TLS private key file"
+    storage:
+      title: "Storage Backend"
+      description: "Configure storage backend"
+      help: "SQLite is lightweight and requires no setup. PostgreSQL is recommended for production and enables full data replication."
+      backend:
+        label: "Backend"
+        options:
+          sqlite: "SQLite"
+          postgres: "PostgreSQL"
+    p2p:
+      title: "P2P Networking"
+      description: "Configure P2P networking"
+      help: "P2P networking allows nodes to discover each other and share data without a central server."
+      enabled:
+        label: "Enable P2P"
+        help: "Enable peer-to-peer networking"
+      mode:
+        label: "P2P Mode"
+        options:
+          proxy: "Proxy - Forward requests, minimal resources"
+          selective: "Selective - Subscribe to specific topics"
+          full: "Full - Replicate all data (requires PostgreSQL)"
+
+# TUI Dashboard
+dashboard:
+  title: "Bib Dashboard"
+  tabs:
+    overview: "Overview"
+    jobs: "Jobs"
+    datasets: "Datasets"
+    cluster: "Cluster"
+    logs: "Logs"
+    settings: "Settings"
+  overview:
+    welcome: "Welcome to Bib"
+    quick_stats: "Quick Stats"
+    recent_activity: "Recent Activity"
+    active_jobs: "Active Jobs"
+    total_datasets: "Total Datasets"
+    cluster_nodes: "Cluster Nodes"
+    storage_used: "Storage Used"
+  jobs:
+    title: "Jobs"
+    no_jobs: "No jobs found"
+    status:
+      pending: "Pending"
+      running: "Running"
+      completed: "Completed"
+      failed: "Failed"
+      cancelled: "Cancelled"
+  datasets:
+    title: "Datasets"
+    no_datasets: "No datasets found"
+  cluster:
+    title: "Cluster Status"
+    not_clustered: "Not part of a cluster"
+    nodes: "Nodes"
+    leader: "Leader"
+    replication_lag: "Replication Lag"
+  logs:
+    title: "Logs"
+    level:
+      debug: "Debug"
+      info: "Info"
+      warn: "Warning"
+      error: "Error"
+
+# Commands
+commands:
+  help:
+    title: "Help"
+    description: "Press ? for help"
+  quit:
+    title: "Quit"
+    confirm: "Are you sure you want to quit?"
+  search:
+    title: "Search"
+    placeholder: "Type to search..."
+  command_palette:
+    title: "Command Palette"
+    placeholder: "Type a command..."
+
+# Errors
+errors:
+  config_not_found: "Configuration file not found"
+  config_invalid: "Configuration file is invalid"
+  connection_failed: "Failed to connect to bibd at {{ .address }}"
+  not_found: "{{ .resource }} not found: {{ .id }}"
+  permission_denied: "Permission denied"
+  timeout: "Operation timed out after {{ .duration }}"
+  validation: "Validation error"
+  unknown: "An unexpected error occurred"
+
+# Validation messages
+validation:
+  required: "This field is required"
+  min_length: "Must be at least {{ .min }} characters"
+  max_length: "Must be at most {{ .max }} characters"
+  email: "Must be a valid email address"
+  url: "Must be a valid URL"
+  port: "Must be a valid port number (1-65535)"
+  path: "Must be a valid file path"
+  alphanumeric: "Must contain only letters and numbers"
+
+# Keybindings
+keys:
+  tab: "tab"
+  shift_tab: "shift+tab"
+  enter: "enter"
+  escape: "esc"
+  space: "space"
+  up: "↑"
+  down: "↓"
+  left: "←"
+  right: "→"
+  help: "?"
+  quit: "q"
+  search: "/"
+  command: ":"
+

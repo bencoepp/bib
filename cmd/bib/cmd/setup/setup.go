@@ -1,4 +1,4 @@
-package cmd
+package setup
 
 import (
 	"crypto/rand"
@@ -23,8 +23,8 @@ var (
 	setupClusterJoin string
 )
 
-// setupCmd represents the setup command
-var setupCmd = &cobra.Command{
+// Cmd represents the setup command
+var Cmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Set up configuration interactively",
 	Long: `Set up configuration for bib or bibd interactively.
@@ -41,13 +41,16 @@ Examples:
 	RunE: runSetup,
 }
 
-func init() {
-	rootCmd.AddCommand(setupCmd)
+// NewCommand returns the setup command
+func NewCommand() *cobra.Command {
+	return Cmd
+}
 
-	setupCmd.Flags().BoolVarP(&setupDaemon, "daemon", "d", false, "configure bibd daemon instead of bib CLI")
-	setupCmd.Flags().StringVarP(&setupFormat, "format", "f", "yaml", "config file format (yaml, toml, json)")
-	setupCmd.Flags().BoolVar(&setupCluster, "cluster", false, "initialize a new HA cluster (outputs join token)")
-	setupCmd.Flags().StringVar(&setupClusterJoin, "cluster-join", "", "join an existing cluster using this token")
+func init() {
+	Cmd.Flags().BoolVarP(&setupDaemon, "daemon", "d", false, "configure bibd daemon instead of bib CLI")
+	Cmd.Flags().StringVarP(&setupFormat, "format", "f", "yaml", "config file format (yaml, toml, json)")
+	Cmd.Flags().BoolVar(&setupCluster, "cluster", false, "initialize a new HA cluster (outputs join token)")
+	Cmd.Flags().StringVar(&setupClusterJoin, "cluster-join", "", "join an existing cluster using this token")
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {

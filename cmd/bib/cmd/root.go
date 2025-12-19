@@ -6,6 +6,12 @@ import (
 	"os"
 	"time"
 
+	"bib/cmd/bib/cmd/admin"
+	configcmd "bib/cmd/bib/cmd/config"
+	"bib/cmd/bib/cmd/demo"
+	"bib/cmd/bib/cmd/setup"
+	"bib/cmd/bib/cmd/tui"
+	"bib/cmd/bib/cmd/version"
 	"bib/internal/config"
 	"bib/internal/logger"
 
@@ -143,6 +149,14 @@ func init() {
 
 	// Bind flags to viper
 	viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("output"))
+
+	// Add subcommands from subdirectories
+	rootCmd.AddCommand(admin.NewCommand())
+	rootCmd.AddCommand(configcmd.NewCommand())
+	rootCmd.AddCommand(demo.NewCommand())
+	rootCmd.AddCommand(setup.NewCommand())
+	rootCmd.AddCommand(tui.NewCommand())
+	rootCmd.AddCommand(version.NewCommand())
 }
 
 // onInitialize is called before any command runs

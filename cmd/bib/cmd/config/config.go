@@ -1,4 +1,4 @@
-package cmd
+package configcmd
 
 import (
 	"encoding/json"
@@ -16,8 +16,8 @@ var (
 	configDaemon bool // --daemon flag for bibd config
 )
 
-// configCmd represents the config command
-var configCmd = &cobra.Command{
+// Cmd represents the config command
+var Cmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration",
 	Long: `View and manage bib configuration.
@@ -35,6 +35,45 @@ Subcommands:
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
+}
+
+// NewCommand returns the config command with all subcommands registered
+func NewCommand() *cobra.Command {
+	// Register subcommands
+	Cmd.AddCommand(configShowCmd)
+	Cmd.AddCommand(configPathCmd)
+	Cmd.AddCommand(configGetCmd)
+	Cmd.AddCommand(configSetCmd)
+	Cmd.AddCommand(configInitCmd)
+	Cmd.AddCommand(configValidateCmd)
+	Cmd.AddCommand(configEditCmd)
+
+	// Add flags
+	Cmd.PersistentFlags().BoolVar(&configDaemon, "daemon", false, "Manage bibd daemon configuration")
+
+	return Cmd
+}
+
+// Package-level config state (loaded by commands that need it)
+var (
+	loadedConfig  *config.BibConfig
+	loadedCfgFile string
+)
+
+// Config returns the loaded bib config (loads if needed)
+func Config() *config.BibConfig {
+	if loadedConfig == nil {
+		loadedConfig, _ = config.LoadBib("")
+	}
+	return loadedConfig
+}
+
+// ConfigFile returns the config file path
+func ConfigFile() string {
+	if loadedCfgFile == "" {
+		loadedCfgFile = config.ConfigFileUsed(config.AppBib)
+	}
+	return loadedCfgFile
 }
 
 // configShowCmd shows current configuration
@@ -133,20 +172,6 @@ with validation and help text.`,
 var configInitForce bool
 
 func init() {
-	rootCmd.AddCommand(configCmd)
-
-	// Add --daemon flag to config command (inherited by subcommands)
-	configCmd.PersistentFlags().BoolVarP(&configDaemon, "daemon", "d", false, "manage bibd daemon config instead of bib CLI")
-
-	// Add subcommands
-	configCmd.AddCommand(configShowCmd)
-	configCmd.AddCommand(configPathCmd)
-	configCmd.AddCommand(configGetCmd)
-	configCmd.AddCommand(configSetCmd)
-	configCmd.AddCommand(configInitCmd)
-	configCmd.AddCommand(configValidateCmd)
-	configCmd.AddCommand(configEditCmd)
-
 	// Add --force flag to init
 	configInitCmd.Flags().BoolVarP(&configInitForce, "force", "f", false, "overwrite existing configuration")
 }
