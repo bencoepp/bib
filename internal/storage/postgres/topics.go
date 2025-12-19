@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"bib/internal/domain"
@@ -324,36 +323,6 @@ func scanTopic(rows pgx.Rows) (*domain.Topic, error) {
 	}
 
 	return topic, nil
-}
-
-func nullableString(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	// pgx wraps errors, check the error message
-	return errors.Is(err, pgx.ErrNoRows) == false &&
-		(containsString(err.Error(), "duplicate key") ||
-			containsString(err.Error(), "unique constraint"))
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // Ensure interface compliance

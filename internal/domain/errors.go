@@ -35,13 +35,24 @@ var (
 	ErrChunkNotFound     = errors.New("chunk not found")
 
 	// User errors
-	ErrInvalidUserID    = errors.New("invalid user ID")
-	ErrInvalidUserName  = errors.New("invalid user name")
-	ErrInvalidPublicKey = errors.New("invalid public key")
-	ErrUserNotFound     = errors.New("user not found")
-	ErrInvalidSignature = errors.New("invalid signature")
-	ErrInvalidOperation = errors.New("invalid operation")
-	ErrUnauthorized     = errors.New("unauthorized")
+	ErrInvalidUserID     = errors.New("invalid user ID")
+	ErrInvalidUserName   = errors.New("invalid user name")
+	ErrInvalidPublicKey  = errors.New("invalid public key")
+	ErrInvalidKeyType    = errors.New("invalid key type")
+	ErrInvalidUserStatus = errors.New("invalid user status")
+	ErrInvalidUserRole   = errors.New("invalid user role")
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUserExists        = errors.New("user already exists")
+	ErrUserSuspended     = errors.New("user account is suspended")
+	ErrUserPending       = errors.New("user account is pending approval")
+	ErrInvalidSignature  = errors.New("invalid signature")
+	ErrInvalidOperation  = errors.New("invalid operation")
+	ErrUnauthorized      = errors.New("unauthorized")
+	ErrAutoRegDisabled   = errors.New("auto-registration is disabled")
+
+	// Session errors
+	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionExpired  = errors.New("session has expired")
 
 	// Ownership errors
 	ErrInvalidResourceType  = errors.New("invalid resource type")

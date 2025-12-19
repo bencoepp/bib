@@ -25,6 +25,12 @@ type Store interface {
 	// Nodes returns the node repository.
 	Nodes() NodeRepository
 
+	// Users returns the user repository.
+	Users() UserRepository
+
+	// Sessions returns the session repository.
+	Sessions() SessionRepository
+
 	// Audit returns the audit repository.
 	Audit() AuditRepository
 
@@ -470,6 +476,165 @@ type AuditFilter struct {
 
 	// Suspicious filters for suspicious entries only
 	Suspicious *bool
+
+	// Limit is the maximum number of results
+	Limit int
+
+	// Offset is the number of results to skip
+	Offset int
+}
+
+// UserRepository handles user persistence.
+type UserRepository interface {
+	// Create creates a new user.
+	Create(ctx context.Context, user *domain.User) error
+
+	// Get retrieves a user by ID.
+	Get(ctx context.Context, id domain.UserID) (*domain.User, error)
+
+	// GetByPublicKey retrieves a user by their public key.
+	GetByPublicKey(ctx context.Context, publicKey []byte) (*domain.User, error)
+
+	// GetByEmail retrieves a user by email.
+	GetByEmail(ctx context.Context, email string) (*domain.User, error)
+
+	// List retrieves users matching the filter.
+	List(ctx context.Context, filter UserFilter) ([]*domain.User, error)
+
+	// Update updates an existing user.
+	Update(ctx context.Context, user *domain.User) error
+
+	// Delete deletes a user (soft delete - sets status to deleted).
+	Delete(ctx context.Context, id domain.UserID) error
+
+	// Count returns the number of users matching the filter.
+	Count(ctx context.Context, filter UserFilter) (int64, error)
+
+	// Exists checks if a user with the given public key exists.
+	Exists(ctx context.Context, publicKey []byte) (bool, error)
+
+	// IsFirstUser returns true if no users exist yet (for auto-admin).
+	IsFirstUser(ctx context.Context) (bool, error)
+}
+
+// UserFilter defines filtering options for user queries.
+type UserFilter struct {
+	// Status filters by user status
+	Status domain.UserStatus
+
+	// Role filters by user role
+	Role domain.UserRole
+
+	// Search performs text search on name/email
+	Search string
+
+	// Limit is the maximum number of results
+	Limit int
+
+	// Offset is the number of results to skip
+	Offset int
+
+	// OrderBy is the field to order by
+	OrderBy string
+
+	// OrderDesc reverses the order
+	OrderDesc bool
+}
+
+// SessionRepository handles user session persistence for security auditing.
+type SessionRepository interface {
+	// Create creates a new session.
+	Create(ctx context.Context, session *Session) error
+
+	// Get retrieves a session by ID.
+	Get(ctx context.Context, id string) (*Session, error)
+
+	// GetByUser retrieves all active sessions for a user.
+	GetByUser(ctx context.Context, userID domain.UserID) ([]*Session, error)
+
+	// Update updates an existing session.
+	Update(ctx context.Context, session *Session) error
+
+	// End marks a session as ended.
+	End(ctx context.Context, id string) error
+
+	// EndAllForUser ends all sessions for a user.
+	EndAllForUser(ctx context.Context, userID domain.UserID) error
+
+	// List retrieves sessions matching the filter.
+	List(ctx context.Context, filter SessionFilter) ([]*Session, error)
+
+	// Cleanup removes expired sessions older than the given time.
+	Cleanup(ctx context.Context, before time.Time) (int64, error)
+}
+
+// Session represents an authenticated user session.
+type Session struct {
+	// ID is the unique session identifier.
+	ID string `json:"id"`
+
+	// UserID is the user who owns this session.
+	UserID domain.UserID `json:"user_id"`
+
+	// Type is the session type (ssh, grpc, api).
+	Type SessionType `json:"type"`
+
+	// ClientIP is the client's IP address.
+	ClientIP string `json:"client_ip"`
+
+	// ClientAgent is the client's user agent or SSH client string.
+	ClientAgent string `json:"client_agent,omitempty"`
+
+	// PublicKeyFingerprint is the fingerprint of the key used to authenticate.
+	PublicKeyFingerprint string `json:"public_key_fingerprint"`
+
+	// NodeID is the node that the session is connected to.
+	NodeID string `json:"node_id"`
+
+	// StartedAt is when the session started.
+	StartedAt time.Time `json:"started_at"`
+
+	// EndedAt is when the session ended (null if still active).
+	EndedAt *time.Time `json:"ended_at,omitempty"`
+
+	// LastActivityAt is when the session was last active.
+	LastActivityAt time.Time `json:"last_activity_at"`
+
+	// Metadata holds additional session data.
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// SessionType represents the type of session.
+type SessionType string
+
+const (
+	SessionTypeSSH  SessionType = "ssh"
+	SessionTypeGRPC SessionType = "grpc"
+	SessionTypeAPI  SessionType = "api"
+)
+
+// SessionFilter defines filtering options for session queries.
+type SessionFilter struct {
+	// UserID filters by user
+	UserID *domain.UserID
+
+	// Type filters by session type
+	Type SessionType
+
+	// Active filters for active sessions only (EndedAt is null)
+	Active *bool
+
+	// ClientIP filters by client IP
+	ClientIP string
+
+	// NodeID filters by node
+	NodeID string
+
+	// After filters by start time
+	After *time.Time
+
+	// Before filters by start time
+	Before *time.Time
 
 	// Limit is the maximum number of results
 	Limit int

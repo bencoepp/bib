@@ -30,6 +30,8 @@ type Store struct {
 	datasets *DatasetRepository
 	jobs     *JobRepository
 	nodes    *NodeRepository
+	users    *UserRepository
+	sessions *SessionRepository
 	audit    *AuditRepository
 
 	mu     sync.RWMutex
@@ -93,6 +95,8 @@ func New(ctx context.Context, cfg storage.PostgresConfig, dataDir, nodeID string
 	s.datasets = &DatasetRepository{store: s}
 	s.jobs = &JobRepository{store: s}
 	s.nodes = &NodeRepository{store: s}
+	s.users = &UserRepository{store: s}
+	s.sessions = &SessionRepository{store: s}
 	s.audit = &AuditRepository{store: s, nodeID: nodeID, hashChain: true}
 
 	return s, nil
@@ -110,6 +114,8 @@ func NewWithPool(pool *pgxpool.Pool, nodeID string) *Store {
 	s.datasets = &DatasetRepository{store: s}
 	s.jobs = &JobRepository{store: s}
 	s.nodes = &NodeRepository{store: s}
+	s.users = &UserRepository{store: s}
+	s.sessions = &SessionRepository{store: s}
 	s.audit = &AuditRepository{store: s, nodeID: nodeID, hashChain: true}
 
 	return s
@@ -154,6 +160,16 @@ func (s *Store) Jobs() storage.JobRepository {
 // Nodes returns the node repository.
 func (s *Store) Nodes() storage.NodeRepository {
 	return s.nodes
+}
+
+// Users returns the user repository.
+func (s *Store) Users() storage.UserRepository {
+	return s.users
+}
+
+// Sessions returns the session repository.
+func (s *Store) Sessions() storage.SessionRepository {
+	return s.sessions
 }
 
 // Audit returns the audit repository.

@@ -317,9 +317,32 @@ type BibdConfig struct {
 	Log      LogConfig      `mapstructure:"log"`
 	Identity IdentityConfig `mapstructure:"identity"`
 	Server   ServerConfig   `mapstructure:"server"`
+	Auth     AuthConfig     `mapstructure:"auth"`
 	P2P      P2PConfig      `mapstructure:"p2p"`
 	Cluster  ClusterConfig  `mapstructure:"cluster"`
 	Database DatabaseConfig `mapstructure:"database"`
+}
+
+// AuthConfig holds authentication and user management configuration.
+type AuthConfig struct {
+	// AllowAutoRegistration allows new users to register automatically on first connection.
+	// If false, an admin must create the user first (at least add their public key).
+	AllowAutoRegistration bool `mapstructure:"allow_auto_registration"`
+
+	// RequireEmail requires users to provide an email during registration.
+	RequireEmail bool `mapstructure:"require_email"`
+
+	// DefaultRole is the default role for new users (user, readonly).
+	// The first user is always an admin regardless of this setting.
+	DefaultRole string `mapstructure:"default_role"`
+
+	// SessionTimeout is how long a session can be inactive before expiring.
+	// Default: 24h
+	SessionTimeout time.Duration `mapstructure:"session_timeout"`
+
+	// MaxSessionsPerUser is the maximum number of concurrent sessions per user.
+	// 0 means unlimited.
+	MaxSessionsPerUser int `mapstructure:"max_sessions_per_user"`
 }
 
 // DatabaseConfig holds storage layer configuration
