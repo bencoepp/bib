@@ -34,6 +34,18 @@ type Store interface {
 	// Audit returns the audit repository.
 	Audit() AuditRepository
 
+	// UserPreferences returns the user preferences repository.
+	UserPreferences() UserPreferencesRepository
+
+	// TopicMembers returns the topic membership repository.
+	TopicMembers() TopicMemberRepository
+
+	// TopicInvitations returns the topic invitations repository.
+	TopicInvitations() TopicInvitationRepository
+
+	// BannedPeers returns the banned peers repository.
+	BannedPeers() BannedPeerRepository
+
 	// Ping checks database connectivity.
 	Ping(ctx context.Context) error
 
@@ -659,6 +671,325 @@ type SessionFilter struct {
 
 	// Before filters by start time
 	Before *time.Time
+
+	// Limit is the maximum number of results
+	Limit int
+
+	// Offset is the number of results to skip
+	Offset int
+}
+
+// =============================================================================
+// User Preferences
+// =============================================================================
+
+// UserPreferences represents user preference settings.
+type UserPreferences struct {
+	// UserID is the user ID.
+	UserID domain.UserID `json:"user_id"`
+
+	// Theme is the UI theme preference: "light", "dark", "system".
+	Theme string `json:"theme"`
+
+	// Locale is the preferred locale.
+	Locale string `json:"locale"`
+
+	// Timezone is the IANA timezone name.
+	Timezone string `json:"timezone"`
+
+	// DateFormat is the preferred date format.
+	DateFormat string `json:"date_format"`
+
+	// NotificationsEnabled indicates if notifications are enabled.
+	NotificationsEnabled bool `json:"notifications_enabled"`
+
+	// EmailNotifications indicates if email notifications are enabled.
+	EmailNotifications bool `json:"email_notifications"`
+
+	// Custom holds additional preferences.
+	Custom map[string]string `json:"custom,omitempty"`
+
+	// CreatedAt is when the preferences were created.
+	CreatedAt time.Time `json:"created_at"`
+
+	// UpdatedAt is when the preferences were last updated.
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UserPreferencesRepository handles user preferences persistence.
+type UserPreferencesRepository interface {
+	// Get retrieves preferences for a user.
+	Get(ctx context.Context, userID domain.UserID) (*UserPreferences, error)
+
+	// Upsert creates or updates preferences for a user.
+	Upsert(ctx context.Context, prefs *UserPreferences) error
+
+	// Delete removes preferences for a user.
+	Delete(ctx context.Context, userID domain.UserID) error
+}
+
+// =============================================================================
+// Topic Membership
+// =============================================================================
+
+// TopicMemberRole represents the role of a topic member.
+type TopicMemberRole string
+
+const (
+	TopicMemberRoleOwner  TopicMemberRole = "owner"
+	TopicMemberRoleEditor TopicMemberRole = "editor"
+	TopicMemberRoleViewer TopicMemberRole = "viewer"
+)
+
+// IsValid checks if the role is valid.
+func (r TopicMemberRole) IsValid() bool {
+	switch r {
+	case TopicMemberRoleOwner, TopicMemberRoleEditor, TopicMemberRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// CanEdit returns true if the role allows editing.
+func (r TopicMemberRole) CanEdit() bool {
+	return r == TopicMemberRoleOwner || r == TopicMemberRoleEditor
+}
+
+// TopicMember represents a user's membership in a topic.
+type TopicMember struct {
+	// ID is the unique membership ID.
+	ID string `json:"id"`
+
+	// TopicID is the topic ID.
+	TopicID domain.TopicID `json:"topic_id"`
+
+	// UserID is the user ID.
+	UserID domain.UserID `json:"user_id"`
+
+	// Role is the member's role in the topic.
+	Role TopicMemberRole `json:"role"`
+
+	// InvitedBy is the user who invited this member.
+	InvitedBy domain.UserID `json:"invited_by,omitempty"`
+
+	// InvitedAt is when the user was invited.
+	InvitedAt time.Time `json:"invited_at"`
+
+	// AcceptedAt is when the user accepted the invitation.
+	AcceptedAt *time.Time `json:"accepted_at,omitempty"`
+
+	// CreatedAt is when the membership was created.
+	CreatedAt time.Time `json:"created_at"`
+
+	// UpdatedAt is when the membership was last updated.
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// TopicMemberRepository handles topic membership persistence.
+type TopicMemberRepository interface {
+	// Create creates a new membership.
+	Create(ctx context.Context, member *TopicMember) error
+
+	// Get retrieves a membership by topic and user.
+	Get(ctx context.Context, topicID domain.TopicID, userID domain.UserID) (*TopicMember, error)
+
+	// GetByID retrieves a membership by ID.
+	GetByID(ctx context.Context, id string) (*TopicMember, error)
+
+	// ListByTopic lists all members of a topic.
+	ListByTopic(ctx context.Context, topicID domain.TopicID, filter TopicMemberFilter) ([]*TopicMember, error)
+
+	// ListByUser lists all topic memberships for a user.
+	ListByUser(ctx context.Context, userID domain.UserID) ([]*TopicMember, error)
+
+	// Update updates a membership.
+	Update(ctx context.Context, member *TopicMember) error
+
+	// Delete removes a membership.
+	Delete(ctx context.Context, topicID domain.TopicID, userID domain.UserID) error
+
+	// CountOwners counts the number of owners for a topic.
+	CountOwners(ctx context.Context, topicID domain.TopicID) (int, error)
+
+	// HasAccess checks if a user has access to a topic.
+	HasAccess(ctx context.Context, topicID domain.TopicID, userID domain.UserID) (bool, error)
+
+	// GetRole gets the role of a user in a topic.
+	GetRole(ctx context.Context, topicID domain.TopicID, userID domain.UserID) (TopicMemberRole, error)
+}
+
+// TopicMemberFilter defines filtering options for topic member queries.
+type TopicMemberFilter struct {
+	// Role filters by role
+	Role TopicMemberRole
+
+	// Limit is the maximum number of results
+	Limit int
+
+	// Offset is the number of results to skip
+	Offset int
+}
+
+// =============================================================================
+// Topic Invitations
+// =============================================================================
+
+// InvitationStatus represents the status of an invitation.
+type InvitationStatus string
+
+const (
+	InvitationStatusPending   InvitationStatus = "pending"
+	InvitationStatusAccepted  InvitationStatus = "accepted"
+	InvitationStatusDeclined  InvitationStatus = "declined"
+	InvitationStatusExpired   InvitationStatus = "expired"
+	InvitationStatusCancelled InvitationStatus = "cancelled"
+)
+
+// TopicInvitation represents an invitation to join a topic.
+type TopicInvitation struct {
+	// ID is the unique invitation ID.
+	ID string `json:"id"`
+
+	// TopicID is the topic being invited to.
+	TopicID domain.TopicID `json:"topic_id"`
+
+	// InviterID is the user who sent the invitation.
+	InviterID domain.UserID `json:"inviter_id"`
+
+	// InviteeEmail is the email of the invitee (optional).
+	InviteeEmail string `json:"invitee_email,omitempty"`
+
+	// InviteeUserID is the user ID of the invitee (optional).
+	InviteeUserID domain.UserID `json:"invitee_user_id,omitempty"`
+
+	// Role is the role being offered.
+	Role TopicMemberRole `json:"role"`
+
+	// Token is the unique token for accepting the invitation.
+	Token string `json:"token"`
+
+	// Message is an optional message from the inviter.
+	Message string `json:"message,omitempty"`
+
+	// Status is the invitation status.
+	Status InvitationStatus `json:"status"`
+
+	// ExpiresAt is when the invitation expires.
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// CreatedAt is when the invitation was created.
+	CreatedAt time.Time `json:"created_at"`
+
+	// RespondedAt is when the invitation was responded to.
+	RespondedAt *time.Time `json:"responded_at,omitempty"`
+}
+
+// TopicInvitationRepository handles topic invitation persistence.
+type TopicInvitationRepository interface {
+	// Create creates a new invitation.
+	Create(ctx context.Context, invitation *TopicInvitation) error
+
+	// Get retrieves an invitation by ID.
+	Get(ctx context.Context, id string) (*TopicInvitation, error)
+
+	// GetByToken retrieves an invitation by token.
+	GetByToken(ctx context.Context, token string) (*TopicInvitation, error)
+
+	// ListByTopic lists invitations for a topic.
+	ListByTopic(ctx context.Context, topicID domain.TopicID, filter InvitationFilter) ([]*TopicInvitation, error)
+
+	// ListByUser lists invitations for a user (as invitee).
+	ListByUser(ctx context.Context, userID domain.UserID) ([]*TopicInvitation, error)
+
+	// ListByEmail lists invitations for an email address.
+	ListByEmail(ctx context.Context, email string) ([]*TopicInvitation, error)
+
+	// Update updates an invitation.
+	Update(ctx context.Context, invitation *TopicInvitation) error
+
+	// Delete removes an invitation.
+	Delete(ctx context.Context, id string) error
+
+	// ExpirePending expires all pending invitations that have passed their expiration.
+	ExpirePending(ctx context.Context) (int64, error)
+}
+
+// InvitationFilter defines filtering options for invitation queries.
+type InvitationFilter struct {
+	// Status filters by status
+	Status InvitationStatus
+
+	// Limit is the maximum number of results
+	Limit int
+
+	// Offset is the number of results to skip
+	Offset int
+}
+
+// =============================================================================
+// Banned Peers
+// =============================================================================
+
+// BannedPeer represents a banned peer.
+type BannedPeer struct {
+	// PeerID is the libp2p peer ID.
+	PeerID string `json:"peer_id"`
+
+	// Reason is the reason for the ban.
+	Reason string `json:"reason"`
+
+	// BannedBy is the user who banned the peer.
+	BannedBy domain.UserID `json:"banned_by,omitempty"`
+
+	// BannedAt is when the peer was banned.
+	BannedAt time.Time `json:"banned_at"`
+
+	// ExpiresAt is when the ban expires (nil = permanent).
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// Metadata holds additional ban information.
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// IsPermanent returns true if the ban is permanent.
+func (bp *BannedPeer) IsPermanent() bool {
+	return bp.ExpiresAt == nil
+}
+
+// IsExpired returns true if the ban has expired.
+func (bp *BannedPeer) IsExpired() bool {
+	if bp.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*bp.ExpiresAt)
+}
+
+// BannedPeerRepository handles banned peer persistence.
+type BannedPeerRepository interface {
+	// Create creates a new ban.
+	Create(ctx context.Context, ban *BannedPeer) error
+
+	// Get retrieves a ban by peer ID.
+	Get(ctx context.Context, peerID string) (*BannedPeer, error)
+
+	// List lists all bans.
+	List(ctx context.Context, filter BannedPeerFilter) ([]*BannedPeer, error)
+
+	// Delete removes a ban.
+	Delete(ctx context.Context, peerID string) error
+
+	// IsBanned checks if a peer is currently banned.
+	IsBanned(ctx context.Context, peerID string) (bool, error)
+
+	// CleanupExpired removes expired bans.
+	CleanupExpired(ctx context.Context) (int64, error)
+}
+
+// BannedPeerFilter defines filtering options for banned peer queries.
+type BannedPeerFilter struct {
+	// IncludeExpired includes expired bans
+	IncludeExpired bool
 
 	// Limit is the maximum number of results
 	Limit int
