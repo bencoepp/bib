@@ -13,6 +13,7 @@ import (
 
 	"bib/internal/cluster"
 	"bib/internal/config"
+	grpcpkg "bib/internal/grpc"
 	"bib/internal/logger"
 	"bib/internal/p2p"
 	"bib/internal/storage"
@@ -37,8 +38,9 @@ type Daemon struct {
 	p2pMode     *p2p.ModeManager
 	cluster     *cluster.Cluster
 
-	mu      sync.Mutex
-	running bool
+	mu        sync.Mutex
+	running   bool
+	startedAt time.Time
 }
 
 // NewDaemon creates a new daemon instance.
@@ -105,6 +107,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}
 
 	d.running = true
+	d.startedAt = time.Now()
 	d.log.Info("daemon started successfully")
 
 	return nil
@@ -904,6 +907,11 @@ func (d *Daemon) P2PHost() *p2p.Host {
 	return d.p2pHost
 }
 
+// P2PDiscovery returns the P2P discovery manager.
+func (d *Daemon) P2PDiscovery() *p2p.Discovery {
+	return d.p2pDisc
+}
+
 // Cluster returns the cluster instance for use by other components.
 func (d *Daemon) Cluster() *cluster.Cluster {
 	return d.cluster
@@ -914,4 +922,44 @@ func (d *Daemon) IsRunning() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.running
+}
+
+// StartedAt returns when the daemon started.
+func (d *Daemon) StartedAt() time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.startedAt
+}
+
+// NodeMode returns the P2P mode.
+func (d *Daemon) NodeMode() string {
+	return d.cfg.P2P.Mode
+}
+
+// NodeID returns the node identifier.
+func (d *Daemon) NodeID() string {
+	// Prefer cluster node ID if available
+	if d.cfg.Cluster.NodeID != "" {
+		return d.cfg.Cluster.NodeID
+	}
+	// Fall back to P2P peer ID
+	if d.p2pHost != nil {
+		return d.p2pHost.PeerID().String()
+	}
+	return "standalone"
+}
+
+// ListenAddresses returns the gRPC server listen addresses.
+func (d *Daemon) ListenAddresses() []string {
+	addr := fmt.Sprintf("%s:%d", d.cfg.Server.Host, d.cfg.Server.Port)
+	return []string{addr}
+}
+
+// HealthConfig returns configuration relevant to health reporting.
+func (d *Daemon) HealthConfig() grpcpkg.HealthProviderConfig {
+	return grpcpkg.HealthProviderConfig{
+		P2PEnabled:        d.cfg.P2P.Enabled,
+		ClusterEnabled:    d.cfg.Cluster.Enabled,
+		BandwidthMetering: d.cfg.P2P.Metrics.BandwidthMetering,
+	}
 }

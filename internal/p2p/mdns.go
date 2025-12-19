@@ -120,3 +120,8 @@ func (m *MDNSDiscovery) IsDiscovered(id peer.ID) bool {
 	_, ok := m.discovered[id]
 	return ok
 }
+
+// IsRunning returns true if mDNS is enabled and the service is running.
+func (m *MDNSDiscovery) IsRunning() bool {
+	return m.cfg.Enabled && m.service != nil
+}

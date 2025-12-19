@@ -91,6 +91,16 @@ type P2PConfig struct {
 
 	// Proxy mode configuration
 	Proxy ProxyConfig `mapstructure:"proxy"`
+
+	// Metrics configuration for P2P networking
+	Metrics P2PMetricsConfig `mapstructure:"metrics"`
+}
+
+// P2PMetricsConfig holds P2P metrics configuration
+type P2PMetricsConfig struct {
+	// BandwidthMetering enables tracking of bytes sent/received.
+	// This has some performance overhead and is disabled by default.
+	BandwidthMetering bool `mapstructure:"bandwidth_metering"`
 }
 
 // P2PIdentityConfig holds node P2P identity configuration

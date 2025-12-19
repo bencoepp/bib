@@ -9,6 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/metrics"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
@@ -20,7 +21,8 @@ import (
 // Host wraps a libp2p host with bib-specific functionality.
 type Host struct {
 	host.Host
-	cfg config.P2PConfig
+	cfg              config.P2PConfig
+	bandwidthCounter *metrics.BandwidthCounter
 }
 
 // NewHost creates a new libp2p host with the given configuration.
@@ -32,6 +34,7 @@ func NewHost(ctx context.Context, cfg config.P2PConfig, configDir string) (*Host
 		"listen_addresses", cfg.ListenAddresses,
 		"conn_low_watermark", cfg.ConnManager.LowWatermark,
 		"conn_high_watermark", cfg.ConnManager.HighWatermark,
+		"bandwidth_metering", cfg.Metrics.BandwidthMetering,
 	)
 
 	// Load or generate identity
@@ -92,6 +95,14 @@ func NewHost(ctx context.Context, cfg config.P2PConfig, configDir string) (*Host
 		libp2p.EnableHolePunching(),
 	}
 
+	// Add bandwidth metering if enabled
+	var bwCounter *metrics.BandwidthCounter
+	if cfg.Metrics.BandwidthMetering {
+		bwCounter = metrics.NewBandwidthCounter()
+		opts = append(opts, libp2p.BandwidthReporter(bwCounter))
+		hostLog.Debug("bandwidth metering enabled")
+	}
+
 	// Create the libp2p host
 	h, err := libp2p.New(opts...)
 	if err != nil {
@@ -105,8 +116,9 @@ func NewHost(ctx context.Context, cfg config.P2PConfig, configDir string) (*Host
 	)
 
 	return &Host{
-		Host: h,
-		cfg:  cfg,
+		Host:             h,
+		cfg:              cfg,
+		bandwidthCounter: bwCounter,
 	}, nil
 }
 
@@ -134,6 +146,35 @@ func (h *Host) FullAddrs() []multiaddr.Multiaddr {
 // Close shuts down the host.
 func (h *Host) Close() error {
 	return h.Host.Close()
+}
+
+// BandwidthStats returns bandwidth statistics if metering is enabled.
+// Returns (bytesSent, bytesReceived, enabled).
+func (h *Host) BandwidthStats() (int64, int64, bool) {
+	if h.bandwidthCounter == nil {
+		return 0, 0, false
+	}
+	stats := h.bandwidthCounter.GetBandwidthTotals()
+	return stats.TotalOut, stats.TotalIn, true
+}
+
+// ConnectedPeersCount returns the number of currently connected peers.
+func (h *Host) ConnectedPeersCount() int {
+	return len(h.Host.Network().Peers())
+}
+
+// ActiveStreamsCount returns the number of active streams.
+func (h *Host) ActiveStreamsCount() int {
+	count := 0
+	for _, conn := range h.Host.Network().Conns() {
+		count += conn.Stat().NumStreams
+	}
+	return count
+}
+
+// Config returns the P2P configuration.
+func (h *Host) Config() config.P2PConfig {
+	return h.cfg
 }
 
 // parseMultiaddrs parses a slice of multiaddr strings.

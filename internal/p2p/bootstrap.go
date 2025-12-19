@@ -101,6 +101,11 @@ func (b *Bootstrapper) IsBootstrapPeer(id peer.ID) bool {
 	return false
 }
 
+// IsConnected returns true if at least one bootstrap peer is connected.
+func (b *Bootstrapper) IsConnected() bool {
+	return b.ConnectedPeers() > 0
+}
+
 // connectWithBackoff attempts to connect to a peer with exponential backoff.
 func (b *Bootstrapper) connectWithBackoff(peerInfo peer.AddrInfo) {
 	defer b.wg.Done()

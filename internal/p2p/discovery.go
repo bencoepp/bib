@@ -332,3 +332,49 @@ func (d *Discovery) GetPeersForPruning(count int) []peer.ID {
 
 	return result
 }
+
+// DiscoveryHealth contains health information about discovery subsystems.
+type DiscoveryHealth struct {
+	BootstrapConnected bool
+	BootstrapHealthy   bool
+	MDNSEnabled        bool
+	MDNSHealthy        bool
+	DHTEnabled         bool
+	DHTHealthy         bool
+	DHTRoutingSize     int
+	KnownPeers         int
+	ConnectedPeers     int
+}
+
+// GetHealth returns the health status of discovery subsystems.
+func (d *Discovery) GetHealth() DiscoveryHealth {
+	health := DiscoveryHealth{
+		MDNSEnabled: d.cfg.MDNS.Enabled,
+		DHTEnabled:  d.cfg.DHT.Enabled,
+	}
+
+	// Check bootstrap connectivity
+	if d.bootstrapper != nil {
+		health.BootstrapConnected = d.bootstrapper.IsConnected()
+		health.BootstrapHealthy = health.BootstrapConnected
+	}
+
+	// Check mDNS health
+	if d.mdns != nil && d.cfg.MDNS.Enabled {
+		health.MDNSHealthy = d.mdns.IsRunning()
+	}
+
+	// Check DHT health
+	if d.dht != nil {
+		health.DHTHealthy = true // DHT is considered healthy if it exists
+		health.DHTRoutingSize = d.dht.RoutingTableSize()
+	}
+
+	// Peer counts
+	health.ConnectedPeers = len(d.host.Network().Peers())
+	if count, err := d.peerStore.Count(); err == nil {
+		health.KnownPeers = count
+	}
+
+	return health
+}

@@ -164,6 +164,69 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return fmt.Errorf("migration system updated - please use storage.RunMigrations() instead")
 }
 
+// Stats returns storage statistics for the SQLite database.
+func (s *Store) Stats(ctx context.Context) (storage.StorageStats, error) {
+	stats := storage.StorageStats{
+		Healthy: true,
+		Message: "SQLite storage operational",
+	}
+
+	// Check database health first
+	if err := s.Ping(ctx); err != nil {
+		stats.Healthy = false
+		stats.Message = fmt.Sprintf("database ping failed: %v", err)
+		return stats, nil
+	}
+
+	// Get dataset count
+	var datasetCount int64
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM datasets WHERE status != 'deleted'").Scan(&datasetCount)
+	if err != nil && err != sql.ErrNoRows {
+		// Table might not exist yet
+		datasetCount = 0
+	}
+	stats.DatasetCount = datasetCount
+
+	// Get topic count
+	var topicCount int64
+	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM topics WHERE status != 'deleted'").Scan(&topicCount)
+	if err != nil && err != sql.ErrNoRows {
+		topicCount = 0
+	}
+	stats.TopicCount = topicCount
+
+	// Get database file size
+	dbPath := s.cfg.Path
+	if dbPath == "" {
+		// Default path wasn't stored, try to get from pragma
+		var dbFile string
+		err = s.db.QueryRowContext(ctx, "PRAGMA database_list").Scan(nil, nil, &dbFile)
+		if err == nil && dbFile != "" {
+			dbPath = dbFile
+		}
+	}
+
+	if dbPath != "" && dbPath != ":memory:" {
+		// Get file size
+		if fi, err := os.Stat(dbPath); err == nil {
+			stats.BytesUsed = fi.Size()
+		}
+
+		// Also count WAL and SHM files
+		if walFi, err := os.Stat(dbPath + "-wal"); err == nil {
+			stats.BytesUsed += walFi.Size()
+		}
+		if shmFi, err := os.Stat(dbPath + "-shm"); err == nil {
+			stats.BytesUsed += shmFi.Size()
+		}
+
+		// Get available disk space (platform-dependent)
+		stats.BytesAvailable = getAvailableSpace(filepath.Dir(dbPath))
+	}
+
+	return stats, nil
+}
+
 // DB returns the underlying database connection.
 // Use with caution - prefer repository methods.
 func (s *Store) DB() *sql.DB {

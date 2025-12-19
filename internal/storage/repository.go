@@ -46,6 +46,30 @@ type Store interface {
 
 	// Migrate runs database migrations.
 	Migrate(ctx context.Context) error
+
+	// Stats returns storage statistics.
+	Stats(ctx context.Context) (StorageStats, error)
+}
+
+// StorageStats contains storage usage statistics.
+type StorageStats struct {
+	// DatasetCount is the number of datasets in storage.
+	DatasetCount int64
+
+	// TopicCount is the number of topics in storage.
+	TopicCount int64
+
+	// BytesUsed is the total storage space used in bytes.
+	BytesUsed int64
+
+	// BytesAvailable is the available storage space in bytes.
+	BytesAvailable int64
+
+	// Healthy indicates if the storage is healthy.
+	Healthy bool
+
+	// Message provides additional information about storage status.
+	Message string
 }
 
 // BackendType represents the storage backend.

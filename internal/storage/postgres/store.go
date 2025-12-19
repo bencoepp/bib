@@ -198,6 +198,56 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return fmt.Errorf("legacy Migrate() deprecated - use storage.RunMigrations() with the new migration framework")
 }
 
+// Stats returns storage statistics for the PostgreSQL database.
+func (s *Store) Stats(ctx context.Context) (storage.StorageStats, error) {
+	stats := storage.StorageStats{
+		Healthy: true,
+		Message: "PostgreSQL storage operational",
+	}
+
+	// Check database health first
+	if err := s.Ping(ctx); err != nil {
+		stats.Healthy = false
+		stats.Message = fmt.Sprintf("database ping failed: %v", err)
+		return stats, nil
+	}
+
+	// Get dataset count
+	var datasetCount int64
+	err := s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM datasets WHERE status != 'deleted'").Scan(&datasetCount)
+	if err != nil {
+		// Table might not exist yet
+		datasetCount = 0
+	}
+	stats.DatasetCount = datasetCount
+
+	// Get topic count
+	var topicCount int64
+	err = s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM topics WHERE status != 'deleted'").Scan(&topicCount)
+	if err != nil {
+		topicCount = 0
+	}
+	stats.TopicCount = topicCount
+
+	// Get database size using pg_database_size
+	var dbSize int64
+	err = s.pool.QueryRow(ctx, "SELECT pg_database_size(current_database())").Scan(&dbSize)
+	if err != nil {
+		dbSize = 0
+	}
+	stats.BytesUsed = dbSize
+
+	// Get available tablespace size (if possible)
+	// This queries the data directory size which requires superuser in some configs
+	// For now, we use a reasonable approach - check disk space of the data directory
+	dataDir := s.DataDir()
+	if dataDir != "" {
+		stats.BytesAvailable = getAvailableSpace(dataDir)
+	}
+
+	return stats, nil
+}
+
 // Pool returns the main connection pool.
 func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool

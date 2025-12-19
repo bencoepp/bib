@@ -634,7 +634,7 @@
 ### 4.2 Service Proto Definitions
 
 #### 4.2.1 HealthService (P0)
-- [ ] **GRPC-004**: HealthService proto definition
+- [x] **GRPC-004**: HealthService proto definition
   ```protobuf
   service HealthService {
     // Check performs a health check (standard gRPC health check)
