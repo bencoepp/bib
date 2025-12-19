@@ -1,0 +1,433 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "bib/v1/common.proto";
+
+// TopicService provides topic management and subscription operations.
+service TopicService {
+  // CreateTopic creates a new topic.
+  rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+
+  // GetTopic retrieves a topic by ID or name.
+  rpc GetTopic(GetTopicRequest) returns (GetTopicResponse);
+
+  // ListTopics lists topics with filtering.
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+
+  // UpdateTopic updates topic metadata.
+  rpc UpdateTopic(UpdateTopicRequest) returns (UpdateTopicResponse);
+
+  // DeleteTopic soft-deletes a topic.
+  rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse);
+
+  // Subscribe subscribes to a topic (selective mode).
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
+
+  // Unsubscribe unsubscribes from a topic.
+  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+
+  // ListSubscriptions lists current subscriptions.
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+
+  // GetSubscription gets subscription details for a topic.
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
+
+  // StreamTopicUpdates streams topic changes in real-time.
+  rpc StreamTopicUpdates(StreamTopicUpdatesRequest) returns (stream TopicUpdate);
+
+  // GetTopicStats returns statistics for a topic.
+  rpc GetTopicStats(GetTopicStatsRequest) returns (GetTopicStatsResponse);
+
+  // SearchTopics searches topics by text query.
+  rpc SearchTopics(SearchTopicsRequest) returns (SearchTopicsResponse);
+}
+
+// =============================================================================
+// Topic Entity
+// =============================================================================
+
+// Topic represents a topic (collection of related datasets).
+message Topic {
+  // Unique topic identifier.
+  string id = 1;
+
+  // Human-readable topic name.
+  string name = 2;
+
+  // Topic description.
+  string description = 3;
+
+  // Schema for datasets in this topic (JSON schema).
+  string schema = 4;
+
+  // Number of datasets in this topic.
+  int64 dataset_count = 5;
+
+  // Total size of all datasets (bytes).
+  int64 total_size = 6;
+
+  // Topic owner (user ID).
+  string owner_id = 7;
+
+  // Whether the topic is public.
+  bool is_public = 8;
+
+  // Topic status: "active", "archived", "deleted".
+  string status = 9;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 10;
+
+  // Last modification timestamp.
+  google.protobuf.Timestamp updated_at = 11;
+
+  // When the topic was last synced.
+  google.protobuf.Timestamp last_sync_at = 12;
+
+  // Tags for categorization.
+  repeated string tags = 13;
+
+  // Additional metadata.
+  map<string, string> metadata = 14;
+}
+
+// Subscription represents a topic subscription.
+message Subscription {
+  // Topic ID.
+  string topic_id = 1;
+
+  // Topic name.
+  string topic_name = 2;
+
+  // When subscribed.
+  google.protobuf.Timestamp subscribed_at = 3;
+
+  // Sync status: "pending", "syncing", "synced", "error".
+  string sync_status = 4;
+
+  // Last sync timestamp.
+  google.protobuf.Timestamp last_sync_at = 5;
+
+  // Number of datasets synced.
+  int64 synced_datasets = 6;
+
+  // Total datasets in topic.
+  int64 total_datasets = 7;
+
+  // Sync error message (if status is "error").
+  string sync_error = 8;
+
+  // Whether auto-sync is enabled.
+  bool auto_sync = 9;
+}
+
+// =============================================================================
+// Create Topic
+// =============================================================================
+
+// CreateTopicRequest creates a new topic.
+message CreateTopicRequest {
+  // Topic name (must be unique).
+  string name = 1;
+
+  // Topic description.
+  string description = 2;
+
+  // Optional JSON schema for datasets.
+  string schema = 3;
+
+  // Whether the topic is public.
+  bool is_public = 4;
+
+  // Tags.
+  repeated string tags = 5;
+
+  // Additional metadata.
+  map<string, string> metadata = 6;
+}
+
+// CreateTopicResponse contains the created topic.
+message CreateTopicResponse {
+  Topic topic = 1;
+}
+
+// =============================================================================
+// Get Topic
+// =============================================================================
+
+// GetTopicRequest retrieves a topic.
+message GetTopicRequest {
+  // Topic ID.
+  string id = 1;
+
+  // Or topic name (if ID is empty).
+  string name = 2;
+
+  // Include dataset count and size.
+  bool include_stats = 3;
+}
+
+// GetTopicResponse contains the topic.
+message GetTopicResponse {
+  Topic topic = 1;
+
+  // Whether we're subscribed to this topic.
+  bool subscribed = 2;
+
+  // Subscription info (if subscribed).
+  Subscription subscription = 3;
+}
+
+// =============================================================================
+// List Topics
+// =============================================================================
+
+// ListTopicsRequest lists topics.
+message ListTopicsRequest {
+  // Filter by status.
+  string status = 1;
+
+  // Filter by owner.
+  string owner_id = 2;
+
+  // Only public topics.
+  bool public_only = 3;
+
+  // Only subscribed topics.
+  bool subscribed_only = 4;
+
+  // Filter by tag.
+  repeated string tags = 5;
+
+  // Pagination.
+  bib.v1.PageRequest page = 6;
+
+  // Sorting.
+  bib.v1.SortOrder sort = 7;
+}
+
+// ListTopicsResponse contains topics.
+message ListTopicsResponse {
+  repeated Topic topics = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Update Topic
+// =============================================================================
+
+// UpdateTopicRequest updates a topic.
+message UpdateTopicRequest {
+  // Topic ID.
+  string id = 1;
+
+  // New name (if set).
+  optional string name = 2;
+
+  // New description (if set).
+  optional string description = 3;
+
+  // New schema (if set).
+  optional string schema = 4;
+
+  // Update public status.
+  optional bool is_public = 5;
+
+  // Replace tags.
+  repeated string tags = 6;
+
+  // Whether to update tags.
+  bool update_tags = 7;
+
+  // Replace metadata.
+  map<string, string> metadata = 8;
+
+  // Whether to update metadata.
+  bool update_metadata = 9;
+}
+
+// UpdateTopicResponse contains the updated topic.
+message UpdateTopicResponse {
+  Topic topic = 1;
+}
+
+// =============================================================================
+// Delete Topic
+// =============================================================================
+
+// DeleteTopicRequest deletes a topic.
+message DeleteTopicRequest {
+  // Topic ID.
+  string id = 1;
+
+  // Force delete even if topic has datasets.
+  bool force = 2;
+}
+
+// DeleteTopicResponse confirms deletion.
+message DeleteTopicResponse {
+  bool success = 1;
+
+  // Number of datasets affected.
+  int64 datasets_affected = 2;
+}
+
+// =============================================================================
+// Subscriptions
+// =============================================================================
+
+// SubscribeRequest subscribes to a topic.
+message SubscribeRequest {
+  // Topic ID.
+  string topic_id = 1;
+
+  // Or topic name.
+  string topic_name = 2;
+
+  // Enable auto-sync.
+  bool auto_sync = 3;
+
+  // Start immediate sync.
+  bool sync_now = 4;
+}
+
+// SubscribeResponse confirms subscription.
+message SubscribeResponse {
+  Subscription subscription = 1;
+}
+
+// UnsubscribeRequest unsubscribes from a topic.
+message UnsubscribeRequest {
+  // Topic ID.
+  string topic_id = 1;
+
+  // Delete local data.
+  bool delete_local_data = 2;
+}
+
+// UnsubscribeResponse confirms unsubscription.
+message UnsubscribeResponse {
+  bool success = 1;
+
+  // Bytes freed (if delete_local_data).
+  int64 bytes_freed = 2;
+}
+
+// ListSubscriptionsRequest lists subscriptions.
+message ListSubscriptionsRequest {
+  // Filter by sync status.
+  string sync_status = 1;
+
+  // Pagination.
+  bib.v1.PageRequest page = 2;
+}
+
+// ListSubscriptionsResponse contains subscriptions.
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// GetSubscriptionRequest gets subscription details.
+message GetSubscriptionRequest {
+  string topic_id = 1;
+}
+
+// GetSubscriptionResponse contains subscription details.
+message GetSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+// =============================================================================
+// Topic Updates Stream
+// =============================================================================
+
+// StreamTopicUpdatesRequest requests topic update streaming.
+message StreamTopicUpdatesRequest {
+  // Topic IDs to watch (empty = all subscribed topics).
+  repeated string topic_ids = 1;
+
+  // Include dataset events.
+  bool include_datasets = 2;
+}
+
+// TopicUpdate represents a topic update event.
+message TopicUpdate {
+  // Event type: "created", "updated", "deleted", "dataset_added", "dataset_updated", "dataset_removed".
+  string event_type = 1;
+
+  // Topic info.
+  Topic topic = 2;
+
+  // Dataset info (for dataset events).
+  bib.v1.DatasetInfo dataset = 3;
+
+  // Event timestamp.
+  google.protobuf.Timestamp timestamp = 4;
+
+  // Source node.
+  string source_node_id = 5;
+}
+
+// =============================================================================
+// Topic Stats
+// =============================================================================
+
+// GetTopicStatsRequest requests topic statistics.
+message GetTopicStatsRequest {
+  string topic_id = 1;
+}
+
+// GetTopicStatsResponse contains topic statistics.
+message GetTopicStatsResponse {
+  // Topic ID.
+  string topic_id = 1;
+
+  // Number of datasets.
+  int64 dataset_count = 2;
+
+  // Total size (bytes).
+  int64 total_size = 3;
+
+  // Number of subscribers (approximate).
+  int64 subscriber_count = 4;
+
+  // Number of nodes hosting this topic.
+  int64 replica_count = 5;
+
+  // Dataset stats by type.
+  map<string, int64> datasets_by_type = 6;
+
+  // Last activity timestamp.
+  google.protobuf.Timestamp last_activity = 7;
+}
+
+// =============================================================================
+// Search Topics
+// =============================================================================
+
+// SearchTopicsRequest searches topics.
+message SearchTopicsRequest {
+  // Text query.
+  string query = 1;
+
+  // Only public topics.
+  bool public_only = 2;
+
+  // Filter by tags.
+  repeated string tags = 3;
+
+  // Pagination.
+  bib.v1.PageRequest page = 4;
+}
+
+// SearchTopicsResponse contains search results.
+message SearchTopicsResponse {
+  repeated Topic topics = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+

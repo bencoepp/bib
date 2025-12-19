@@ -1,0 +1,562 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "bib/v1/common.proto";
+
+// DatasetService provides dataset management and data transfer operations.
+service DatasetService {
+  // CreateDataset creates a new dataset.
+  rpc CreateDataset(CreateDatasetRequest) returns (CreateDatasetResponse);
+
+  // GetDataset retrieves dataset metadata.
+  rpc GetDataset(GetDatasetRequest) returns (GetDatasetResponse);
+
+  // ListDatasets lists datasets with filtering.
+  rpc ListDatasets(ListDatasetsRequest) returns (ListDatasetsResponse);
+
+  // UpdateDataset updates dataset metadata.
+  rpc UpdateDataset(UpdateDatasetRequest) returns (UpdateDatasetResponse);
+
+  // DeleteDataset soft-deletes a dataset.
+  rpc DeleteDataset(DeleteDatasetRequest) returns (DeleteDatasetResponse);
+
+  // UploadDataset uploads dataset content (streaming).
+  rpc UploadDataset(stream UploadDatasetRequest) returns (UploadDatasetResponse);
+
+  // DownloadDataset downloads dataset content (streaming).
+  rpc DownloadDataset(DownloadDatasetRequest) returns (stream DownloadDatasetResponse);
+
+  // GetDatasetVersions lists versions of a dataset.
+  rpc GetDatasetVersions(GetDatasetVersionsRequest) returns (GetDatasetVersionsResponse);
+
+  // GetVersion retrieves a specific version.
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
+
+  // GetChunk retrieves a specific chunk.
+  rpc GetChunk(GetChunkRequest) returns (GetChunkResponse);
+
+  // VerifyDataset verifies dataset integrity.
+  rpc VerifyDataset(VerifyDatasetRequest) returns (VerifyDatasetResponse);
+
+  // SearchDatasets searches datasets by text query.
+  rpc SearchDatasets(SearchDatasetsRequest) returns (SearchDatasetsResponse);
+
+  // GetDatasetStats returns statistics for a dataset.
+  rpc GetDatasetStats(GetDatasetStatsRequest) returns (GetDatasetStatsResponse);
+
+  // CopyDataset copies a dataset to another topic.
+  rpc CopyDataset(CopyDatasetRequest) returns (CopyDatasetResponse);
+
+  // StreamDatasetEvents streams dataset events.
+  rpc StreamDatasetEvents(StreamDatasetEventsRequest) returns (stream DatasetEvent);
+}
+
+// =============================================================================
+// Dataset Entity
+// =============================================================================
+
+// Dataset represents a dataset with its metadata.
+message Dataset {
+  // Unique dataset identifier.
+  string id = 1;
+
+  // Topic this dataset belongs to.
+  string topic_id = 2;
+
+  // Human-readable name.
+  string name = 3;
+
+  // Dataset description.
+  string description = 4;
+
+  // Content type (MIME type).
+  string content_type = 5;
+
+  // Total size in bytes.
+  int64 size = 6;
+
+  // SHA-256 hash of the content.
+  string hash = 7;
+
+  // Number of chunks.
+  int32 chunk_count = 8;
+
+  // Size of each chunk.
+  int64 chunk_size = 9;
+
+  // Current version number.
+  int32 version = 10;
+
+  // Dataset owner (user ID).
+  string owner_id = 11;
+
+  // Dataset status: "active", "archived", "deleted".
+  string status = 12;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 13;
+
+  // Last modification timestamp.
+  google.protobuf.Timestamp updated_at = 14;
+
+  // Tags for categorization.
+  repeated string tags = 15;
+
+  // Additional metadata.
+  map<string, string> metadata = 16;
+
+  // Schema validation status.
+  string schema_status = 17;
+
+  // Source information (where this data came from).
+  DataSource source = 18;
+}
+
+// DataSource describes where the dataset originated.
+message DataSource {
+  // Source type: "upload", "scrape", "transform", "import".
+  string type = 1;
+
+  // Source URL (for scrape/import).
+  string url = 2;
+
+  // Parent dataset ID (for transform).
+  string parent_dataset_id = 3;
+
+  // Job ID that created this dataset.
+  string job_id = 4;
+
+  // Import format (for import).
+  string format = 5;
+}
+
+// DatasetVersion represents a specific version of a dataset.
+message DatasetVersion {
+  // Version number.
+  int32 version = 1;
+
+  // Dataset ID.
+  string dataset_id = 2;
+
+  // Size at this version.
+  int64 size = 3;
+
+  // Hash at this version.
+  string hash = 4;
+
+  // Chunk count at this version.
+  int32 chunk_count = 5;
+
+  // When this version was created.
+  google.protobuf.Timestamp created_at = 6;
+
+  // User who created this version.
+  string created_by = 7;
+
+  // Change description.
+  string message = 8;
+
+  // Parent version (for branching).
+  int32 parent_version = 9;
+}
+
+// =============================================================================
+// Create Dataset
+// =============================================================================
+
+// CreateDatasetRequest creates a new dataset (metadata only).
+// Use UploadDataset to upload content.
+message CreateDatasetRequest {
+  // Topic ID.
+  string topic_id = 1;
+
+  // Dataset name.
+  string name = 2;
+
+  // Description.
+  string description = 3;
+
+  // Content type.
+  string content_type = 4;
+
+  // Tags.
+  repeated string tags = 5;
+
+  // Metadata.
+  map<string, string> metadata = 6;
+}
+
+// CreateDatasetResponse contains the created dataset.
+message CreateDatasetResponse {
+  Dataset dataset = 1;
+}
+
+// =============================================================================
+// Get Dataset
+// =============================================================================
+
+// GetDatasetRequest retrieves a dataset.
+message GetDatasetRequest {
+  // Dataset ID.
+  string id = 1;
+
+  // Or lookup by topic + name.
+  string topic_id = 2;
+  string name = 3;
+
+  // Specific version (0 = latest).
+  int32 version = 4;
+
+  // Include source information.
+  bool include_source = 5;
+}
+
+// GetDatasetResponse contains the dataset.
+message GetDatasetResponse {
+  Dataset dataset = 1;
+
+  // Available locally.
+  bool available_locally = 2;
+
+  // Nodes that have this dataset.
+  repeated string available_on_nodes = 3;
+}
+
+// =============================================================================
+// List Datasets
+// =============================================================================
+
+// ListDatasetsRequest lists datasets.
+message ListDatasetsRequest {
+  // Filter by topic.
+  string topic_id = 1;
+
+  // Filter by status.
+  string status = 2;
+
+  // Filter by owner.
+  string owner_id = 3;
+
+  // Filter by content type.
+  string content_type = 4;
+
+  // Filter by tags.
+  repeated string tags = 5;
+
+  // Only locally available datasets.
+  bool local_only = 6;
+
+  // Pagination.
+  bib.v1.PageRequest page = 7;
+
+  // Sorting.
+  bib.v1.SortOrder sort = 8;
+}
+
+// ListDatasetsResponse contains datasets.
+message ListDatasetsResponse {
+  repeated Dataset datasets = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Update Dataset
+// =============================================================================
+
+// UpdateDatasetRequest updates dataset metadata.
+message UpdateDatasetRequest {
+  // Dataset ID.
+  string id = 1;
+
+  // New name.
+  optional string name = 2;
+
+  // New description.
+  optional string description = 3;
+
+  // New content type.
+  optional string content_type = 4;
+
+  // Replace tags.
+  repeated string tags = 5;
+  bool update_tags = 6;
+
+  // Replace metadata.
+  map<string, string> metadata = 7;
+  bool update_metadata = 8;
+}
+
+// UpdateDatasetResponse contains the updated dataset.
+message UpdateDatasetResponse {
+  Dataset dataset = 1;
+}
+
+// =============================================================================
+// Delete Dataset
+// =============================================================================
+
+// DeleteDatasetRequest deletes a dataset.
+message DeleteDatasetRequest {
+  // Dataset ID.
+  string id = 1;
+
+  // Delete all versions.
+  bool delete_all_versions = 2;
+
+  // Force delete even if referenced.
+  bool force = 3;
+}
+
+// DeleteDatasetResponse confirms deletion.
+message DeleteDatasetResponse {
+  bool success = 1;
+  int64 bytes_freed = 2;
+}
+
+// =============================================================================
+// Upload/Download
+// =============================================================================
+
+// UploadDatasetRequest is a streaming upload request.
+message UploadDatasetRequest {
+  oneof data {
+    // Metadata (first message).
+    UploadMetadata metadata = 1;
+
+    // Chunk data (subsequent messages).
+    bytes chunk = 2;
+  }
+}
+
+// UploadMetadata contains upload metadata.
+message UploadMetadata {
+  // Dataset ID (for updating existing).
+  string dataset_id = 1;
+
+  // Or create new in topic.
+  string topic_id = 2;
+
+  // Dataset name (for new datasets).
+  string name = 3;
+
+  // Content type.
+  string content_type = 4;
+
+  // Expected total size.
+  int64 total_size = 5;
+
+  // Expected hash (for verification).
+  string expected_hash = 6;
+
+  // Create new version.
+  bool create_version = 7;
+
+  // Version message.
+  string version_message = 8;
+
+  // Description.
+  string description = 9;
+
+  // Tags.
+  repeated string tags = 10;
+
+  // Metadata.
+  map<string, string> metadata = 11;
+}
+
+// UploadDatasetResponse contains upload result.
+message UploadDatasetResponse {
+  Dataset dataset = 1;
+
+  // Bytes uploaded.
+  int64 bytes_uploaded = 2;
+
+  // Chunks created.
+  int32 chunks_created = 3;
+
+  // New version number.
+  int32 version = 4;
+}
+
+// DownloadDatasetRequest requests dataset download.
+message DownloadDatasetRequest {
+  // Dataset ID.
+  string id = 1;
+
+  // Specific version (0 = latest).
+  int32 version = 2;
+
+  // Start from chunk (for resume).
+  int32 start_chunk = 3;
+
+  // End at chunk (0 = all remaining).
+  int32 end_chunk = 4;
+
+  // Preferred source node.
+  string preferred_node = 5;
+}
+
+// DownloadDatasetResponse streams dataset content.
+message DownloadDatasetResponse {
+  oneof data {
+    // Metadata (first message).
+    DownloadMetadata metadata = 1;
+
+    // Chunk data.
+    ChunkData chunk = 2;
+  }
+}
+
+// DownloadMetadata contains download metadata.
+message DownloadMetadata {
+  Dataset dataset = 1;
+  int32 total_chunks = 2;
+  int64 total_size = 3;
+}
+
+// ChunkData contains chunk content.
+message ChunkData {
+  int32 index = 1;
+  bytes data = 2;
+  string hash = 3;
+  int64 size = 4;
+}
+
+// =============================================================================
+// Versions
+// =============================================================================
+
+// GetDatasetVersionsRequest lists dataset versions.
+message GetDatasetVersionsRequest {
+  string dataset_id = 1;
+  bib.v1.PageRequest page = 2;
+}
+
+// GetDatasetVersionsResponse contains versions.
+message GetDatasetVersionsResponse {
+  repeated DatasetVersion versions = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// GetVersionRequest gets a specific version.
+message GetVersionRequest {
+  string dataset_id = 1;
+  int32 version = 2;
+}
+
+// GetVersionResponse contains the version.
+message GetVersionResponse {
+  DatasetVersion version = 1;
+}
+
+// =============================================================================
+// Chunks
+// =============================================================================
+
+// GetChunkRequest retrieves a chunk.
+message GetChunkRequest {
+  string dataset_id = 1;
+  int32 version = 2;
+  int32 chunk_index = 3;
+}
+
+// GetChunkResponse contains the chunk.
+message GetChunkResponse {
+  ChunkData chunk = 1;
+}
+
+// =============================================================================
+// Verification
+// =============================================================================
+
+// VerifyDatasetRequest verifies dataset integrity.
+message VerifyDatasetRequest {
+  string dataset_id = 1;
+  int32 version = 2;
+  bool repair = 3;
+}
+
+// VerifyDatasetResponse contains verification result.
+message VerifyDatasetResponse {
+  bool valid = 1;
+  repeated string errors = 2;
+  int32 chunks_verified = 3;
+  int32 chunks_corrupted = 4;
+  int32 chunks_repaired = 5;
+}
+
+// =============================================================================
+// Search
+// =============================================================================
+
+// SearchDatasetsRequest searches datasets.
+message SearchDatasetsRequest {
+  string query = 1;
+  string topic_id = 2;
+  repeated string tags = 3;
+  bib.v1.PageRequest page = 4;
+}
+
+// SearchDatasetsResponse contains search results.
+message SearchDatasetsResponse {
+  repeated Dataset datasets = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Stats
+// =============================================================================
+
+// GetDatasetStatsRequest requests dataset statistics.
+message GetDatasetStatsRequest {
+  string dataset_id = 1;
+}
+
+// GetDatasetStatsResponse contains statistics.
+message GetDatasetStatsResponse {
+  string dataset_id = 1;
+  int32 version_count = 2;
+  int64 total_size_all_versions = 3;
+  int64 download_count = 4;
+  int64 replica_count = 5;
+  google.protobuf.Timestamp last_accessed = 6;
+}
+
+// =============================================================================
+// Copy
+// =============================================================================
+
+// CopyDatasetRequest copies a dataset.
+message CopyDatasetRequest {
+  string source_dataset_id = 1;
+  string target_topic_id = 2;
+  string new_name = 3;
+}
+
+// CopyDatasetResponse contains the copied dataset.
+message CopyDatasetResponse {
+  Dataset dataset = 1;
+}
+
+// =============================================================================
+// Events
+// =============================================================================
+
+// StreamDatasetEventsRequest requests dataset event streaming.
+message StreamDatasetEventsRequest {
+  repeated string dataset_ids = 1;
+  string topic_id = 2;
+}
+
+// DatasetEvent represents a dataset event.
+message DatasetEvent {
+  string event_type = 1;
+  Dataset dataset = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string source_node_id = 4;
+}
+

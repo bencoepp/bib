@@ -1,0 +1,429 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "bib/v1/common.proto";
+
+// JobService provides job management operations.
+// Note: Implementation deferred until Phase 3 (Scheduler) completion.
+service JobService {
+  // CreateJob creates a new job.
+  rpc CreateJob(CreateJobRequest) returns (CreateJobResponse);
+
+  // GetJob retrieves job status.
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+
+  // ListJobs lists jobs with filtering.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+
+  // CancelJob cancels a running job.
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+
+  // RetryJob retries a failed job.
+  rpc RetryJob(RetryJobRequest) returns (RetryJobResponse);
+
+  // StreamJobLogs streams job output in real-time.
+  rpc StreamJobLogs(StreamJobLogsRequest) returns (stream JobLogEntry);
+
+  // StreamJobStatus streams job status updates.
+  rpc StreamJobStatus(StreamJobStatusRequest) returns (stream JobStatusUpdate);
+
+  // PauseJob pauses a running job.
+  rpc PauseJob(PauseJobRequest) returns (PauseJobResponse);
+
+  // ResumeJob resumes a paused job.
+  rpc ResumeJob(ResumeJobRequest) returns (ResumeJobResponse);
+
+  // GetJobResult retrieves job result/output.
+  rpc GetJobResult(GetJobResultRequest) returns (GetJobResultResponse);
+
+  // DeleteJob deletes a job and its artifacts.
+  rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);
+}
+
+// =============================================================================
+// Job Entity
+// =============================================================================
+
+// JobType defines the type of job.
+enum JobType {
+  JOB_TYPE_UNSPECIFIED = 0;
+  JOB_TYPE_SCRAPE = 1;
+  JOB_TYPE_TRANSFORM = 2;
+  JOB_TYPE_CLEAN = 3;
+  JOB_TYPE_ANALYZE = 4;
+  JOB_TYPE_ML = 5;
+  JOB_TYPE_ETL = 6;
+  JOB_TYPE_CUSTOM = 7;
+}
+
+// JobStatus defines job status.
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  JOB_STATUS_PENDING = 1;
+  JOB_STATUS_QUEUED = 2;
+  JOB_STATUS_RUNNING = 3;
+  JOB_STATUS_PAUSED = 4;
+  JOB_STATUS_COMPLETED = 5;
+  JOB_STATUS_FAILED = 6;
+  JOB_STATUS_CANCELLED = 7;
+  JOB_STATUS_TIMEOUT = 8;
+}
+
+// Job represents a job.
+message Job {
+  // Unique job identifier.
+  string id = 1;
+
+  // Job name.
+  string name = 2;
+
+  // Job type.
+  JobType type = 3;
+
+  // Current status.
+  JobStatus status = 4;
+
+  // CEL expression or script.
+  string expression = 5;
+
+  // Target topic.
+  string topic_id = 6;
+
+  // Target dataset (optional).
+  string dataset_id = 7;
+
+  // Output dataset (if created).
+  string output_dataset_id = 8;
+
+  // Job priority (0-100).
+  int32 priority = 9;
+
+  // Owner.
+  string owner_id = 10;
+
+  // Created timestamp.
+  google.protobuf.Timestamp created_at = 11;
+
+  // Queued timestamp.
+  google.protobuf.Timestamp queued_at = 12;
+
+  // Started timestamp.
+  google.protobuf.Timestamp started_at = 13;
+
+  // Completed timestamp.
+  google.protobuf.Timestamp completed_at = 14;
+
+  // Maximum duration.
+  google.protobuf.Duration timeout = 15;
+
+  // Error message (if failed).
+  string error = 16;
+
+  // Node executing the job.
+  string node_id = 17;
+
+  // Progress (0-100).
+  int32 progress = 18;
+
+  // Progress message.
+  string progress_message = 19;
+
+  // Retry count.
+  int32 retry_count = 20;
+
+  // Maximum retries.
+  int32 max_retries = 21;
+
+  // Job parameters.
+  map<string, google.protobuf.Value> parameters = 22;
+
+  // Resource requirements.
+  ResourceRequirements resources = 23;
+
+  // Tags.
+  repeated string tags = 24;
+
+  // Metadata.
+  map<string, string> metadata = 25;
+
+  // Schedule ID (if scheduled).
+  string schedule_id = 26;
+}
+
+// ResourceRequirements defines resource limits.
+message ResourceRequirements {
+  // Memory limit (bytes).
+  int64 memory_limit = 1;
+
+  // CPU limit (millicores).
+  int32 cpu_limit = 2;
+
+  // Disk limit (bytes).
+  int64 disk_limit = 3;
+
+  // Network limit (bytes/sec).
+  int64 network_limit = 4;
+
+  // Maximum execution time.
+  google.protobuf.Duration time_limit = 5;
+}
+
+// =============================================================================
+// Create Job
+// =============================================================================
+
+// CreateJobRequest creates a job.
+message CreateJobRequest {
+  // Job name.
+  string name = 1;
+
+  // Job type.
+  JobType type = 2;
+
+  // Expression/script.
+  string expression = 3;
+
+  // Target topic.
+  string topic_id = 4;
+
+  // Target dataset.
+  string dataset_id = 5;
+
+  // Priority.
+  int32 priority = 6;
+
+  // Parameters.
+  map<string, google.protobuf.Value> parameters = 7;
+
+  // Resource requirements.
+  ResourceRequirements resources = 8;
+
+  // Maximum retries.
+  int32 max_retries = 9;
+
+  // Timeout.
+  google.protobuf.Duration timeout = 10;
+
+  // Tags.
+  repeated string tags = 11;
+
+  // Metadata.
+  map<string, string> metadata = 12;
+
+  // Schedule for recurring execution.
+  JobSchedule schedule = 13;
+}
+
+// JobSchedule defines job schedule.
+message JobSchedule {
+  // Cron expression.
+  string cron = 1;
+
+  // Timezone.
+  string timezone = 2;
+
+  // Start time.
+  google.protobuf.Timestamp start_at = 3;
+
+  // End time.
+  google.protobuf.Timestamp end_at = 4;
+
+  // Maximum runs.
+  int32 max_runs = 5;
+}
+
+// CreateJobResponse contains created job.
+message CreateJobResponse {
+  Job job = 1;
+}
+
+// =============================================================================
+// Get Job
+// =============================================================================
+
+// GetJobRequest gets a job.
+message GetJobRequest {
+  string id = 1;
+}
+
+// GetJobResponse contains job.
+message GetJobResponse {
+  Job job = 1;
+}
+
+// =============================================================================
+// List Jobs
+// =============================================================================
+
+// ListJobsRequest lists jobs.
+message ListJobsRequest {
+  // Filter by status.
+  JobStatus status = 1;
+
+  // Filter by type.
+  JobType type = 2;
+
+  // Filter by topic.
+  string topic_id = 3;
+
+  // Filter by owner.
+  string owner_id = 4;
+
+  // Filter by tag.
+  repeated string tags = 5;
+
+  // Pagination.
+  bib.v1.PageRequest page = 6;
+
+  // Sorting.
+  bib.v1.SortOrder sort = 7;
+}
+
+// ListJobsResponse contains jobs.
+message ListJobsResponse {
+  repeated Job jobs = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Job Control
+// =============================================================================
+
+// CancelJobRequest cancels a job.
+message CancelJobRequest {
+  string id = 1;
+  string reason = 2;
+}
+
+// CancelJobResponse confirms cancellation.
+message CancelJobResponse {
+  bool success = 1;
+  Job job = 2;
+}
+
+// RetryJobRequest retries a job.
+message RetryJobRequest {
+  string id = 1;
+}
+
+// RetryJobResponse contains new job.
+message RetryJobResponse {
+  Job job = 1;
+}
+
+// PauseJobRequest pauses a job.
+message PauseJobRequest {
+  string id = 1;
+}
+
+// PauseJobResponse confirms pause.
+message PauseJobResponse {
+  bool success = 1;
+  Job job = 2;
+}
+
+// ResumeJobRequest resumes a job.
+message ResumeJobRequest {
+  string id = 1;
+}
+
+// ResumeJobResponse confirms resume.
+message ResumeJobResponse {
+  bool success = 1;
+  Job job = 2;
+}
+
+// =============================================================================
+// Job Logs
+// =============================================================================
+
+// StreamJobLogsRequest requests log streaming.
+message StreamJobLogsRequest {
+  string id = 1;
+  bool follow = 2;
+  int32 tail_lines = 3;
+}
+
+// JobLogEntry is a log entry.
+message JobLogEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string level = 2;
+  string message = 3;
+  string stream = 4;  // "stdout", "stderr"
+}
+
+// StreamJobStatusRequest requests status streaming.
+message StreamJobStatusRequest {
+  string id = 1;
+}
+
+// JobStatusUpdate is a status update.
+message JobStatusUpdate {
+  Job job = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string event = 3;
+}
+
+// =============================================================================
+// Job Results
+// =============================================================================
+
+// GetJobResultRequest gets job result.
+message GetJobResultRequest {
+  string id = 1;
+}
+
+// GetJobResultResponse contains result.
+message GetJobResultResponse {
+  Job job = 1;
+
+  // Result data.
+  google.protobuf.Struct result = 2;
+
+  // Output artifacts.
+  repeated JobArtifact artifacts = 3;
+
+  // Execution stats.
+  JobExecutionStats stats = 4;
+}
+
+// JobArtifact is a job output artifact.
+message JobArtifact {
+  string name = 1;
+  string type = 2;
+  string path = 3;
+  int64 size = 4;
+  string hash = 5;
+}
+
+// JobExecutionStats contains execution stats.
+message JobExecutionStats {
+  google.protobuf.Duration total_time = 1;
+  google.protobuf.Duration cpu_time = 2;
+  int64 peak_memory = 3;
+  int64 bytes_read = 4;
+  int64 bytes_written = 5;
+  int64 rows_processed = 6;
+}
+
+// =============================================================================
+// Delete Job
+// =============================================================================
+
+// DeleteJobRequest deletes a job.
+message DeleteJobRequest {
+  string id = 1;
+  bool delete_artifacts = 2;
+}
+
+// DeleteJobResponse confirms deletion.
+message DeleteJobResponse {
+  bool success = 1;
+}
+

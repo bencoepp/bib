@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package bib.v1.p2p;
+
+option go_package = "bib/api/gen/go/bib/v1/p2p;p2p";
+
+import "bib/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// PubSub messages for GossipSub topics
+
+// PubSubMessage is the wrapper for all pubsub messages
+message PubSubMessage {
+  // type identifies the message type
+  string type = 1;
+
+  // sender_peer_id is the originating peer
+  string sender_peer_id = 2;
+
+  // timestamp is when the message was created
+  google.protobuf.Timestamp timestamp = 3;
+
+  // signature is the Ed25519 signature of the payload
+  bytes signature = 4;
+
+  // payload is the message-specific data
+  bytes payload = 5;
+}
+
+// Message types for topic: /bib/global
+
+// GlobalAnnouncement is broadcast to all nodes
+message GlobalAnnouncement {
+  string announcement_id = 1;
+  string type = 2;  // "node_join", "node_leave", "new_topic", "new_dataset"
+
+  oneof content {
+    NodeJoinAnnouncement node_join = 3;
+    NodeLeaveAnnouncement node_leave = 4;
+    NewTopicAnnouncement new_topic = 5;
+    NewDatasetAnnouncement new_dataset = 6;
+  }
+}
+
+message NodeJoinAnnouncement {
+  bib.v1.PeerInfo peer_info = 1;
+}
+
+message NodeLeaveAnnouncement {
+  string peer_id = 1;
+  string reason = 2;
+}
+
+message NewTopicAnnouncement {
+  bib.v1.TopicInfo topic = 1;
+}
+
+message NewDatasetAnnouncement {
+  bib.v1.DatasetInfo dataset = 1;
+  string topic_name = 2;
+}
+
+// Message types for topic: /bib/nodes
+
+// NodeStatus is periodically broadcast by nodes
+message NodeStatus {
+  string peer_id = 1;
+  string node_mode = 2;
+  int32 connected_peers = 3;
+  int32 dataset_count = 4;
+  int64 storage_used_bytes = 5;
+  int64 storage_total_bytes = 6;
+  float cpu_usage_percent = 7;
+  float memory_usage_percent = 8;
+  int32 active_jobs = 9;
+  google.protobuf.Timestamp uptime_since = 10;
+}
+
+// Message types for topic: /bib/topics/<topic-id>
+
+// TopicUpdate is broadcast when a topic's data changes
+message TopicUpdate {
+  string topic_id = 1;
+  string update_type = 2;  // "new_dataset", "updated_dataset", "deleted_dataset"
+
+  oneof content {
+    bib.v1.CatalogEntry new_entry = 3;
+    bib.v1.CatalogEntry updated_entry = 4;
+    string deleted_hash = 5;
+  }
+}
+
+// TopicSubscription manages topic subscriptions
+message TopicSubscription {
+  string topic_id = 1;
+  bool subscribe = 2;  // true = subscribe, false = unsubscribe
+}
+

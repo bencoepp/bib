@@ -1,0 +1,430 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "bib/v1/common.proto";
+
+// NodeService provides node and peer management operations.
+service NodeService {
+  // GetNode returns information about a specific node by ID.
+  rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
+
+  // ListNodes lists known nodes in the network.
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+
+  // GetSelfNode returns this node's information.
+  rpc GetSelfNode(GetSelfNodeRequest) returns (GetSelfNodeResponse);
+
+  // ConnectPeer manually connects to a peer by multiaddr.
+  rpc ConnectPeer(ConnectPeerRequest) returns (ConnectPeerResponse);
+
+  // DisconnectPeer disconnects from a peer.
+  rpc DisconnectPeer(DisconnectPeerRequest) returns (DisconnectPeerResponse);
+
+  // GetNetworkStats returns network statistics.
+  rpc GetNetworkStats(GetNetworkStatsRequest) returns (GetNetworkStatsResponse);
+
+  // StreamNodeEvents streams node join/leave events.
+  rpc StreamNodeEvents(StreamNodeEventsRequest) returns (stream NodeEvent);
+
+  // GetPeerInfo returns detailed information about a connected peer.
+  rpc GetPeerInfo(GetPeerInfoRequest) returns (GetPeerInfoResponse);
+
+  // ListConnectedPeers lists currently connected peers.
+  rpc ListConnectedPeers(ListConnectedPeersRequest) returns (ListConnectedPeersResponse);
+
+  // BanPeer bans a peer (prevents reconnection).
+  rpc BanPeer(BanPeerRequest) returns (BanPeerResponse);
+
+  // UnbanPeer removes a peer ban.
+  rpc UnbanPeer(UnbanPeerRequest) returns (UnbanPeerResponse);
+
+  // ListBannedPeers lists banned peers.
+  rpc ListBannedPeers(ListBannedPeersRequest) returns (ListBannedPeersResponse);
+}
+
+// =============================================================================
+// Node Information
+// =============================================================================
+
+// NodeInfo represents information about a network node.
+message NodeInfo {
+  // Node/peer ID.
+  string id = 1;
+
+  // Node mode: "full", "selective", "proxy".
+  string mode = 2;
+
+  // Software version.
+  string version = 3;
+
+  // Known multiaddresses.
+  repeated string addresses = 4;
+
+  // Whether we're currently connected.
+  bool connected = 5;
+
+  // Connection latency (milliseconds).
+  int64 latency_ms = 6;
+
+  // When we first discovered this node.
+  google.protobuf.Timestamp discovered_at = 7;
+
+  // When we last saw this node.
+  google.protobuf.Timestamp last_seen = 8;
+
+  // Protocols supported by this node.
+  repeated string protocols = 9;
+
+  // Agent version (libp2p agent string).
+  string agent_version = 10;
+
+  // Whether this is a bootstrap node.
+  bool is_bootstrap = 11;
+
+  // Storage type: "postgres", "sqlite", "unknown".
+  string storage_type = 12;
+
+  // Whether this node is an authoritative data source.
+  bool is_authoritative = 13;
+
+  // Number of datasets this node has.
+  int64 dataset_count = 14;
+
+  // Peer reputation score (0-100).
+  int32 reputation = 15;
+
+  // Additional metadata.
+  map<string, string> metadata = 16;
+}
+
+// =============================================================================
+// Get Node
+// =============================================================================
+
+// GetNodeRequest requests a node by ID.
+message GetNodeRequest {
+  // Node/peer ID.
+  string node_id = 1;
+}
+
+// GetNodeResponse contains node information.
+message GetNodeResponse {
+  NodeInfo node = 1;
+}
+
+// =============================================================================
+// List Nodes
+// =============================================================================
+
+// ListNodesRequest lists known nodes.
+message ListNodesRequest {
+  // Filter by mode.
+  string mode = 1;
+
+  // Only connected nodes.
+  bool connected_only = 2;
+
+  // Only authoritative nodes.
+  bool authoritative_only = 3;
+
+  // Pagination.
+  bib.v1.PageRequest page = 4;
+
+  // Sorting.
+  bib.v1.SortOrder sort = 5;
+}
+
+// ListNodesResponse contains the node list.
+message ListNodesResponse {
+  repeated NodeInfo nodes = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Self Node
+// =============================================================================
+
+// GetSelfNodeRequest requests this node's information.
+message GetSelfNodeRequest {
+  // Include detailed statistics.
+  bool include_stats = 1;
+}
+
+// GetSelfNodeResponse contains this node's information.
+message GetSelfNodeResponse {
+  // This node's info.
+  NodeInfo node = 1;
+
+  // Public addresses (NAT-discovered).
+  repeated string public_addresses = 2;
+
+  // Private/local addresses.
+  repeated string private_addresses = 3;
+
+  // Whether we're behind NAT.
+  bool is_behind_nat = 4;
+
+  // NAT type if behind NAT.
+  string nat_type = 5;
+
+  // Bootstrap nodes we're connected to.
+  repeated string connected_bootstrap_nodes = 6;
+}
+
+// =============================================================================
+// Peer Connection Management
+// =============================================================================
+
+// ConnectPeerRequest connects to a peer.
+message ConnectPeerRequest {
+  // Multiaddr to connect to (e.g., /ip4/1.2.3.4/tcp/4001/p2p/QmPeer...).
+  string multiaddr = 1;
+}
+
+// ConnectPeerResponse confirms connection.
+message ConnectPeerResponse {
+  // Whether connection succeeded.
+  bool success = 1;
+
+  // Connected peer info.
+  NodeInfo node = 2;
+
+  // Error message if failed.
+  string error = 3;
+}
+
+// DisconnectPeerRequest disconnects from a peer.
+message DisconnectPeerRequest {
+  // Peer ID to disconnect.
+  string peer_id = 1;
+}
+
+// DisconnectPeerResponse confirms disconnection.
+message DisconnectPeerResponse {
+  bool success = 1;
+}
+
+// GetPeerInfoRequest requests peer information.
+message GetPeerInfoRequest {
+  // Peer ID.
+  string peer_id = 1;
+}
+
+// GetPeerInfoResponse contains peer information.
+message GetPeerInfoResponse {
+  NodeInfo node = 1;
+
+  // Connection information.
+  ConnectionInfo connection = 2;
+}
+
+// ConnectionInfo contains connection details.
+message ConnectionInfo {
+  // Number of active streams.
+  int32 stream_count = 1;
+
+  // Connection direction: "inbound", "outbound".
+  string direction = 2;
+
+  // When the connection was established.
+  google.protobuf.Timestamp connected_at = 3;
+
+  // Bytes sent to this peer.
+  int64 bytes_sent = 4;
+
+  // Bytes received from this peer.
+  int64 bytes_received = 5;
+
+  // Remote multiaddr.
+  string remote_addr = 6;
+
+  // Local multiaddr.
+  string local_addr = 7;
+
+  // Transport: "tcp", "quic", "websocket".
+  string transport = 8;
+
+  // Security protocol: "noise", "tls".
+  string security = 9;
+
+  // Multiplexer: "yamux", "mplex".
+  string multiplexer = 10;
+}
+
+// ListConnectedPeersRequest lists connected peers.
+message ListConnectedPeersRequest {
+  // Pagination.
+  bib.v1.PageRequest page = 1;
+}
+
+// ListConnectedPeersResponse contains connected peers.
+message ListConnectedPeersResponse {
+  repeated NodeInfo peers = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Network Statistics
+// =============================================================================
+
+// GetNetworkStatsRequest requests network statistics.
+message GetNetworkStatsRequest {
+  // Include per-protocol stats.
+  bool include_protocol_stats = 1;
+
+  // Include per-peer stats.
+  bool include_peer_stats = 2;
+}
+
+// GetNetworkStatsResponse contains network statistics.
+message GetNetworkStatsResponse {
+  // Total connected peers.
+  int32 connected_peers = 1;
+
+  // Total known peers.
+  int32 known_peers = 2;
+
+  // Total bytes sent.
+  int64 total_bytes_sent = 3;
+
+  // Total bytes received.
+  int64 total_bytes_received = 4;
+
+  // Active streams.
+  int32 active_streams = 5;
+
+  // DHT routing table size.
+  int32 dht_size = 6;
+
+  // Whether bootstrap is connected.
+  bool bootstrap_connected = 7;
+
+  // Per-protocol statistics.
+  map<string, ProtocolStats> protocol_stats = 8;
+
+  // Bandwidth (bytes/second).
+  BandwidthStats bandwidth = 9;
+}
+
+// ProtocolStats contains per-protocol statistics.
+message ProtocolStats {
+  // Protocol ID.
+  string protocol_id = 1;
+
+  // Number of active streams.
+  int32 stream_count = 2;
+
+  // Messages sent.
+  int64 messages_sent = 3;
+
+  // Messages received.
+  int64 messages_received = 4;
+
+  // Bytes sent.
+  int64 bytes_sent = 5;
+
+  // Bytes received.
+  int64 bytes_received = 6;
+}
+
+// BandwidthStats contains bandwidth information.
+message BandwidthStats {
+  // Current inbound rate (bytes/sec).
+  double rate_in = 1;
+
+  // Current outbound rate (bytes/sec).
+  double rate_out = 2;
+
+  // Total bytes in.
+  int64 total_in = 3;
+
+  // Total bytes out.
+  int64 total_out = 4;
+}
+
+// =============================================================================
+// Node Events
+// =============================================================================
+
+// StreamNodeEventsRequest requests node event streaming.
+message StreamNodeEventsRequest {
+  // Event types to subscribe to (empty = all).
+  repeated string event_types = 1;
+}
+
+// NodeEvent represents a node event.
+message NodeEvent {
+  // Event type: "join", "leave", "update".
+  string type = 1;
+
+  // Node info.
+  NodeInfo node = 2;
+
+  // When the event occurred.
+  google.protobuf.Timestamp timestamp = 3;
+
+  // Additional details.
+  map<string, string> details = 4;
+}
+
+// =============================================================================
+// Peer Banning
+// =============================================================================
+
+// BanPeerRequest bans a peer.
+message BanPeerRequest {
+  // Peer ID to ban.
+  string peer_id = 1;
+
+  // Reason for ban.
+  string reason = 2;
+
+  // Ban duration (0 = permanent).
+  int64 duration_seconds = 3;
+}
+
+// BanPeerResponse confirms the ban.
+message BanPeerResponse {
+  bool success = 1;
+}
+
+// UnbanPeerRequest removes a ban.
+message UnbanPeerRequest {
+  string peer_id = 1;
+}
+
+// UnbanPeerResponse confirms unban.
+message UnbanPeerResponse {
+  bool success = 1;
+}
+
+// ListBannedPeersRequest lists banned peers.
+message ListBannedPeersRequest {
+  bib.v1.PageRequest page = 1;
+}
+
+// BannedPeer represents a banned peer.
+message BannedPeer {
+  // Peer ID.
+  string peer_id = 1;
+
+  // Reason for ban.
+  string reason = 2;
+
+  // When banned.
+  google.protobuf.Timestamp banned_at = 3;
+
+  // When ban expires (null = permanent).
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// ListBannedPeersResponse contains banned peers.
+message ListBannedPeersResponse {
+  repeated BannedPeer peers = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+

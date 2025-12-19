@@ -1,0 +1,450 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "bib/v1/common.proto";
+
+// QueryService provides CEL-based query operations.
+// Note: Full implementation depends on Phase 3 CEL integration.
+service QueryService {
+  // Execute runs a CEL query and returns results.
+  rpc Execute(ExecuteQueryRequest) returns (ExecuteQueryResponse);
+
+  // ExecuteStream runs a query and streams results.
+  rpc ExecuteStream(ExecuteQueryRequest) returns (stream QueryResult);
+
+  // ValidateQuery validates a CEL expression without executing.
+  rpc ValidateQuery(ValidateQueryRequest) returns (ValidateQueryResponse);
+
+  // ExplainQuery explains query execution plan.
+  rpc ExplainQuery(ExplainQueryRequest) returns (ExplainQueryResponse);
+
+  // ListFunctions lists available CEL functions.
+  rpc ListFunctions(ListFunctionsRequest) returns (ListFunctionsResponse);
+
+  // GetQueryHistory returns recent queries.
+  rpc GetQueryHistory(GetQueryHistoryRequest) returns (GetQueryHistoryResponse);
+
+  // SaveQuery saves a named query.
+  rpc SaveQuery(SaveQueryRequest) returns (SaveQueryResponse);
+
+  // ListSavedQueries lists saved queries.
+  rpc ListSavedQueries(ListSavedQueriesRequest) returns (ListSavedQueriesResponse);
+
+  // DeleteSavedQuery deletes a saved query.
+  rpc DeleteSavedQuery(DeleteSavedQueryRequest) returns (DeleteSavedQueryResponse);
+}
+
+// =============================================================================
+// Execute Query
+// =============================================================================
+
+// ExecuteQueryRequest executes a query.
+message ExecuteQueryRequest {
+  // CEL expression to execute.
+  string expression = 1;
+
+  // Target datasets (empty = all accessible).
+  repeated string dataset_ids = 2;
+
+  // Target topics (alternative to dataset_ids).
+  repeated string topic_ids = 3;
+
+  // Query parameters (substituted into expression).
+  map<string, google.protobuf.Value> parameters = 4;
+
+  // Pagination.
+  bib.v1.PageRequest page = 5;
+
+  // Maximum execution time.
+  google.protobuf.Duration timeout = 6;
+
+  // Output format: "json", "csv", "table".
+  string format = 7;
+
+  // Include metadata in results.
+  bool include_metadata = 8;
+
+  // Dry run (validate but don't execute).
+  bool dry_run = 9;
+}
+
+// ExecuteQueryResponse contains query results.
+message ExecuteQueryResponse {
+  // Query results.
+  repeated QueryResult results = 1;
+
+  // Pagination info.
+  bib.v1.PageInfo page_info = 2;
+
+  // Query statistics.
+  QueryStats stats = 3;
+
+  // Warnings (non-fatal issues).
+  repeated string warnings = 4;
+}
+
+// QueryResult is a single query result row.
+message QueryResult {
+  // Result data as structured value.
+  google.protobuf.Struct data = 1;
+
+  // Source dataset ID.
+  string dataset_id = 2;
+
+  // Source topic ID.
+  string topic_id = 3;
+
+  // Result index.
+  int64 index = 4;
+
+  // Relevance score (for search queries).
+  float score = 5;
+}
+
+// QueryStats contains query execution statistics.
+message QueryStats {
+  // Execution time.
+  google.protobuf.Duration execution_time = 1;
+
+  // Rows scanned.
+  int64 rows_scanned = 2;
+
+  // Rows matched.
+  int64 rows_matched = 3;
+
+  // Datasets queried.
+  int32 datasets_queried = 4;
+
+  // Bytes scanned.
+  int64 bytes_scanned = 5;
+
+  // Cache hits.
+  int64 cache_hits = 6;
+
+  // Whether query was truncated due to limits.
+  bool truncated = 7;
+}
+
+// =============================================================================
+// Validate Query
+// =============================================================================
+
+// ValidateQueryRequest validates a query.
+message ValidateQueryRequest {
+  // CEL expression to validate.
+  string expression = 1;
+
+  // Expected parameter types.
+  map<string, string> parameter_types = 2;
+}
+
+// ValidateQueryResponse contains validation result.
+message ValidateQueryResponse {
+  // Whether expression is valid.
+  bool valid = 1;
+
+  // Validation errors.
+  repeated QueryError errors = 2;
+
+  // Validation warnings.
+  repeated string warnings = 3;
+
+  // Inferred result type.
+  string result_type = 4;
+
+  // Required parameters.
+  repeated ParameterInfo required_parameters = 5;
+}
+
+// QueryError represents a query error.
+message QueryError {
+  // Error message.
+  string message = 1;
+
+  // Line number (1-indexed).
+  int32 line = 2;
+
+  // Column number (1-indexed).
+  int32 column = 3;
+
+  // Error code.
+  string code = 4;
+
+  // Suggestion for fixing.
+  string suggestion = 5;
+}
+
+// ParameterInfo describes a query parameter.
+message ParameterInfo {
+  // Parameter name.
+  string name = 1;
+
+  // Parameter type.
+  string type = 2;
+
+  // Whether required.
+  bool required = 3;
+
+  // Default value.
+  google.protobuf.Value default_value = 4;
+
+  // Description.
+  string description = 5;
+}
+
+// =============================================================================
+// Explain Query
+// =============================================================================
+
+// ExplainQueryRequest explains a query.
+message ExplainQueryRequest {
+  // CEL expression.
+  string expression = 1;
+
+  // Target datasets.
+  repeated string dataset_ids = 2;
+
+  // Target topics.
+  repeated string topic_ids = 3;
+
+  // Query parameters.
+  map<string, google.protobuf.Value> parameters = 4;
+
+  // Verbosity level.
+  string verbosity = 5;
+}
+
+// ExplainQueryResponse contains query plan.
+message ExplainQueryResponse {
+  // Execution plan.
+  QueryPlan plan = 1;
+
+  // Estimated cost.
+  QueryCost estimated_cost = 2;
+
+  // Optimizations applied.
+  repeated string optimizations = 3;
+
+  // Warnings.
+  repeated string warnings = 4;
+}
+
+// QueryPlan describes query execution plan.
+message QueryPlan {
+  // Plan type: "scan", "index", "filter", etc.
+  string type = 1;
+
+  // Description.
+  string description = 2;
+
+  // Child plans.
+  repeated QueryPlan children = 3;
+
+  // Estimated row count.
+  int64 estimated_rows = 4;
+
+  // Plan-specific properties.
+  map<string, string> properties = 5;
+}
+
+// QueryCost estimates query cost.
+message QueryCost {
+  // CPU cost (relative).
+  float cpu = 1;
+
+  // IO cost (relative).
+  float io = 2;
+
+  // Network cost (relative).
+  float network = 3;
+
+  // Estimated duration.
+  google.protobuf.Duration estimated_duration = 4;
+
+  // Estimated bytes to scan.
+  int64 estimated_bytes = 5;
+}
+
+// =============================================================================
+// Functions
+// =============================================================================
+
+// ListFunctionsRequest lists CEL functions.
+message ListFunctionsRequest {
+  // Filter by category.
+  string category = 1;
+
+  // Search by name.
+  string search = 2;
+}
+
+// ListFunctionsResponse contains functions.
+message ListFunctionsResponse {
+  repeated FunctionInfo functions = 1;
+}
+
+// FunctionInfo describes a CEL function.
+message FunctionInfo {
+  // Function name.
+  string name = 1;
+
+  // Category.
+  string category = 2;
+
+  // Description.
+  string description = 3;
+
+  // Signature.
+  string signature = 4;
+
+  // Return type.
+  string return_type = 5;
+
+  // Parameter descriptions.
+  repeated ParameterInfo parameters = 6;
+
+  // Usage examples.
+  repeated string examples = 7;
+}
+
+// =============================================================================
+// Query History
+// =============================================================================
+
+// GetQueryHistoryRequest requests query history.
+message GetQueryHistoryRequest {
+  bib.v1.PageRequest page = 1;
+}
+
+// GetQueryHistoryResponse contains history.
+message GetQueryHistoryResponse {
+  repeated QueryHistoryEntry entries = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// QueryHistoryEntry is a history entry.
+message QueryHistoryEntry {
+  // Entry ID.
+  string id = 1;
+
+  // Expression.
+  string expression = 2;
+
+  // When executed.
+  google.protobuf.Timestamp executed_at = 3;
+
+  // Execution time.
+  google.protobuf.Duration duration = 4;
+
+  // Result count.
+  int64 result_count = 5;
+
+  // Success.
+  bool success = 6;
+
+  // Error (if failed).
+  string error = 7;
+}
+
+// =============================================================================
+// Saved Queries
+// =============================================================================
+
+// SaveQueryRequest saves a query.
+message SaveQueryRequest {
+  // Query name.
+  string name = 1;
+
+  // Expression.
+  string expression = 2;
+
+  // Description.
+  string description = 3;
+
+  // Default parameters.
+  map<string, google.protobuf.Value> default_parameters = 4;
+
+  // Is public.
+  bool is_public = 5;
+
+  // Tags.
+  repeated string tags = 6;
+}
+
+// SaveQueryResponse contains saved query.
+message SaveQueryResponse {
+  SavedQuery query = 1;
+}
+
+// SavedQuery is a saved query.
+message SavedQuery {
+  // Query ID.
+  string id = 1;
+
+  // Name.
+  string name = 2;
+
+  // Expression.
+  string expression = 3;
+
+  // Description.
+  string description = 4;
+
+  // Default parameters.
+  map<string, google.protobuf.Value> default_parameters = 5;
+
+  // Owner.
+  string owner_id = 6;
+
+  // Is public.
+  bool is_public = 7;
+
+  // Tags.
+  repeated string tags = 8;
+
+  // Created at.
+  google.protobuf.Timestamp created_at = 9;
+
+  // Updated at.
+  google.protobuf.Timestamp updated_at = 10;
+
+  // Use count.
+  int64 use_count = 11;
+}
+
+// ListSavedQueriesRequest lists saved queries.
+message ListSavedQueriesRequest {
+  // Include public queries.
+  bool include_public = 1;
+
+  // Filter by tag.
+  repeated string tags = 2;
+
+  // Search by name.
+  string search = 3;
+
+  bib.v1.PageRequest page = 4;
+}
+
+// ListSavedQueriesResponse contains queries.
+message ListSavedQueriesResponse {
+  repeated SavedQuery queries = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// DeleteSavedQueryRequest deletes a query.
+message DeleteSavedQueryRequest {
+  string id = 1;
+}
+
+// DeleteSavedQueryResponse confirms deletion.
+message DeleteSavedQueryResponse {
+  bool success = 1;
+}
+

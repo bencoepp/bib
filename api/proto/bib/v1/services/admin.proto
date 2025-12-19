@@ -1,0 +1,563 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "bib/v1/common.proto";
+
+// AdminService provides administrative operations.
+// All operations require admin privileges.
+service AdminService {
+  // GetConfig returns current configuration (secrets redacted).
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+
+  // UpdateConfig updates runtime configuration.
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+
+  // GetMetrics returns Prometheus-style metrics.
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+
+  // StreamLogs streams daemon logs in real-time.
+  rpc StreamLogs(StreamLogsRequest) returns (stream LogEntry);
+
+  // GetAuditLogs queries the audit trail.
+  rpc GetAuditLogs(GetAuditLogsRequest) returns (GetAuditLogsResponse);
+
+  // TriggerBackup initiates a database backup.
+  rpc TriggerBackup(TriggerBackupRequest) returns (TriggerBackupResponse);
+
+  // ListBackups lists available backups.
+  rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse);
+
+  // RestoreBackup restores from a backup.
+  rpc RestoreBackup(RestoreBackupRequest) returns (RestoreBackupResponse);
+
+  // DeleteBackup deletes a backup.
+  rpc DeleteBackup(DeleteBackupRequest) returns (DeleteBackupResponse);
+
+  // GetClusterStatus returns cluster/raft status.
+  rpc GetClusterStatus(GetClusterStatusRequest) returns (GetClusterStatusResponse);
+
+  // TriggerSnapshot triggers a Raft snapshot.
+  rpc TriggerSnapshot(TriggerSnapshotRequest) returns (TriggerSnapshotResponse);
+
+  // TransferLeadership transfers Raft leadership.
+  rpc TransferLeadership(TransferLeadershipRequest) returns (TransferLeadershipResponse);
+
+  // Shutdown gracefully shuts down the daemon.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // GetSystemInfo returns system information.
+  rpc GetSystemInfo(GetSystemInfoRequest) returns (GetSystemInfoResponse);
+
+  // RunMaintenance runs maintenance tasks.
+  rpc RunMaintenance(RunMaintenanceRequest) returns (RunMaintenanceResponse);
+}
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+// GetConfigRequest requests configuration.
+message GetConfigRequest {
+  // Include secrets (hashed/redacted).
+  bool include_secrets = 1;
+
+  // Specific section (empty = all).
+  string section = 2;
+}
+
+// GetConfigResponse contains configuration.
+message GetConfigResponse {
+  // Configuration as structured data.
+  google.protobuf.Struct config = 1;
+
+  // Configuration file path.
+  string config_path = 2;
+
+  // When config was last modified.
+  google.protobuf.Timestamp last_modified = 3;
+
+  // Effective configuration (with defaults applied).
+  google.protobuf.Struct effective_config = 4;
+}
+
+// UpdateConfigRequest updates configuration.
+message UpdateConfigRequest {
+  // Configuration updates (merged with existing).
+  google.protobuf.Struct updates = 1;
+
+  // Restart required sections.
+  repeated string restart_required = 2;
+
+  // Persist to disk.
+  bool persist = 3;
+
+  // Validation only (don't apply).
+  bool validate_only = 4;
+}
+
+// UpdateConfigResponse confirms update.
+message UpdateConfigResponse {
+  bool success = 1;
+
+  // Validation errors.
+  repeated string validation_errors = 2;
+
+  // Whether restart is required.
+  bool restart_required = 3;
+
+  // Affected sections.
+  repeated string affected_sections = 4;
+}
+
+// =============================================================================
+// Metrics
+// =============================================================================
+
+// GetMetricsRequest requests metrics.
+message GetMetricsRequest {
+  // Format: "prometheus", "json".
+  string format = 1;
+
+  // Include histograms.
+  bool include_histograms = 2;
+}
+
+// GetMetricsResponse contains metrics.
+message GetMetricsResponse {
+  // Metrics in requested format.
+  string metrics = 1;
+
+  // Or structured metrics.
+  repeated Metric structured_metrics = 2;
+}
+
+// Metric represents a single metric.
+message Metric {
+  string name = 1;
+  string type = 2;
+  string help = 3;
+  repeated MetricValue values = 4;
+}
+
+// MetricValue is a metric value with labels.
+message MetricValue {
+  map<string, string> labels = 1;
+  double value = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// =============================================================================
+// Logs
+// =============================================================================
+
+// StreamLogsRequest requests log streaming.
+message StreamLogsRequest {
+  // Minimum log level: "debug", "info", "warn", "error".
+  string level = 1;
+
+  // Filter by component.
+  string component = 2;
+
+  // Filter by text pattern.
+  string pattern = 3;
+
+  // Include historical logs.
+  bool include_history = 4;
+
+  // Number of historical entries.
+  int32 history_count = 5;
+}
+
+// LogEntry represents a log entry.
+message LogEntry {
+  // Timestamp.
+  google.protobuf.Timestamp timestamp = 1;
+
+  // Log level.
+  string level = 2;
+
+  // Component/logger name.
+  string component = 3;
+
+  // Log message.
+  string message = 4;
+
+  // Structured fields.
+  map<string, string> fields = 5;
+
+  // Request ID (for tracing).
+  string request_id = 6;
+
+  // Error stack trace (if error).
+  string stack_trace = 7;
+}
+
+// =============================================================================
+// Audit Logs
+// =============================================================================
+
+// GetAuditLogsRequest requests audit logs.
+message GetAuditLogsRequest {
+  // Filter by user.
+  string user_id = 1;
+
+  // Filter by action.
+  string action = 2;
+
+  // Filter by resource type.
+  string resource_type = 3;
+
+  // Filter by resource ID.
+  string resource_id = 4;
+
+  // Start time.
+  google.protobuf.Timestamp start_time = 5;
+
+  // End time.
+  google.protobuf.Timestamp end_time = 6;
+
+  // Pagination.
+  bib.v1.PageRequest page = 7;
+}
+
+// GetAuditLogsResponse contains audit logs.
+message GetAuditLogsResponse {
+  repeated AuditLogEntry entries = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// AuditLogEntry represents an audit log entry.
+message AuditLogEntry {
+  // Entry ID.
+  string id = 1;
+
+  // Timestamp.
+  google.protobuf.Timestamp timestamp = 2;
+
+  // User who performed the action.
+  string user_id = 3;
+
+  // User name.
+  string user_name = 4;
+
+  // Action performed.
+  string action = 5;
+
+  // Resource type.
+  string resource_type = 6;
+
+  // Resource ID.
+  string resource_id = 7;
+
+  // Resource name.
+  string resource_name = 8;
+
+  // Action result: "success", "failure".
+  string result = 9;
+
+  // Error message (if failure).
+  string error = 10;
+
+  // Client IP.
+  string client_ip = 11;
+
+  // Additional details.
+  map<string, string> details = 12;
+
+  // Request ID.
+  string request_id = 13;
+
+  // Node ID.
+  string node_id = 14;
+}
+
+// =============================================================================
+// Backups
+// =============================================================================
+
+// TriggerBackupRequest triggers a backup.
+message TriggerBackupRequest {
+  // Backup name (auto-generated if empty).
+  string name = 1;
+
+  // Include blob storage.
+  bool include_blobs = 2;
+
+  // Compress backup.
+  bool compress = 3;
+
+  // Encrypt backup.
+  bool encrypt = 4;
+}
+
+// TriggerBackupResponse contains backup result.
+message TriggerBackupResponse {
+  BackupInfo backup = 1;
+}
+
+// BackupInfo contains backup information.
+message BackupInfo {
+  // Backup ID.
+  string id = 1;
+
+  // Backup name.
+  string name = 2;
+
+  // When created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Size in bytes.
+  int64 size = 4;
+
+  // Backup type: "full", "incremental".
+  string type = 5;
+
+  // Status: "in_progress", "completed", "failed".
+  string status = 6;
+
+  // Includes blobs.
+  bool includes_blobs = 7;
+
+  // Is compressed.
+  bool compressed = 8;
+
+  // Is encrypted.
+  bool encrypted = 9;
+
+  // File path.
+  string path = 10;
+
+  // Database version.
+  string db_version = 11;
+
+  // Node ID that created backup.
+  string node_id = 12;
+}
+
+// ListBackupsRequest lists backups.
+message ListBackupsRequest {
+  bib.v1.PageRequest page = 1;
+}
+
+// ListBackupsResponse contains backups.
+message ListBackupsResponse {
+  repeated BackupInfo backups = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// RestoreBackupRequest restores a backup.
+message RestoreBackupRequest {
+  // Backup ID.
+  string backup_id = 1;
+
+  // Or path to backup file.
+  string backup_path = 2;
+
+  // Validate only (don't restore).
+  bool validate_only = 3;
+}
+
+// RestoreBackupResponse contains restore result.
+message RestoreBackupResponse {
+  bool success = 1;
+  string message = 2;
+  bool restart_required = 3;
+}
+
+// DeleteBackupRequest deletes a backup.
+message DeleteBackupRequest {
+  string backup_id = 1;
+}
+
+// DeleteBackupResponse confirms deletion.
+message DeleteBackupResponse {
+  bool success = 1;
+}
+
+// =============================================================================
+// Cluster
+// =============================================================================
+
+// GetClusterStatusRequest requests cluster status.
+message GetClusterStatusRequest {
+  // Include detailed member info.
+  bool include_members = 1;
+}
+
+// GetClusterStatusResponse contains cluster status.
+message GetClusterStatusResponse {
+  // Cluster enabled.
+  bool enabled = 1;
+
+  // Node role.
+  string role = 2;
+
+  // Leader ID.
+  string leader_id = 3;
+
+  // Raft term.
+  uint64 term = 4;
+
+  // Commit index.
+  uint64 commit_index = 5;
+
+  // Applied index.
+  uint64 applied_index = 6;
+
+  // Cluster members.
+  repeated ClusterMember members = 7;
+
+  // Cluster state.
+  string state = 8;
+
+  // Last snapshot info.
+  SnapshotInfo last_snapshot = 9;
+}
+
+// ClusterMember represents a cluster member.
+message ClusterMember {
+  // Node ID.
+  string id = 1;
+
+  // Node address.
+  string address = 2;
+
+  // Role: "voter", "non-voter", "learner".
+  string role = 3;
+
+  // Is leader.
+  bool is_leader = 4;
+
+  // Health status.
+  string health = 5;
+
+  // Last contact.
+  google.protobuf.Timestamp last_contact = 6;
+}
+
+// SnapshotInfo contains snapshot information.
+message SnapshotInfo {
+  // Snapshot ID.
+  string id = 1;
+
+  // Term.
+  uint64 term = 2;
+
+  // Index.
+  uint64 index = 3;
+
+  // When created.
+  google.protobuf.Timestamp created_at = 4;
+
+  // Size.
+  int64 size = 5;
+}
+
+// TriggerSnapshotRequest triggers a snapshot.
+message TriggerSnapshotRequest {}
+
+// TriggerSnapshotResponse contains snapshot result.
+message TriggerSnapshotResponse {
+  SnapshotInfo snapshot = 1;
+}
+
+// TransferLeadershipRequest transfers leadership.
+message TransferLeadershipRequest {
+  // Target node ID (empty = any).
+  string target_id = 1;
+}
+
+// TransferLeadershipResponse confirms transfer.
+message TransferLeadershipResponse {
+  bool success = 1;
+  string new_leader_id = 2;
+}
+
+// =============================================================================
+// Shutdown
+// =============================================================================
+
+// ShutdownRequest requests shutdown.
+message ShutdownRequest {
+  // Graceful shutdown timeout.
+  google.protobuf.Duration timeout = 1;
+
+  // Force shutdown.
+  bool force = 2;
+
+  // Reason for shutdown.
+  string reason = 3;
+}
+
+// ShutdownResponse confirms shutdown initiated.
+message ShutdownResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+// =============================================================================
+// System Info
+// =============================================================================
+
+// GetSystemInfoRequest requests system info.
+message GetSystemInfoRequest {}
+
+// GetSystemInfoResponse contains system info.
+message GetSystemInfoResponse {
+  // OS info.
+  string os = 1;
+  string arch = 2;
+  int32 num_cpu = 3;
+
+  // Memory (bytes).
+  int64 total_memory = 4;
+  int64 used_memory = 5;
+  int64 heap_alloc = 6;
+
+  // Go runtime.
+  string go_version = 7;
+  int32 num_goroutine = 8;
+
+  // Process.
+  int32 pid = 9;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Duration uptime = 11;
+
+  // Disk usage.
+  int64 disk_total = 12;
+  int64 disk_used = 13;
+  int64 disk_free = 14;
+}
+
+// =============================================================================
+// Maintenance
+// =============================================================================
+
+// RunMaintenanceRequest runs maintenance.
+message RunMaintenanceRequest {
+  // Tasks to run.
+  repeated string tasks = 1;
+
+  // Force run even if recently run.
+  bool force = 2;
+}
+
+// RunMaintenanceResponse contains maintenance result.
+message RunMaintenanceResponse {
+  repeated MaintenanceResult results = 1;
+}
+
+// MaintenanceResult is a maintenance task result.
+message MaintenanceResult {
+  string task = 1;
+  bool success = 2;
+  string message = 3;
+  google.protobuf.Duration duration = 4;
+}
+

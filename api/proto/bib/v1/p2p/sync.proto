@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package bib.v1.p2p;
+
+option go_package = "bib/api/gen/go/bib/v1/p2p;p2p";
+
+import "bib/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Sync protocol messages for /bib/sync/1.0.0
+
+// SyncRequest is the request message for sync operations
+message SyncRequest {
+  string request_id = 1;
+
+  oneof request {
+    GetSyncStatusRequest get_sync_status = 2;
+    StartSyncRequest start_sync = 3;
+    SyncStateRequest sync_state = 4;
+  }
+}
+
+// SyncResponse is the response message for sync operations
+message SyncResponse {
+  string request_id = 1;
+  bool success = 2;
+  bib.v1.Error error = 3;
+
+  oneof response {
+    GetSyncStatusResponse get_sync_status = 4;
+    StartSyncResponse start_sync = 5;
+    SyncStateResponse sync_state = 6;
+  }
+}
+
+// GetSyncStatusRequest requests sync status
+message GetSyncStatusRequest {
+  // Empty
+}
+
+// GetSyncStatusResponse returns sync status
+message GetSyncStatusResponse {
+  bool in_progress = 1;
+  google.protobuf.Timestamp last_sync_time = 2;
+  string last_sync_error = 3;
+  int32 pending_entries = 4;
+  int32 synced_entries = 5;
+}
+
+// StartSyncRequest requests a sync operation
+message StartSyncRequest {
+  bool full_sync = 1;  // Full sync vs incremental
+  string topic_filter = 2;  // Optional topic filter
+}
+
+// StartSyncResponse returns sync start result
+message StartSyncResponse {
+  bool started = 1;
+  string sync_id = 2;
+}
+
+// SyncStateRequest exchanges sync state for reconciliation
+message SyncStateRequest {
+  // catalog_version is our current catalog version
+  uint64 catalog_version = 1;
+
+  // hashes is a list of dataset hashes we have
+  repeated string hashes = 2;
+}
+
+// SyncStateResponse returns missing data info
+message SyncStateResponse {
+  // missing_hashes are hashes we have that the requester doesn't
+  repeated string missing_hashes = 1;
+
+  // wanted_hashes are hashes the requester has that we want
+  repeated string wanted_hashes = 2;
+
+  // catalog_version is our current catalog version
+  uint64 catalog_version = 3;
+}
+

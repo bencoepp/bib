@@ -1,0 +1,353 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+
+// AuthService provides authentication operations.
+// Users authenticate using their SSH key (Ed25519/RSA).
+service AuthService {
+  // Challenge requests a challenge for signature-based authentication.
+  // This is the first step in the authentication flow.
+  rpc Challenge(ChallengeRequest) returns (ChallengeResponse);
+
+  // VerifyChallenge verifies a signed challenge and returns a session token.
+  // This is the second step in the authentication flow.
+  rpc VerifyChallenge(VerifyChallengeRequest) returns (VerifyChallengeResponse);
+
+  // Logout ends the current session.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // RefreshSession extends the current session's expiry.
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse);
+
+  // ValidateSession checks if a session token is still valid.
+  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse);
+
+  // GetAuthConfig returns the authentication configuration.
+  // This allows clients to know supported key types, auto-registration, etc.
+  rpc GetAuthConfig(GetAuthConfigRequest) returns (GetAuthConfigResponse);
+
+  // GetPublicKeyInfo returns information about a public key.
+  // Used to get fingerprint/type from key bytes.
+  rpc GetPublicKeyInfo(GetPublicKeyInfoRequest) returns (GetPublicKeyInfoResponse);
+
+  // ListMySessions lists all active sessions for the current user.
+  rpc ListMySessions(ListMySessionsRequest) returns (ListMySessionsResponse);
+
+  // RevokeSession revokes a specific session (current user only).
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+
+  // RevokeAllSessions revokes all sessions except the current one.
+  rpc RevokeAllSessions(RevokeAllSessionsRequest) returns (RevokeAllSessionsResponse);
+}
+
+// =============================================================================
+// Challenge/Verify Authentication Flow
+// =============================================================================
+
+// ChallengeRequest requests an authentication challenge.
+message ChallengeRequest {
+  // Public key bytes (Ed25519 or RSA public key in OpenSSH format).
+  bytes public_key = 1;
+
+  // Key type: "ed25519", "rsa-sha2-256", "rsa-sha2-512".
+  string key_type = 2;
+}
+
+// ChallengeResponse contains the authentication challenge.
+message ChallengeResponse {
+  // Challenge identifier (used in VerifyChallenge).
+  string challenge_id = 1;
+
+  // Challenge bytes to sign with the private key.
+  bytes challenge = 2;
+
+  // When the challenge expires.
+  google.protobuf.Timestamp expires_at = 3;
+
+  // Algorithm to use for signing.
+  string signature_algorithm = 4;
+}
+
+// VerifyChallengeRequest verifies a signed challenge.
+message VerifyChallengeRequest {
+  // Challenge identifier from ChallengeResponse.
+  string challenge_id = 1;
+
+  // Signature of the challenge bytes.
+  bytes signature = 2;
+
+  // User name (used for auto-registration if enabled).
+  string name = 3;
+
+  // User email (may be required for auto-registration).
+  string email = 4;
+
+  // Client information for session tracking.
+  ClientInfo client_info = 5;
+}
+
+// ClientInfo contains information about the connecting client.
+message ClientInfo {
+  // Client IP address.
+  string ip_address = 1;
+
+  // User agent or client identifier.
+  string user_agent = 2;
+
+  // Client version.
+  string version = 3;
+
+  // Additional metadata.
+  map<string, string> metadata = 4;
+}
+
+// VerifyChallengeResponse contains the authentication result.
+message VerifyChallengeResponse {
+  // Session token (JWT or opaque token).
+  string session_token = 1;
+
+  // When the session expires.
+  google.protobuf.Timestamp expires_at = 2;
+
+  // The authenticated user.
+  UserInfo user = 3;
+
+  // Whether this was a new user registration.
+  bool is_new_user = 4;
+
+  // Session details.
+  SessionInfo session = 5;
+}
+
+// =============================================================================
+// Session Management
+// =============================================================================
+
+// LogoutRequest ends a session.
+message LogoutRequest {
+  // Session ID to logout (empty = current session).
+  string session_id = 1;
+}
+
+// LogoutResponse confirms logout.
+message LogoutResponse {
+  bool success = 1;
+}
+
+// RefreshSessionRequest extends session expiry.
+message RefreshSessionRequest {
+  // Empty - uses the session from gRPC metadata.
+}
+
+// RefreshSessionResponse contains the new expiry.
+message RefreshSessionResponse {
+  // New session token (if rotated).
+  string session_token = 1;
+
+  // New expiry time.
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// ValidateSessionRequest validates a session token.
+message ValidateSessionRequest {
+  // Session token to validate.
+  string session_token = 1;
+}
+
+// ValidateSessionResponse contains validation result.
+message ValidateSessionResponse {
+  // Whether the session is valid.
+  bool valid = 1;
+
+  // The user (if valid).
+  UserInfo user = 2;
+
+  // The session (if valid).
+  SessionInfo session = 3;
+
+  // When the session expires.
+  google.protobuf.Timestamp expires_at = 4;
+
+  // Reason for invalidity (if invalid).
+  string invalid_reason = 5;
+}
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+// GetAuthConfigRequest requests auth configuration.
+message GetAuthConfigRequest {}
+
+// GetAuthConfigResponse contains auth configuration.
+message GetAuthConfigResponse {
+  // Whether auto-registration is enabled.
+  bool allow_auto_registration = 1;
+
+  // Whether email is required for registration.
+  bool require_email = 2;
+
+  // Default role for new users.
+  string default_role = 3;
+
+  // Session timeout duration (in seconds).
+  int64 session_timeout_seconds = 4;
+
+  // Maximum session lifetime (in seconds).
+  int64 max_session_lifetime_seconds = 5;
+
+  // Supported key types.
+  repeated string supported_key_types = 6;
+
+  // Server version.
+  string server_version = 7;
+
+  // Node ID.
+  string node_id = 8;
+
+  // Node mode: "full", "selective", "proxy".
+  string node_mode = 9;
+}
+
+// =============================================================================
+// Public Key Info
+// =============================================================================
+
+// GetPublicKeyInfoRequest requests information about a public key.
+message GetPublicKeyInfoRequest {
+  // Public key bytes.
+  bytes public_key = 1;
+}
+
+// GetPublicKeyInfoResponse contains public key information.
+message GetPublicKeyInfoResponse {
+  // Key type: "ed25519", "rsa".
+  string key_type = 1;
+
+  // SHA256 fingerprint (hex-encoded).
+  string fingerprint_sha256 = 2;
+
+  // MD5 fingerprint (for compatibility, hex-encoded).
+  string fingerprint_md5 = 3;
+
+  // Key size in bits.
+  int32 key_size = 4;
+
+  // Public key in OpenSSH format.
+  string openssh_format = 5;
+
+  // Whether this key is associated with an existing user.
+  bool has_user = 6;
+
+  // User ID (if has_user is true).
+  string user_id = 7;
+}
+
+// =============================================================================
+// Session Listing
+// =============================================================================
+
+// ListMySessionsRequest lists sessions for the current user.
+message ListMySessionsRequest {
+  // Include expired sessions.
+  bool include_expired = 1;
+
+  // Maximum number of sessions to return.
+  int32 limit = 2;
+}
+
+// ListMySessionsResponse contains the session list.
+message ListMySessionsResponse {
+  // Active sessions.
+  repeated SessionInfo sessions = 1;
+
+  // Total session count.
+  int32 total_count = 2;
+}
+
+// RevokeSessionRequest revokes a specific session.
+message RevokeSessionRequest {
+  // Session ID to revoke.
+  string session_id = 1;
+}
+
+// RevokeSessionResponse confirms revocation.
+message RevokeSessionResponse {
+  bool success = 1;
+}
+
+// RevokeAllSessionsRequest revokes all sessions except current.
+message RevokeAllSessionsRequest {
+  // Include the current session (force logout).
+  bool include_current = 1;
+}
+
+// RevokeAllSessionsResponse contains revocation result.
+message RevokeAllSessionsResponse {
+  // Number of sessions revoked.
+  int32 revoked_count = 1;
+}
+
+// =============================================================================
+// Shared Types
+// =============================================================================
+
+// UserInfo contains basic user information returned by auth operations.
+// For full user management, see UserService.
+message UserInfo {
+  // Unique user identifier.
+  string id = 1;
+
+  // Display name.
+  string name = 2;
+
+  // Email address.
+  string email = 3;
+
+  // User role.
+  string role = 4;
+
+  // Account status.
+  string status = 5;
+
+  // Public key fingerprint.
+  string public_key_fingerprint = 6;
+
+  // Preferred locale.
+  string locale = 7;
+}
+
+// SessionInfo contains session information.
+message SessionInfo {
+  // Session identifier.
+  string id = 1;
+
+  // Session type: "grpc", "ssh", "api".
+  string type = 2;
+
+  // Client IP address.
+  string client_ip = 3;
+
+  // Client user agent.
+  string client_agent = 4;
+
+  // Node the session is connected to.
+  string node_id = 5;
+
+  // When the session started.
+  google.protobuf.Timestamp started_at = 6;
+
+  // When the session expires.
+  google.protobuf.Timestamp expires_at = 7;
+
+  // Last activity timestamp.
+  google.protobuf.Timestamp last_activity_at = 8;
+
+  // Whether this is the current session.
+  bool is_current = 9;
+}
+

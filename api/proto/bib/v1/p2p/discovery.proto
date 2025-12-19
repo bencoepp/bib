@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package bib.v1.p2p;
+
+option go_package = "bib/api/gen/go/bib/v1/p2p;p2p";
+
+import "bib/v1/common.proto";
+
+// Discovery protocol messages for /bib/discovery/1.0.0
+
+// DiscoveryRequest is the request message for discovery operations
+message DiscoveryRequest {
+  string request_id = 1;
+
+  oneof request {
+    GetCatalogRequest get_catalog = 2;
+    QueryCatalogRequest query_catalog = 3;
+    GetPeerInfoRequest get_peer_info = 4;
+    AnnounceRequest announce = 5;
+  }
+}
+
+// DiscoveryResponse is the response message for discovery operations
+message DiscoveryResponse {
+  string request_id = 1;
+  bool success = 2;
+  bib.v1.Error error = 3;
+
+  oneof response {
+    GetCatalogResponse get_catalog = 4;
+    QueryCatalogResponse query_catalog = 5;
+    GetPeerInfoResponse get_peer_info = 6;
+    AnnounceResponse announce = 7;
+  }
+}
+
+// GetCatalogRequest requests a peer's full catalog
+message GetCatalogRequest {
+  // since_version only returns entries updated since this version
+  uint64 since_version = 1;
+}
+
+// GetCatalogResponse returns a peer's catalog
+message GetCatalogResponse {
+  bib.v1.Catalog catalog = 1;
+}
+
+// QueryCatalogRequest queries for specific catalog entries
+message QueryCatalogRequest {
+  string topic_id = 1;
+  string dataset_id = 2;
+  string name_pattern = 3;
+  int32 limit = 4;
+  int32 offset = 5;
+}
+
+// QueryCatalogResponse returns matching catalog entries
+message QueryCatalogResponse {
+  repeated bib.v1.CatalogEntry entries = 1;
+  int32 total_count = 2;
+}
+
+// GetPeerInfoRequest requests peer information
+message GetPeerInfoRequest {
+  // Empty - just requests peer info
+}
+
+// GetPeerInfoResponse returns peer information
+message GetPeerInfoResponse {
+  bib.v1.PeerInfo peer_info = 1;
+  repeated string supported_protocols = 2;
+}
+
+// AnnounceRequest announces new data availability
+message AnnounceRequest {
+  repeated bib.v1.CatalogEntry new_entries = 1;
+  repeated string removed_hashes = 2;
+}
+
+// AnnounceResponse acknowledges an announcement
+message AnnounceResponse {
+  int32 entries_received = 1;
+}
+

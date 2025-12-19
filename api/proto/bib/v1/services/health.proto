@@ -1,0 +1,210 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// HealthService provides health check and node information operations.
+// This service is unauthenticated and can be used for load balancer health checks.
+service HealthService {
+  // Check performs a health check (standard gRPC health check pattern).
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Watch streams health status changes.
+  rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+
+  // GetNodeInfo returns detailed node information.
+  rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
+
+  // Ping is a simple connectivity check.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// ServingStatus represents the health status of a service.
+enum ServingStatus {
+  SERVING_STATUS_UNSPECIFIED = 0;
+  SERVING_STATUS_SERVING = 1;
+  SERVING_STATUS_NOT_SERVING = 2;
+  SERVING_STATUS_UNKNOWN = 3;
+}
+
+// HealthCheckRequest requests health status.
+message HealthCheckRequest {
+  // Service name to check (empty for overall health).
+  string service = 1;
+}
+
+// HealthCheckResponse contains health status.
+message HealthCheckResponse {
+  // Overall status.
+  ServingStatus status = 1;
+
+  // Status of individual components.
+  map<string, ComponentHealth> components = 2;
+
+  // Server timestamp.
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// ComponentHealth represents the health of a single component.
+message ComponentHealth {
+  // Component name.
+  string name = 1;
+
+  // Component status.
+  ServingStatus status = 2;
+
+  // Human-readable message.
+  string message = 3;
+
+  // Last check timestamp.
+  google.protobuf.Timestamp last_check = 4;
+}
+
+// GetNodeInfoRequest requests node information.
+message GetNodeInfoRequest {
+  // Include detailed component information.
+  bool include_components = 1;
+
+  // Include network statistics.
+  bool include_network = 2;
+
+  // Include storage statistics.
+  bool include_storage = 3;
+}
+
+// GetNodeInfoResponse contains node information.
+message GetNodeInfoResponse {
+  // Node identifier (peer ID).
+  string node_id = 1;
+
+  // Node mode: "full", "selective", "proxy".
+  string mode = 2;
+
+  // Software version.
+  string version = 3;
+
+  // Git commit hash.
+  string commit = 4;
+
+  // Build timestamp.
+  google.protobuf.Timestamp build_time = 5;
+
+  // When the node started.
+  google.protobuf.Timestamp started_at = 6;
+
+  // Node uptime.
+  google.protobuf.Duration uptime = 7;
+
+  // Listen addresses.
+  repeated string listen_addresses = 8;
+
+  // Public addresses (discovered).
+  repeated string public_addresses = 9;
+
+  // Network information (if requested).
+  NetworkInfo network = 10;
+
+  // Storage information (if requested).
+  StorageInfo storage = 11;
+
+  // Component status (if requested).
+  map<string, ComponentHealth> components = 12;
+
+  // Cluster information (if in cluster mode).
+  ClusterInfo cluster = 13;
+}
+
+// NetworkInfo contains network statistics.
+message NetworkInfo {
+  // Number of connected peers.
+  int32 connected_peers = 1;
+
+  // Number of known peers.
+  int32 known_peers = 2;
+
+  // Bytes sent since startup.
+  int64 bytes_sent = 3;
+
+  // Bytes received since startup.
+  int64 bytes_received = 4;
+
+  // Active streams count.
+  int32 active_streams = 5;
+
+  // DHT routing table size.
+  int32 dht_routing_table_size = 6;
+
+  // Bootstrap node connectivity.
+  bool bootstrap_connected = 7;
+}
+
+// StorageInfo contains storage statistics.
+message StorageInfo {
+  // Storage backend: "sqlite", "postgres".
+  string backend = 1;
+
+  // Whether storage is healthy.
+  bool healthy = 2;
+
+  // Number of datasets stored.
+  int64 dataset_count = 3;
+
+  // Number of topics.
+  int64 topic_count = 4;
+
+  // Total storage used (bytes).
+  int64 bytes_used = 5;
+
+  // Total storage available (bytes).
+  int64 bytes_available = 6;
+
+  // Is this node an authoritative data source.
+  bool is_authoritative = 7;
+}
+
+// ClusterInfo contains cluster status (if HA mode enabled).
+message ClusterInfo {
+  // Whether clustering is enabled.
+  bool enabled = 1;
+
+  // This node's role: "leader", "follower", "candidate", "non-voter".
+  string role = 2;
+
+  // Current leader node ID (if known).
+  string leader_id = 3;
+
+  // Raft term.
+  uint64 term = 4;
+
+  // Number of cluster members.
+  int32 member_count = 5;
+
+  // Number of healthy members.
+  int32 healthy_members = 6;
+
+  // Cluster state: "healthy", "degraded", "no_quorum".
+  string state = 7;
+}
+
+// PingRequest is an empty ping request.
+message PingRequest {
+  // Optional echo payload.
+  bytes payload = 1;
+}
+
+// PingResponse returns the ping result.
+message PingResponse {
+  // Server timestamp.
+  google.protobuf.Timestamp timestamp = 1;
+
+  // Echoed payload (if provided).
+  bytes payload = 2;
+
+  // Node ID.
+  string node_id = 3;
+}
+

@@ -1,0 +1,321 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// BreakGlassService provides emergency database access functionality.
+// This service is used by the bib CLI to enable, disable, and manage
+// break glass sessions for disaster recovery and debugging.
+service BreakGlassService {
+  // GetStatus returns the current break glass configuration and session status.
+  rpc GetStatus(GetBreakGlassStatusRequest) returns (GetBreakGlassStatusResponse);
+
+  // CreateChallenge creates an authentication challenge for a user.
+  rpc CreateChallenge(CreateBreakGlassChallengeRequest) returns (CreateBreakGlassChallengeResponse);
+
+  // EnableSession enables a break glass session after successful authentication.
+  rpc EnableSession(EnableBreakGlassSessionRequest) returns (EnableBreakGlassSessionResponse);
+
+  // DisableSession disables an active break glass session.
+  rpc DisableSession(DisableBreakGlassSessionRequest) returns (DisableBreakGlassSessionResponse);
+
+  // GetPendingAcknowledgments returns sessions that need to be acknowledged.
+  rpc GetPendingAcknowledgments(GetPendingAcknowledgmentsRequest) returns (GetPendingAcknowledgmentsResponse);
+
+  // AcknowledgeSession acknowledges a completed break glass session.
+  rpc AcknowledgeSession(AcknowledgeBreakGlassSessionRequest) returns (AcknowledgeBreakGlassSessionResponse);
+
+  // GetSessionReport returns the detailed report for a break glass session.
+  rpc GetSessionReport(GetBreakGlassSessionReportRequest) returns (GetBreakGlassSessionReportResponse);
+
+  // ListSessions lists all break glass sessions.
+  rpc ListSessions(ListBreakGlassSessionsRequest) returns (ListBreakGlassSessionsResponse);
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+// BreakGlassAccessLevel defines access levels for break glass sessions.
+enum BreakGlassAccessLevel {
+  BREAK_GLASS_ACCESS_LEVEL_UNSPECIFIED = 0;
+  BREAK_GLASS_ACCESS_LEVEL_READONLY = 1;
+  BREAK_GLASS_ACCESS_LEVEL_READWRITE = 2;
+}
+
+// BreakGlassSessionState defines session states.
+enum BreakGlassSessionState {
+  BREAK_GLASS_SESSION_STATE_UNSPECIFIED = 0;
+  BREAK_GLASS_SESSION_STATE_ACTIVE = 1;
+  BREAK_GLASS_SESSION_STATE_EXPIRED = 2;
+  BREAK_GLASS_SESSION_STATE_DISABLED = 3;
+  BREAK_GLASS_SESSION_STATE_PENDING_ACK = 4;
+  BREAK_GLASS_SESSION_STATE_ACKNOWLEDGED = 5;
+}
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+// BreakGlassConfig contains the break glass configuration.
+message BreakGlassConfig {
+  // Whether break glass is enabled.
+  bool enabled = 1;
+
+  // Whether daemon restart is required to enable.
+  bool require_restart = 2;
+
+  // Maximum session duration.
+  google.protobuf.Duration max_duration = 3;
+
+  // Default access level.
+  BreakGlassAccessLevel default_access_level = 4;
+
+  // Whether acknowledgment is required after session.
+  bool require_acknowledgment = 5;
+
+  // Whether session recording is enabled.
+  bool session_recording = 6;
+
+  // Allowed users.
+  repeated BreakGlassUser allowed_users = 7;
+}
+
+// BreakGlassUser represents a configured break glass user.
+message BreakGlassUser {
+  // User name.
+  string name = 1;
+
+  // Public key (OpenSSH format).
+  string public_key = 2;
+
+  // Access level for this user.
+  BreakGlassAccessLevel access_level = 3;
+}
+
+// =============================================================================
+// Session
+// =============================================================================
+
+// BreakGlassSession represents a break glass session.
+message BreakGlassSession {
+  // Session ID.
+  string id = 1;
+
+  // Username.
+  string username = 2;
+
+  // Reason for session.
+  string reason = 3;
+
+  // Access level.
+  BreakGlassAccessLevel access_level = 4;
+
+  // When session started.
+  google.protobuf.Timestamp started_at = 5;
+
+  // When session expires.
+  google.protobuf.Timestamp expires_at = 6;
+
+  // Node ID where session is active.
+  string node_id = 7;
+
+  // User ID who requested.
+  string requested_by = 8;
+
+  // Session state.
+  BreakGlassSessionState state = 9;
+
+  // Path to session recording.
+  string recording_path = 10;
+}
+
+// BreakGlassSessionReport contains the summary of a completed session.
+message BreakGlassSessionReport {
+  // Session info.
+  BreakGlassSession session = 1;
+
+  // When session ended.
+  google.protobuf.Timestamp ended_at = 2;
+
+  // Total duration.
+  google.protobuf.Duration duration = 3;
+
+  // Number of queries executed.
+  int64 query_count = 4;
+
+  // Tables accessed.
+  repeated string tables_accessed = 5;
+
+  // Operation counts by type.
+  map<string, int64> operation_counts = 6;
+
+  // When acknowledged.
+  google.protobuf.Timestamp acknowledged_at = 7;
+
+  // Who acknowledged.
+  string acknowledged_by = 8;
+
+  // Path to recording.
+  string recording_path = 9;
+}
+
+// =============================================================================
+// Get Status
+// =============================================================================
+
+// GetBreakGlassStatusRequest requests the current status.
+message GetBreakGlassStatusRequest {}
+
+// GetBreakGlassStatusResponse contains the current status.
+message GetBreakGlassStatusResponse {
+  // Configuration.
+  BreakGlassConfig config = 1;
+
+  // Active session (if any).
+  BreakGlassSession active_session = 2;
+
+  // Number of pending acknowledgments.
+  int32 pending_acknowledgment_count = 3;
+}
+
+// =============================================================================
+// Challenge
+// =============================================================================
+
+// CreateBreakGlassChallengeRequest requests an authentication challenge.
+message CreateBreakGlassChallengeRequest {
+  // Username.
+  string username = 1;
+}
+
+// CreateBreakGlassChallengeResponse contains the challenge.
+message CreateBreakGlassChallengeResponse {
+  // Challenge ID.
+  string challenge_id = 1;
+
+  // Nonce to sign.
+  bytes nonce = 2;
+
+  // When challenge expires.
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// =============================================================================
+// Enable Session
+// =============================================================================
+
+// EnableBreakGlassSessionRequest enables a session.
+message EnableBreakGlassSessionRequest {
+  // Challenge ID.
+  string challenge_id = 1;
+
+  // Signature of nonce.
+  bytes signature = 2;
+
+  // Reason for access.
+  string reason = 3;
+
+  // Requested duration.
+  google.protobuf.Duration duration = 4;
+
+  // Requested access level.
+  BreakGlassAccessLevel access_level = 5;
+}
+
+// EnableBreakGlassSessionResponse contains enabled session.
+message EnableBreakGlassSessionResponse {
+  // Session info.
+  BreakGlassSession session = 1;
+
+  // Database connection string.
+  string connection_string = 2;
+}
+
+// =============================================================================
+// Disable Session
+// =============================================================================
+
+// DisableBreakGlassSessionRequest disables the active session.
+message DisableBreakGlassSessionRequest {}
+
+// DisableBreakGlassSessionResponse contains the session report.
+message DisableBreakGlassSessionResponse {
+  BreakGlassSessionReport report = 1;
+}
+
+// =============================================================================
+// Acknowledgments
+// =============================================================================
+
+// GetPendingAcknowledgmentsRequest requests pending acknowledgments.
+message GetPendingAcknowledgmentsRequest {}
+
+// GetPendingAcknowledgmentsResponse contains pending sessions.
+message GetPendingAcknowledgmentsResponse {
+  repeated BreakGlassSessionReport reports = 1;
+}
+
+// AcknowledgeBreakGlassSessionRequest acknowledges a session.
+message AcknowledgeBreakGlassSessionRequest {
+  // Session ID.
+  string session_id = 1;
+
+  // Acknowledging user.
+  string acknowledged_by = 2;
+
+  // Optional notes.
+  string notes = 3;
+}
+
+// AcknowledgeBreakGlassSessionResponse confirms acknowledgment.
+message AcknowledgeBreakGlassSessionResponse {
+  bool success = 1;
+}
+
+// =============================================================================
+// Session Report
+// =============================================================================
+
+// GetBreakGlassSessionReportRequest requests a session report.
+message GetBreakGlassSessionReportRequest {
+  string session_id = 1;
+}
+
+// GetBreakGlassSessionReportResponse contains the report.
+message GetBreakGlassSessionReportResponse {
+  BreakGlassSessionReport report = 1;
+}
+
+// =============================================================================
+// List Sessions
+// =============================================================================
+
+// ListBreakGlassSessionsRequest lists sessions.
+message ListBreakGlassSessionsRequest {
+  // Filter by state.
+  BreakGlassSessionState state = 1;
+
+  // Filter by user.
+  string username = 2;
+
+  // Start time filter.
+  google.protobuf.Timestamp start_time = 3;
+
+  // End time filter.
+  google.protobuf.Timestamp end_time = 4;
+
+  // Limit.
+  int32 limit = 5;
+}
+
+// ListBreakGlassSessionsResponse contains sessions.
+message ListBreakGlassSessionsResponse {
+  repeated BreakGlassSession sessions = 1;
+  int32 total_count = 2;
+}
+

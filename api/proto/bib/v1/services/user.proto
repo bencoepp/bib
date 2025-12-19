@@ -1,0 +1,496 @@
+syntax = "proto3";
+
+package bib.v1.services;
+
+option go_package = "bib/api/gen/go/bib/v1/services;services";
+
+import "google/protobuf/timestamp.proto";
+import "bib/v1/common.proto";
+
+// UserService provides user management operations.
+// Most operations require admin privileges unless otherwise noted.
+service UserService {
+  // GetUser retrieves a user by ID (admin only).
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // GetUserByPublicKey retrieves a user by their public key (admin only).
+  rpc GetUserByPublicKey(GetUserByPublicKeyRequest) returns (GetUserByPublicKeyResponse);
+
+  // ListUsers lists users with filtering and pagination (admin only).
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+
+  // SearchUsers searches users by text query (admin only).
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+
+  // CreateUser creates a new user (admin only).
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+
+  // UpdateUser updates an existing user (admin only).
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+
+  // DeleteUser soft-deletes a user (admin only).
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
+  // SuspendUser suspends a user account (admin only).
+  rpc SuspendUser(SuspendUserRequest) returns (SuspendUserResponse);
+
+  // ActivateUser activates a pending or suspended user (admin only).
+  rpc ActivateUser(ActivateUserRequest) returns (ActivateUserResponse);
+
+  // SetUserRole changes a user's role (admin only).
+  rpc SetUserRole(SetUserRoleRequest) returns (SetUserRoleResponse);
+
+  // GetCurrentUser retrieves the currently authenticated user.
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse);
+
+  // UpdateCurrentUser updates the current user's profile.
+  rpc UpdateCurrentUser(UpdateCurrentUserRequest) returns (UpdateCurrentUserResponse);
+
+  // GetUserPreferences retrieves user preferences.
+  rpc GetUserPreferences(GetUserPreferencesRequest) returns (GetUserPreferencesResponse);
+
+  // UpdateUserPreferences updates user preferences.
+  rpc UpdateUserPreferences(UpdateUserPreferencesRequest) returns (UpdateUserPreferencesResponse);
+
+  // ListUserSessions lists sessions for a user (admin only, or self).
+  rpc ListUserSessions(ListUserSessionsRequest) returns (ListUserSessionsResponse);
+
+  // EndUserSession ends a specific session (admin only, or self).
+  rpc EndUserSession(EndUserSessionRequest) returns (EndUserSessionResponse);
+
+  // EndAllUserSessions ends all sessions for a user (admin only).
+  rpc EndAllUserSessions(EndAllUserSessionsRequest) returns (EndAllUserSessionsResponse);
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+// UserStatus represents the status of a user account.
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  USER_STATUS_ACTIVE = 1;
+  USER_STATUS_PENDING = 2;
+  USER_STATUS_SUSPENDED = 3;
+  USER_STATUS_DELETED = 4;
+}
+
+// UserRole represents the role/permission level of a user.
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_ADMIN = 1;
+  USER_ROLE_USER = 2;
+  USER_ROLE_READONLY = 3;
+}
+
+// SessionType represents the type of session.
+enum SessionType {
+  SESSION_TYPE_UNSPECIFIED = 0;
+  SESSION_TYPE_SSH = 1;
+  SESSION_TYPE_GRPC = 2;
+  SESSION_TYPE_API = 3;
+}
+
+// =============================================================================
+// User Entity
+// =============================================================================
+
+// User represents a bib user with cryptographic identity.
+message User {
+  // Unique identifier derived from public key.
+  string id = 1;
+
+  // Public key bytes (Ed25519 or RSA).
+  bytes public_key = 2;
+
+  // Key type: "ed25519" or "rsa".
+  string key_type = 3;
+
+  // SHA256 fingerprint of the public key (hex-encoded).
+  string public_key_fingerprint = 4;
+
+  // Human-readable display name.
+  string name = 5;
+
+  // Optional contact email.
+  string email = 6;
+
+  // Account status.
+  UserStatus status = 7;
+
+  // Permission level.
+  UserRole role = 8;
+
+  // Preferred locale for i18n.
+  string locale = 9;
+
+  // When the user was created.
+  google.protobuf.Timestamp created_at = 10;
+
+  // When the user was last modified.
+  google.protobuf.Timestamp updated_at = 11;
+
+  // When the user last authenticated.
+  google.protobuf.Timestamp last_login_at = 12;
+
+  // Additional user profile data.
+  map<string, string> metadata = 13;
+}
+
+// Session represents an authenticated user session.
+message Session {
+  // Unique session identifier.
+  string id = 1;
+
+  // User who owns this session.
+  string user_id = 2;
+
+  // Session type.
+  SessionType type = 3;
+
+  // Client's IP address.
+  string client_ip = 4;
+
+  // Client's user agent or SSH client string.
+  string client_agent = 5;
+
+  // Fingerprint of the key used to authenticate.
+  string public_key_fingerprint = 6;
+
+  // Node the session is connected to.
+  string node_id = 7;
+
+  // When the session started.
+  google.protobuf.Timestamp started_at = 8;
+
+  // When the session ended (null if active).
+  google.protobuf.Timestamp ended_at = 9;
+
+  // When the session expires.
+  google.protobuf.Timestamp expires_at = 10;
+
+  // When the session was last active.
+  google.protobuf.Timestamp last_activity_at = 11;
+
+  // Additional session data.
+  map<string, string> metadata = 12;
+}
+
+// UserPreferences contains user preference settings.
+message UserPreferences {
+  // User ID.
+  string user_id = 1;
+
+  // Theme preference: "light", "dark", "system".
+  string theme = 2;
+
+  // Preferred locale.
+  string locale = 3;
+
+  // Timezone (IANA timezone name).
+  string timezone = 4;
+
+  // Date format preference.
+  string date_format = 5;
+
+  // Enable notifications.
+  bool notifications_enabled = 6;
+
+  // Email notification preferences.
+  bool email_notifications = 7;
+
+  // Additional preferences.
+  map<string, string> custom = 8;
+}
+
+// =============================================================================
+// Get User
+// =============================================================================
+
+// GetUserRequest requests a user by ID.
+message GetUserRequest {
+  string user_id = 1;
+}
+
+// GetUserResponse contains the user.
+message GetUserResponse {
+  User user = 1;
+}
+
+// GetUserByPublicKeyRequest requests a user by public key.
+message GetUserByPublicKeyRequest {
+  bytes public_key = 1;
+}
+
+// GetUserByPublicKeyResponse contains the user.
+message GetUserByPublicKeyResponse {
+  User user = 1;
+}
+
+// =============================================================================
+// List Users
+// =============================================================================
+
+// ListUsersRequest lists users with filtering.
+message ListUsersRequest {
+  // Filter by status.
+  UserStatus status = 1;
+
+  // Filter by role.
+  UserRole role = 2;
+
+  // Pagination.
+  bib.v1.PageRequest page = 3;
+
+  // Sorting.
+  bib.v1.SortOrder sort = 4;
+}
+
+// ListUsersResponse contains the user list.
+message ListUsersResponse {
+  repeated User users = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Search Users
+// =============================================================================
+
+// SearchUsersRequest searches users by text.
+message SearchUsersRequest {
+  // Text query (searches name, email).
+  string query = 1;
+
+  // Filter by status (optional).
+  UserStatus status = 2;
+
+  // Filter by role (optional).
+  UserRole role = 3;
+
+  // Pagination.
+  bib.v1.PageRequest page = 4;
+}
+
+// SearchUsersResponse contains search results.
+message SearchUsersResponse {
+  repeated User users = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// =============================================================================
+// Create User
+// =============================================================================
+
+// CreateUserRequest creates a new user.
+message CreateUserRequest {
+  // Public key bytes.
+  bytes public_key = 1;
+
+  // Key type: "ed25519" or "rsa".
+  string key_type = 2;
+
+  // Display name.
+  string name = 3;
+
+  // Optional email.
+  string email = 4;
+
+  // Role (defaults to USER).
+  UserRole role = 5;
+
+  // Initial status (defaults to ACTIVE).
+  UserStatus status = 6;
+
+  // Optional locale.
+  string locale = 7;
+
+  // Additional metadata.
+  map<string, string> metadata = 8;
+}
+
+// CreateUserResponse contains the created user.
+message CreateUserResponse {
+  User user = 1;
+}
+
+// =============================================================================
+// Update User
+// =============================================================================
+
+// UpdateUserRequest updates an existing user.
+message UpdateUserRequest {
+  // User ID to update.
+  string user_id = 1;
+
+  // New name (if set).
+  optional string name = 2;
+
+  // New email (if set).
+  optional string email = 3;
+
+  // New locale (if set).
+  optional string locale = 4;
+
+  // New metadata (replaces existing).
+  map<string, string> metadata = 5;
+
+  // Whether to update metadata.
+  bool update_metadata = 6;
+}
+
+// UpdateUserResponse contains the updated user.
+message UpdateUserResponse {
+  User user = 1;
+}
+
+// =============================================================================
+// Delete User
+// =============================================================================
+
+// DeleteUserRequest soft-deletes a user.
+message DeleteUserRequest {
+  // User ID to delete.
+  string user_id = 1;
+}
+
+// DeleteUserResponse confirms deletion.
+message DeleteUserResponse {
+  bool success = 1;
+}
+
+// =============================================================================
+// User Status Changes
+// =============================================================================
+
+// SuspendUserRequest suspends a user.
+message SuspendUserRequest {
+  string user_id = 1;
+  string reason = 2;
+}
+
+// SuspendUserResponse confirms suspension.
+message SuspendUserResponse {
+  User user = 1;
+}
+
+// ActivateUserRequest activates a user.
+message ActivateUserRequest {
+  string user_id = 1;
+}
+
+// ActivateUserResponse confirms activation.
+message ActivateUserResponse {
+  User user = 1;
+}
+
+// SetUserRoleRequest changes a user's role.
+message SetUserRoleRequest {
+  string user_id = 1;
+  UserRole role = 2;
+}
+
+// SetUserRoleResponse confirms the role change.
+message SetUserRoleResponse {
+  User user = 1;
+}
+
+// =============================================================================
+// Current User
+// =============================================================================
+
+// GetCurrentUserRequest gets the current user.
+message GetCurrentUserRequest {}
+
+// GetCurrentUserResponse contains the current user.
+message GetCurrentUserResponse {
+  User user = 1;
+}
+
+// UpdateCurrentUserRequest updates the current user's profile.
+message UpdateCurrentUserRequest {
+  // New name (if set).
+  optional string name = 2;
+
+  // New email (if set).
+  optional string email = 3;
+
+  // New locale (if set).
+  optional string locale = 4;
+}
+
+// UpdateCurrentUserResponse contains the updated user.
+message UpdateCurrentUserResponse {
+  User user = 1;
+}
+
+// =============================================================================
+// User Preferences
+// =============================================================================
+
+// GetUserPreferencesRequest gets user preferences.
+message GetUserPreferencesRequest {
+  // User ID (empty = current user).
+  string user_id = 1;
+}
+
+// GetUserPreferencesResponse contains preferences.
+message GetUserPreferencesResponse {
+  UserPreferences preferences = 1;
+}
+
+// UpdateUserPreferencesRequest updates preferences.
+message UpdateUserPreferencesRequest {
+  // User ID (empty = current user).
+  string user_id = 1;
+
+  // Preferences to update.
+  UserPreferences preferences = 2;
+}
+
+// UpdateUserPreferencesResponse contains updated preferences.
+message UpdateUserPreferencesResponse {
+  UserPreferences preferences = 1;
+}
+
+// =============================================================================
+// Session Management
+// =============================================================================
+
+// ListUserSessionsRequest lists sessions for a user.
+message ListUserSessionsRequest {
+  // User ID (empty = current user).
+  string user_id = 1;
+
+  // Include expired sessions.
+  bool include_expired = 2;
+
+  // Pagination.
+  bib.v1.PageRequest page = 3;
+}
+
+// ListUserSessionsResponse contains sessions.
+message ListUserSessionsResponse {
+  repeated Session sessions = 1;
+  bib.v1.PageInfo page_info = 2;
+}
+
+// EndUserSessionRequest ends a session.
+message EndUserSessionRequest {
+  string session_id = 1;
+}
+
+// EndUserSessionResponse confirms session end.
+message EndUserSessionResponse {
+  bool success = 1;
+}
+
+// EndAllUserSessionsRequest ends all sessions for a user.
+message EndAllUserSessionsRequest {
+  string user_id = 1;
+}
+
+// EndAllUserSessionsResponse confirms sessions ended.
+message EndAllUserSessionsResponse {
+  int32 ended_count = 1;
+}
+
