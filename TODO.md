@@ -655,7 +655,7 @@
   - Include version info, uptime, node mode
 
 #### 4.2.2 AuthService Enhancement (P0)
-- [ ] **GRPC-005**: AuthService enhancement (existing proto)
+- [x] **GRPC-005**: AuthService enhancement (existing proto)
   - Review existing `AuthService` in auth.proto
   - Ensure Challenge/VerifyChallenge flow works for SSH keys
   - Add `GetPublicKeyInfo` RPC to get key fingerprint/type from bytes

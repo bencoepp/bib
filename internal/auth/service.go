@@ -176,6 +176,11 @@ func (s *Service) EndAllSessions(ctx context.Context, userID domain.UserID) erro
 	return s.store.Sessions().EndAllForUser(ctx, userID)
 }
 
+// ListUserSessions lists all sessions for a user.
+func (s *Service) ListUserSessions(ctx context.Context, userID domain.UserID) ([]*storage.Session, error) {
+	return s.store.Sessions().GetByUser(ctx, userID)
+}
+
 // GetSession retrieves a session by ID.
 func (s *Service) GetSession(ctx context.Context, sessionID string) (*storage.Session, error) {
 	session, err := s.store.Sessions().Get(ctx, sessionID)
