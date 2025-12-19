@@ -584,7 +584,7 @@
 
 > **Goal**: Separate P2P protocol messages from gRPC service definitions for clarity.
 
-- [ ] **GRPC-001**: Proto file structure reorganization
+- [x] **GRPC-001**: Proto file structure reorganization
   ```
   api/proto/bib/v1/
   ├── common.proto           # Shared types (existing, keep)
@@ -609,15 +609,15 @@
       └── health.proto       # HealthService (new)
   ```
 
-- [ ] **GRPC-002**: Common types enhancement
-  - Add pagination message: `PageRequest { int32 limit, int32 offset, string cursor }`
-  - Add pagination response: `PageInfo { int32 total_count, string next_cursor, bool has_more }`
-  - Add sort options: `SortOrder { string field, bool descending }`
-  - Add filter operators for flexible queries
-  - Add `OperationMetadata` for request tracking (request_id, timestamp, node_id)
-  - Ensure all existing types in common.proto are compatible
+- [x] **GRPC-002**: Common types enhancement
+  - [x] Add pagination message: `PageRequest { int32 limit, int32 offset, string cursor }`
+  - [x] Add pagination response: `PageInfo { int32 total_count, string next_cursor, bool has_more }`
+  - [x] Add sort options: `SortOrder { string field, bool descending }`
+  - [x] Add filter operators for flexible queries
+  - [x] Add `OperationMetadata` for request tracking (request_id, timestamp, node_id)
+  - [x] Ensure all existing types in common.proto are compatible
 
-- [ ] **GRPC-003**: Service definitions overview
+- [x] **GRPC-003**: Service definitions overview
   | Service | Priority | Description | Depends On |
   |---------|----------|-------------|------------|
   | HealthService | P0 | Health checks, readiness | None |

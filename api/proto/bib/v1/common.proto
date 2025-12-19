@@ -2,11 +2,129 @@ syntax = "proto3";
 
 package bib.v1;
 
-option go_package = "bib/api/proto/bib/v1;bibv1";
+option go_package = "bib/api/gen/go/bib/v1;bibv1";
 
 import "google/protobuf/timestamp.proto";
 
 // Common message types used across protocols
+
+// =============================================================================
+// Pagination & Sorting
+// =============================================================================
+
+// PageRequest specifies pagination parameters for list operations.
+message PageRequest {
+  // Maximum number of items to return. Default is 50, max is 1000.
+  int32 limit = 1;
+
+  // Number of items to skip (offset-based pagination).
+  int32 offset = 2;
+
+  // Cursor for cursor-based pagination (preferred over offset for large datasets).
+  string cursor = 3;
+}
+
+// PageInfo contains pagination metadata in responses.
+message PageInfo {
+  // Total number of items matching the query (may be approximate for large datasets).
+  int64 total_count = 1;
+
+  // Cursor for the next page (empty if no more pages).
+  string next_cursor = 2;
+
+  // Whether there are more pages available.
+  bool has_more = 3;
+
+  // Current page size (may be less than requested limit).
+  int32 page_size = 4;
+}
+
+// SortOrder specifies how to sort results.
+message SortOrder {
+  // Field to sort by (field name from the response message).
+  string field = 1;
+
+  // Sort in descending order (default is ascending).
+  bool descending = 2;
+}
+
+// =============================================================================
+// Filter Operators
+// =============================================================================
+
+// FilterOperator defines comparison operators for filtering.
+enum FilterOperator {
+  FILTER_OPERATOR_UNSPECIFIED = 0;
+  FILTER_OPERATOR_EQUALS = 1;
+  FILTER_OPERATOR_NOT_EQUALS = 2;
+  FILTER_OPERATOR_GREATER_THAN = 3;
+  FILTER_OPERATOR_GREATER_THAN_OR_EQUALS = 4;
+  FILTER_OPERATOR_LESS_THAN = 5;
+  FILTER_OPERATOR_LESS_THAN_OR_EQUALS = 6;
+  FILTER_OPERATOR_CONTAINS = 7;
+  FILTER_OPERATOR_STARTS_WITH = 8;
+  FILTER_OPERATOR_ENDS_WITH = 9;
+  FILTER_OPERATOR_IN = 10;
+  FILTER_OPERATOR_NOT_IN = 11;
+  FILTER_OPERATOR_IS_NULL = 12;
+  FILTER_OPERATOR_IS_NOT_NULL = 13;
+}
+
+// Filter represents a single filter condition.
+message Filter {
+  // Field name to filter on.
+  string field = 1;
+
+  // Comparison operator.
+  FilterOperator operator = 2;
+
+  // Value to compare against (string representation).
+  string value = 3;
+
+  // Multiple values for IN/NOT_IN operators.
+  repeated string values = 4;
+}
+
+// FilterGroup combines multiple filters with AND/OR logic.
+message FilterGroup {
+  // Filters to combine.
+  repeated Filter filters = 1;
+
+  // Use OR logic instead of AND (default is AND).
+  bool use_or = 2;
+}
+
+// =============================================================================
+// Operation Metadata
+// =============================================================================
+
+// OperationMetadata contains request tracking information.
+message OperationMetadata {
+  // Unique request identifier for tracing.
+  string request_id = 1;
+
+  // Timestamp when the request was received.
+  google.protobuf.Timestamp timestamp = 2;
+
+  // ID of the node processing the request.
+  string node_id = 3;
+
+  // User ID of the requester (if authenticated).
+  string user_id = 4;
+
+  // Session ID (if applicable).
+  string session_id = 5;
+
+  // Client IP address.
+  string client_ip = 6;
+
+  // Additional context for audit logging.
+  map<string, string> context = 7;
+}
+
+// =============================================================================
+// Peer & Node Information
+// =============================================================================
 
 // PeerInfo contains information about a peer
 message PeerInfo {
@@ -16,6 +134,10 @@ message PeerInfo {
   string version = 4;
   google.protobuf.Timestamp last_seen = 5;
 }
+
+// =============================================================================
+// Topic & Dataset Information
+// =============================================================================
 
 // TopicInfo contains topic metadata
 message TopicInfo {
@@ -42,6 +164,10 @@ message DatasetInfo {
   map<string, string> metadata = 10;
 }
 
+// =============================================================================
+// Catalog Types
+// =============================================================================
+
 // CatalogEntry is a lightweight catalog entry
 message CatalogEntry {
   string topic_id = 1;
@@ -61,6 +187,10 @@ message Catalog {
   google.protobuf.Timestamp last_updated = 3;
   uint64 version = 4;
 }
+
+// =============================================================================
+// Error Types
+// =============================================================================
 
 // Error represents a protocol error
 message Error {

@@ -22,6 +22,509 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// FilterOperator defines comparison operators for filtering.
+type FilterOperator int32
+
+const (
+	FilterOperator_FILTER_OPERATOR_UNSPECIFIED            FilterOperator = 0
+	FilterOperator_FILTER_OPERATOR_EQUALS                 FilterOperator = 1
+	FilterOperator_FILTER_OPERATOR_NOT_EQUALS             FilterOperator = 2
+	FilterOperator_FILTER_OPERATOR_GREATER_THAN           FilterOperator = 3
+	FilterOperator_FILTER_OPERATOR_GREATER_THAN_OR_EQUALS FilterOperator = 4
+	FilterOperator_FILTER_OPERATOR_LESS_THAN              FilterOperator = 5
+	FilterOperator_FILTER_OPERATOR_LESS_THAN_OR_EQUALS    FilterOperator = 6
+	FilterOperator_FILTER_OPERATOR_CONTAINS               FilterOperator = 7
+	FilterOperator_FILTER_OPERATOR_STARTS_WITH            FilterOperator = 8
+	FilterOperator_FILTER_OPERATOR_ENDS_WITH              FilterOperator = 9
+	FilterOperator_FILTER_OPERATOR_IN                     FilterOperator = 10
+	FilterOperator_FILTER_OPERATOR_NOT_IN                 FilterOperator = 11
+	FilterOperator_FILTER_OPERATOR_IS_NULL                FilterOperator = 12
+	FilterOperator_FILTER_OPERATOR_IS_NOT_NULL            FilterOperator = 13
+)
+
+// Enum value maps for FilterOperator.
+var (
+	FilterOperator_name = map[int32]string{
+		0:  "FILTER_OPERATOR_UNSPECIFIED",
+		1:  "FILTER_OPERATOR_EQUALS",
+		2:  "FILTER_OPERATOR_NOT_EQUALS",
+		3:  "FILTER_OPERATOR_GREATER_THAN",
+		4:  "FILTER_OPERATOR_GREATER_THAN_OR_EQUALS",
+		5:  "FILTER_OPERATOR_LESS_THAN",
+		6:  "FILTER_OPERATOR_LESS_THAN_OR_EQUALS",
+		7:  "FILTER_OPERATOR_CONTAINS",
+		8:  "FILTER_OPERATOR_STARTS_WITH",
+		9:  "FILTER_OPERATOR_ENDS_WITH",
+		10: "FILTER_OPERATOR_IN",
+		11: "FILTER_OPERATOR_NOT_IN",
+		12: "FILTER_OPERATOR_IS_NULL",
+		13: "FILTER_OPERATOR_IS_NOT_NULL",
+	}
+	FilterOperator_value = map[string]int32{
+		"FILTER_OPERATOR_UNSPECIFIED":            0,
+		"FILTER_OPERATOR_EQUALS":                 1,
+		"FILTER_OPERATOR_NOT_EQUALS":             2,
+		"FILTER_OPERATOR_GREATER_THAN":           3,
+		"FILTER_OPERATOR_GREATER_THAN_OR_EQUALS": 4,
+		"FILTER_OPERATOR_LESS_THAN":              5,
+		"FILTER_OPERATOR_LESS_THAN_OR_EQUALS":    6,
+		"FILTER_OPERATOR_CONTAINS":               7,
+		"FILTER_OPERATOR_STARTS_WITH":            8,
+		"FILTER_OPERATOR_ENDS_WITH":              9,
+		"FILTER_OPERATOR_IN":                     10,
+		"FILTER_OPERATOR_NOT_IN":                 11,
+		"FILTER_OPERATOR_IS_NULL":                12,
+		"FILTER_OPERATOR_IS_NOT_NULL":            13,
+	}
+)
+
+func (x FilterOperator) Enum() *FilterOperator {
+	p := new(FilterOperator)
+	*p = x
+	return p
+}
+
+func (x FilterOperator) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FilterOperator) Descriptor() protoreflect.EnumDescriptor {
+	return file_bib_v1_common_proto_enumTypes[0].Descriptor()
+}
+
+func (FilterOperator) Type() protoreflect.EnumType {
+	return &file_bib_v1_common_proto_enumTypes[0]
+}
+
+func (x FilterOperator) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FilterOperator.Descriptor instead.
+func (FilterOperator) EnumDescriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{0}
+}
+
+// PageRequest specifies pagination parameters for list operations.
+type PageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum number of items to return. Default is 50, max is 1000.
+	Limit int32 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of items to skip (offset-based pagination).
+	Offset int32 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Cursor for cursor-based pagination (preferred over offset for large datasets).
+	Cursor        string `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PageRequest) Reset() {
+	*x = PageRequest{}
+	mi := &file_bib_v1_common_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PageRequest) ProtoMessage() {}
+
+func (x *PageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bib_v1_common_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PageRequest.ProtoReflect.Descriptor instead.
+func (*PageRequest) Descriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PageRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *PageRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *PageRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+// PageInfo contains pagination metadata in responses.
+type PageInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Total number of items matching the query (may be approximate for large datasets).
+	TotalCount int64 `protobuf:"varint,1,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	// Cursor for the next page (empty if no more pages).
+	NextCursor string `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	// Whether there are more pages available.
+	HasMore bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	// Current page size (may be less than requested limit).
+	PageSize      int32 `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PageInfo) Reset() {
+	*x = PageInfo{}
+	mi := &file_bib_v1_common_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PageInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PageInfo) ProtoMessage() {}
+
+func (x *PageInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_bib_v1_common_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PageInfo.ProtoReflect.Descriptor instead.
+func (*PageInfo) Descriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PageInfo) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *PageInfo) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+func (x *PageInfo) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *PageInfo) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+// SortOrder specifies how to sort results.
+type SortOrder struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Field to sort by (field name from the response message).
+	Field string `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
+	// Sort in descending order (default is ascending).
+	Descending    bool `protobuf:"varint,2,opt,name=descending,proto3" json:"descending,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SortOrder) Reset() {
+	*x = SortOrder{}
+	mi := &file_bib_v1_common_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SortOrder) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SortOrder) ProtoMessage() {}
+
+func (x *SortOrder) ProtoReflect() protoreflect.Message {
+	mi := &file_bib_v1_common_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SortOrder.ProtoReflect.Descriptor instead.
+func (*SortOrder) Descriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SortOrder) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *SortOrder) GetDescending() bool {
+	if x != nil {
+		return x.Descending
+	}
+	return false
+}
+
+// Filter represents a single filter condition.
+type Filter struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Field name to filter on.
+	Field string `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
+	// Comparison operator.
+	Operator FilterOperator `protobuf:"varint,2,opt,name=operator,proto3,enum=bib.v1.FilterOperator" json:"operator,omitempty"`
+	// Value to compare against (string representation).
+	Value string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// Multiple values for IN/NOT_IN operators.
+	Values        []string `protobuf:"bytes,4,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Filter) Reset() {
+	*x = Filter{}
+	mi := &file_bib_v1_common_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Filter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Filter) ProtoMessage() {}
+
+func (x *Filter) ProtoReflect() protoreflect.Message {
+	mi := &file_bib_v1_common_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Filter.ProtoReflect.Descriptor instead.
+func (*Filter) Descriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Filter) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *Filter) GetOperator() FilterOperator {
+	if x != nil {
+		return x.Operator
+	}
+	return FilterOperator_FILTER_OPERATOR_UNSPECIFIED
+}
+
+func (x *Filter) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *Filter) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// FilterGroup combines multiple filters with AND/OR logic.
+type FilterGroup struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Filters to combine.
+	Filters []*Filter `protobuf:"bytes,1,rep,name=filters,proto3" json:"filters,omitempty"`
+	// Use OR logic instead of AND (default is AND).
+	UseOr         bool `protobuf:"varint,2,opt,name=use_or,json=useOr,proto3" json:"use_or,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FilterGroup) Reset() {
+	*x = FilterGroup{}
+	mi := &file_bib_v1_common_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FilterGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FilterGroup) ProtoMessage() {}
+
+func (x *FilterGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_bib_v1_common_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FilterGroup.ProtoReflect.Descriptor instead.
+func (*FilterGroup) Descriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *FilterGroup) GetFilters() []*Filter {
+	if x != nil {
+		return x.Filters
+	}
+	return nil
+}
+
+func (x *FilterGroup) GetUseOr() bool {
+	if x != nil {
+		return x.UseOr
+	}
+	return false
+}
+
+// OperationMetadata contains request tracking information.
+type OperationMetadata struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unique request identifier for tracing.
+	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Timestamp when the request was received.
+	Timestamp *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// ID of the node processing the request.
+	NodeId string `protobuf:"bytes,3,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// User ID of the requester (if authenticated).
+	UserId string `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Session ID (if applicable).
+	SessionId string `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Client IP address.
+	ClientIp string `protobuf:"bytes,6,opt,name=client_ip,json=clientIp,proto3" json:"client_ip,omitempty"`
+	// Additional context for audit logging.
+	Context       map[string]string `protobuf:"bytes,7,rep,name=context,proto3" json:"context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OperationMetadata) Reset() {
+	*x = OperationMetadata{}
+	mi := &file_bib_v1_common_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OperationMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OperationMetadata) ProtoMessage() {}
+
+func (x *OperationMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_bib_v1_common_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OperationMetadata.ProtoReflect.Descriptor instead.
+func (*OperationMetadata) Descriptor() ([]byte, []int) {
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *OperationMetadata) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *OperationMetadata) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *OperationMetadata) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *OperationMetadata) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OperationMetadata) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *OperationMetadata) GetClientIp() string {
+	if x != nil {
+		return x.ClientIp
+	}
+	return ""
+}
+
+func (x *OperationMetadata) GetContext() map[string]string {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
 // PeerInfo contains information about a peer
 type PeerInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -36,7 +539,7 @@ type PeerInfo struct {
 
 func (x *PeerInfo) Reset() {
 	*x = PeerInfo{}
-	mi := &file_bib_v1_common_proto_msgTypes[0]
+	mi := &file_bib_v1_common_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +551,7 @@ func (x *PeerInfo) String() string {
 func (*PeerInfo) ProtoMessage() {}
 
 func (x *PeerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_bib_v1_common_proto_msgTypes[0]
+	mi := &file_bib_v1_common_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +564,7 @@ func (x *PeerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerInfo.ProtoReflect.Descriptor instead.
 func (*PeerInfo) Descriptor() ([]byte, []int) {
-	return file_bib_v1_common_proto_rawDescGZIP(), []int{0}
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PeerInfo) GetPeerId() string {
@@ -115,7 +618,7 @@ type TopicInfo struct {
 
 func (x *TopicInfo) Reset() {
 	*x = TopicInfo{}
-	mi := &file_bib_v1_common_proto_msgTypes[1]
+	mi := &file_bib_v1_common_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -127,7 +630,7 @@ func (x *TopicInfo) String() string {
 func (*TopicInfo) ProtoMessage() {}
 
 func (x *TopicInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_bib_v1_common_proto_msgTypes[1]
+	mi := &file_bib_v1_common_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -140,7 +643,7 @@ func (x *TopicInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopicInfo.ProtoReflect.Descriptor instead.
 func (*TopicInfo) Descriptor() ([]byte, []int) {
-	return file_bib_v1_common_proto_rawDescGZIP(), []int{1}
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *TopicInfo) GetId() string {
@@ -211,7 +714,7 @@ type DatasetInfo struct {
 
 func (x *DatasetInfo) Reset() {
 	*x = DatasetInfo{}
-	mi := &file_bib_v1_common_proto_msgTypes[2]
+	mi := &file_bib_v1_common_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -223,7 +726,7 @@ func (x *DatasetInfo) String() string {
 func (*DatasetInfo) ProtoMessage() {}
 
 func (x *DatasetInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_bib_v1_common_proto_msgTypes[2]
+	mi := &file_bib_v1_common_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -236,7 +739,7 @@ func (x *DatasetInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatasetInfo.ProtoReflect.Descriptor instead.
 func (*DatasetInfo) Descriptor() ([]byte, []int) {
-	return file_bib_v1_common_proto_rawDescGZIP(), []int{2}
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DatasetInfo) GetId() string {
@@ -326,7 +829,7 @@ type CatalogEntry struct {
 
 func (x *CatalogEntry) Reset() {
 	*x = CatalogEntry{}
-	mi := &file_bib_v1_common_proto_msgTypes[3]
+	mi := &file_bib_v1_common_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +841,7 @@ func (x *CatalogEntry) String() string {
 func (*CatalogEntry) ProtoMessage() {}
 
 func (x *CatalogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_bib_v1_common_proto_msgTypes[3]
+	mi := &file_bib_v1_common_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +854,7 @@ func (x *CatalogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogEntry.ProtoReflect.Descriptor instead.
 func (*CatalogEntry) Descriptor() ([]byte, []int) {
-	return file_bib_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CatalogEntry) GetTopicId() string {
@@ -423,7 +926,7 @@ type Catalog struct {
 
 func (x *Catalog) Reset() {
 	*x = Catalog{}
-	mi := &file_bib_v1_common_proto_msgTypes[4]
+	mi := &file_bib_v1_common_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +938,7 @@ func (x *Catalog) String() string {
 func (*Catalog) ProtoMessage() {}
 
 func (x *Catalog) ProtoReflect() protoreflect.Message {
-	mi := &file_bib_v1_common_proto_msgTypes[4]
+	mi := &file_bib_v1_common_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +951,7 @@ func (x *Catalog) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Catalog.ProtoReflect.Descriptor instead.
 func (*Catalog) Descriptor() ([]byte, []int) {
-	return file_bib_v1_common_proto_rawDescGZIP(), []int{4}
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Catalog) GetPeerId() string {
@@ -491,7 +994,7 @@ type Error struct {
 
 func (x *Error) Reset() {
 	*x = Error{}
-	mi := &file_bib_v1_common_proto_msgTypes[5]
+	mi := &file_bib_v1_common_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -503,7 +1006,7 @@ func (x *Error) String() string {
 func (*Error) ProtoMessage() {}
 
 func (x *Error) ProtoReflect() protoreflect.Message {
-	mi := &file_bib_v1_common_proto_msgTypes[5]
+	mi := &file_bib_v1_common_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -516,7 +1019,7 @@ func (x *Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Error.ProtoReflect.Descriptor instead.
 func (*Error) Descriptor() ([]byte, []int) {
-	return file_bib_v1_common_proto_rawDescGZIP(), []int{5}
+	return file_bib_v1_common_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Error) GetCode() int32 {
@@ -544,7 +1047,44 @@ var File_bib_v1_common_proto protoreflect.FileDescriptor
 
 const file_bib_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x13bib/v1/common.proto\x12\x06bib.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb1\x01\n" +
+	"\x13bib/v1/common.proto\x12\x06bib.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"S\n" +
+	"\vPageRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"\x84\x01\n" +
+	"\bPageInfo\x12\x1f\n" +
+	"\vtotal_count\x18\x01 \x01(\x03R\n" +
+	"totalCount\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12\x1b\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\"A\n" +
+	"\tSortOrder\x12\x14\n" +
+	"\x05field\x18\x01 \x01(\tR\x05field\x12\x1e\n" +
+	"\n" +
+	"descending\x18\x02 \x01(\bR\n" +
+	"descending\"\x80\x01\n" +
+	"\x06Filter\x12\x14\n" +
+	"\x05field\x18\x01 \x01(\tR\x05field\x122\n" +
+	"\boperator\x18\x02 \x01(\x0e2\x16.bib.v1.FilterOperatorR\boperator\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x12\x16\n" +
+	"\x06values\x18\x04 \x03(\tR\x06values\"N\n" +
+	"\vFilterGroup\x12(\n" +
+	"\afilters\x18\x01 \x03(\v2\x0e.bib.v1.FilterR\afilters\x12\x15\n" +
+	"\x06use_or\x18\x02 \x01(\bR\x05useOr\"\xd8\x02\n" +
+	"\x11OperationMetadata\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x128\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x17\n" +
+	"\anode_id\x18\x03 \x01(\tR\x06nodeId\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x05 \x01(\tR\tsessionId\x12\x1b\n" +
+	"\tclient_ip\x18\x06 \x01(\tR\bclientIp\x12@\n" +
+	"\acontext\x18\a \x03(\v2&.bib.v1.OperationMetadata.ContextEntryR\acontext\x1a:\n" +
+	"\fContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb1\x01\n" +
 	"\bPeerInfo\x12\x17\n" +
 	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x12\x1c\n" +
 	"\taddresses\x18\x02 \x03(\tR\taddresses\x12\x1b\n" +
@@ -604,7 +1144,23 @@ const file_bib_v1_common_proto_rawDesc = "" +
 	"\adetails\x18\x03 \x03(\v2\x1a.bib.v1.Error.DetailsEntryR\adetails\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01Bo\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xd3\x03\n" +
+	"\x0eFilterOperator\x12\x1f\n" +
+	"\x1bFILTER_OPERATOR_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16FILTER_OPERATOR_EQUALS\x10\x01\x12\x1e\n" +
+	"\x1aFILTER_OPERATOR_NOT_EQUALS\x10\x02\x12 \n" +
+	"\x1cFILTER_OPERATOR_GREATER_THAN\x10\x03\x12*\n" +
+	"&FILTER_OPERATOR_GREATER_THAN_OR_EQUALS\x10\x04\x12\x1d\n" +
+	"\x19FILTER_OPERATOR_LESS_THAN\x10\x05\x12'\n" +
+	"#FILTER_OPERATOR_LESS_THAN_OR_EQUALS\x10\x06\x12\x1c\n" +
+	"\x18FILTER_OPERATOR_CONTAINS\x10\a\x12\x1f\n" +
+	"\x1bFILTER_OPERATOR_STARTS_WITH\x10\b\x12\x1d\n" +
+	"\x19FILTER_OPERATOR_ENDS_WITH\x10\t\x12\x16\n" +
+	"\x12FILTER_OPERATOR_IN\x10\n" +
+	"\x12\x1a\n" +
+	"\x16FILTER_OPERATOR_NOT_IN\x10\v\x12\x1b\n" +
+	"\x17FILTER_OPERATOR_IS_NULL\x10\f\x12\x1f\n" +
+	"\x1bFILTER_OPERATOR_IS_NOT_NULL\x10\rBo\n" +
 	"\n" +
 	"com.bib.v1B\vCommonProtoP\x01Z\x1bbib/api/gen/go/bib/v1;bibv1\xa2\x02\x03BXX\xaa\x02\x06Bib.V1\xca\x02\x06Bib\\V1\xe2\x02\x12Bib\\V1\\GPBMetadata\xea\x02\aBib::V1b\x06proto3"
 
@@ -620,34 +1176,47 @@ func file_bib_v1_common_proto_rawDescGZIP() []byte {
 	return file_bib_v1_common_proto_rawDescData
 }
 
-var file_bib_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_bib_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_bib_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_bib_v1_common_proto_goTypes = []any{
-	(*PeerInfo)(nil),              // 0: bib.v1.PeerInfo
-	(*TopicInfo)(nil),             // 1: bib.v1.TopicInfo
-	(*DatasetInfo)(nil),           // 2: bib.v1.DatasetInfo
-	(*CatalogEntry)(nil),          // 3: bib.v1.CatalogEntry
-	(*Catalog)(nil),               // 4: bib.v1.Catalog
-	(*Error)(nil),                 // 5: bib.v1.Error
-	nil,                           // 6: bib.v1.DatasetInfo.MetadataEntry
-	nil,                           // 7: bib.v1.Error.DetailsEntry
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(FilterOperator)(0),           // 0: bib.v1.FilterOperator
+	(*PageRequest)(nil),           // 1: bib.v1.PageRequest
+	(*PageInfo)(nil),              // 2: bib.v1.PageInfo
+	(*SortOrder)(nil),             // 3: bib.v1.SortOrder
+	(*Filter)(nil),                // 4: bib.v1.Filter
+	(*FilterGroup)(nil),           // 5: bib.v1.FilterGroup
+	(*OperationMetadata)(nil),     // 6: bib.v1.OperationMetadata
+	(*PeerInfo)(nil),              // 7: bib.v1.PeerInfo
+	(*TopicInfo)(nil),             // 8: bib.v1.TopicInfo
+	(*DatasetInfo)(nil),           // 9: bib.v1.DatasetInfo
+	(*CatalogEntry)(nil),          // 10: bib.v1.CatalogEntry
+	(*Catalog)(nil),               // 11: bib.v1.Catalog
+	(*Error)(nil),                 // 12: bib.v1.Error
+	nil,                           // 13: bib.v1.OperationMetadata.ContextEntry
+	nil,                           // 14: bib.v1.DatasetInfo.MetadataEntry
+	nil,                           // 15: bib.v1.Error.DetailsEntry
+	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
 }
 var file_bib_v1_common_proto_depIdxs = []int32{
-	8,  // 0: bib.v1.PeerInfo.last_seen:type_name -> google.protobuf.Timestamp
-	8,  // 1: bib.v1.TopicInfo.created_at:type_name -> google.protobuf.Timestamp
-	8,  // 2: bib.v1.TopicInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,  // 3: bib.v1.DatasetInfo.created_at:type_name -> google.protobuf.Timestamp
-	8,  // 4: bib.v1.DatasetInfo.updated_at:type_name -> google.protobuf.Timestamp
-	6,  // 5: bib.v1.DatasetInfo.metadata:type_name -> bib.v1.DatasetInfo.MetadataEntry
-	8,  // 6: bib.v1.CatalogEntry.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 7: bib.v1.Catalog.entries:type_name -> bib.v1.CatalogEntry
-	8,  // 8: bib.v1.Catalog.last_updated:type_name -> google.protobuf.Timestamp
-	7,  // 9: bib.v1.Error.details:type_name -> bib.v1.Error.DetailsEntry
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	0,  // 0: bib.v1.Filter.operator:type_name -> bib.v1.FilterOperator
+	4,  // 1: bib.v1.FilterGroup.filters:type_name -> bib.v1.Filter
+	16, // 2: bib.v1.OperationMetadata.timestamp:type_name -> google.protobuf.Timestamp
+	13, // 3: bib.v1.OperationMetadata.context:type_name -> bib.v1.OperationMetadata.ContextEntry
+	16, // 4: bib.v1.PeerInfo.last_seen:type_name -> google.protobuf.Timestamp
+	16, // 5: bib.v1.TopicInfo.created_at:type_name -> google.protobuf.Timestamp
+	16, // 6: bib.v1.TopicInfo.updated_at:type_name -> google.protobuf.Timestamp
+	16, // 7: bib.v1.DatasetInfo.created_at:type_name -> google.protobuf.Timestamp
+	16, // 8: bib.v1.DatasetInfo.updated_at:type_name -> google.protobuf.Timestamp
+	14, // 9: bib.v1.DatasetInfo.metadata:type_name -> bib.v1.DatasetInfo.MetadataEntry
+	16, // 10: bib.v1.CatalogEntry.updated_at:type_name -> google.protobuf.Timestamp
+	10, // 11: bib.v1.Catalog.entries:type_name -> bib.v1.CatalogEntry
+	16, // 12: bib.v1.Catalog.last_updated:type_name -> google.protobuf.Timestamp
+	15, // 13: bib.v1.Error.details:type_name -> bib.v1.Error.DetailsEntry
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_bib_v1_common_proto_init() }
@@ -660,13 +1229,14 @@ func file_bib_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bib_v1_common_proto_rawDesc), len(file_bib_v1_common_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   8,
+			NumEnums:      1,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_bib_v1_common_proto_goTypes,
 		DependencyIndexes: file_bib_v1_common_proto_depIdxs,
+		EnumInfos:         file_bib_v1_common_proto_enumTypes,
 		MessageInfos:      file_bib_v1_common_proto_msgTypes,
 	}.Build()
 	File_bib_v1_common_proto = out.File

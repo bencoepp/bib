@@ -34,21 +34,44 @@ api/
 │   ├── buf.yaml              # Buf module configuration
 │   ├── buf.gen.yaml          # Code generation configuration
 │   └── bib/v1/               # Proto definitions
-│       ├── common.proto      # Shared types
-│       ├── auth.proto        # AuthService
-│       ├── user.proto        # UserService
-│       ├── breakglass.proto  # BreakGlassService
-│       ├── discovery.proto   # P2P discovery protocol
-│       ├── data.proto        # P2P data transfer protocol
-│       ├── sync.proto        # P2P sync protocol
-│       ├── pubsub.proto      # GossipSub messages
-│       └── jobs.proto        # Job protocol (placeholder)
+│       ├── common.proto      # Shared types (pagination, errors, etc.)
+│       │
+│       ├── p2p/              # P2P protocol messages (libp2p streams)
+│       │   ├── discovery.proto   # /bib/discovery/2.0.0 protocol
+│       │   ├── data.proto        # /bib/data/2.0.0 protocol
+│       │   ├── sync.proto        # /bib/sync/2.0.0 protocol
+│       │   ├── pubsub.proto      # GossipSub messages
+│       │   └── jobs.proto        # /bib/jobs/2.0.0 protocol
+│       │
+│       └── services/         # gRPC service definitions
+│           ├── health.proto      # HealthService
+│           ├── auth.proto        # AuthService
+│           ├── user.proto        # UserService
+│           ├── node.proto        # NodeService
+│           ├── topic.proto       # TopicService
+│           ├── dataset.proto     # DatasetService
+│           ├── admin.proto       # AdminService
+│           ├── query.proto       # QueryService
+│           ├── job.proto         # JobService (placeholder)
+│           └── breakglass.proto  # BreakGlassService
 │
 └── gen/go/                   # Generated Go code (committed)
     └── bib/v1/
-        ├── *.pb.go           # Protobuf types
-        └── *_grpc.pb.go      # gRPC service stubs
+        ├── common.pb.go      # Common types
+        ├── p2p/              # P2P protocol types
+        │   └── *.pb.go
+        └── services/         # gRPC service stubs
+            ├── *.pb.go
+            └── *_grpc.pb.go
 ```
+
+### Package Structure
+
+The proto files are organized into three packages:
+
+- **`bib.v1`** (`bib/api/gen/go/bib/v1`): Common types shared across P2P and gRPC
+- **`bib.v1.p2p`** (`bib/api/gen/go/bib/v1/p2p`): P2P protocol messages for libp2p streams
+- **`bib.v1.services`** (`bib/api/gen/go/bib/v1/services`): gRPC service definitions
 
 ## Common Tasks
 

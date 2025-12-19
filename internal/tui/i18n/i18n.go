@@ -203,12 +203,13 @@ func (i *I18n) loadLocale(locale string) error {
 	var err error
 
 	// Try embedded FS first
+	// Note: embed.FS always uses forward slashes, regardless of OS
 	if i.embeddedFS != nil {
-		path := filepath.Join(i.embeddedRoot, locale+".yaml")
+		path := i.embeddedRoot + "/" + locale + ".yaml"
 		data, err = i.embeddedFS.ReadFile(path)
 		if err != nil {
 			// Try .yml extension
-			path = filepath.Join(i.embeddedRoot, locale+".yml")
+			path = i.embeddedRoot + "/" + locale + ".yml"
 			data, err = i.embeddedFS.ReadFile(path)
 		}
 	}
