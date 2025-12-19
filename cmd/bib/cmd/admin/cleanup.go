@@ -55,7 +55,6 @@ This command is useful for:
 }
 
 func init() {
-	Cmd.AddCommand(cleanupCmd)
 
 	cleanupCmd.Flags().BoolVar(&cleanupAll, "all", false, "Clean up all resources (config, data, containers)")
 	cleanupCmd.Flags().BoolVar(&cleanupPostgres, "postgres", false, "Clean up managed PostgreSQL containers")

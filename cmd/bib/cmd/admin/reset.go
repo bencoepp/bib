@@ -61,7 +61,6 @@ Examples:
 }
 
 func init() {
-	Cmd.AddCommand(resetCmd)
 
 	resetCmd.Flags().BoolVarP(&resetForce, "force", "f", false, "Force stop even if jobs are in-flight")
 	resetCmd.Flags().BoolVar(&resetDbOnly, "db-only", false, "Reset only database")
