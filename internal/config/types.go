@@ -45,9 +45,31 @@ type ServerConfig struct {
 
 // TLSConfig holds TLS/SSL configuration
 type TLSConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`
+	// Enabled controls whether TLS is active (default: true)
+	Enabled bool `mapstructure:"enabled"`
+
+	// AutoGenerate enables automatic certificate generation (default: true)
+	// When true, bibd will auto-generate a CA and server certificate on first startup
+	AutoGenerate bool `mapstructure:"auto_generate"`
+
+	// CertFile is the path to the server certificate (optional if AutoGenerate is true)
 	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
+
+	// KeyFile is the path to the server private key (optional if AutoGenerate is true)
+	KeyFile string `mapstructure:"key_file"`
+
+	// CAFile is the path to the CA certificate (optional if AutoGenerate is true)
+	CAFile string `mapstructure:"ca_file"`
+
+	// ClientAuth controls client certificate verification mode
+	// Options: "none", "optional", "required" (default: "optional")
+	ClientAuth string `mapstructure:"client_auth"`
+
+	// Validity settings for auto-generated certificates
+	CAValidityYears        int `mapstructure:"ca_validity_years"`         // Default: 10
+	ServerCertValidityDays int `mapstructure:"server_cert_validity_days"` // Default: 365
+	ClientCertValidityDays int `mapstructure:"client_cert_validity_days"` // Default: 90
+	RenewalThresholdDays   int `mapstructure:"renewal_threshold_days"`    // Default: 30
 }
 
 // P2PConfig holds P2P networking configuration for the daemon

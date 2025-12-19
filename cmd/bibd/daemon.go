@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bib/internal/certs"
 	"context"
 	"fmt"
 	"os"
@@ -33,10 +34,12 @@ type Daemon struct {
 
 	store       storage.Store
 	pgLifecycle *pglifecycle.Manager // PostgreSQL lifecycle manager (nil if not using managed postgres)
+	p2pIdentity *p2p.Identity        // P2P identity (also used for CA key encryption)
 	p2pHost     *p2p.Host
 	p2pDisc     *p2p.Discovery
 	p2pMode     *p2p.ModeManager
 	cluster     *cluster.Cluster
+	certMgr     *certs.Manager // TLS certificate manager
 
 	mu        sync.Mutex
 	running   bool
@@ -59,7 +62,7 @@ func NewDaemon(cfg *config.BibdConfig, configDir string, log *logger.Logger, aud
 }
 
 // Start initializes and starts all daemon components in the correct order.
-// Order: Storage -> P2P -> Cluster
+// Order: Identity -> Certificates -> Storage -> P2P -> Cluster
 func (d *Daemon) Start(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -76,33 +79,49 @@ func (d *Daemon) Start(ctx context.Context) error {
 		// Non-fatal, continue
 	}
 
-	// 2. Initialize storage
+	// 2. Load or generate P2P identity (needed for certificate encryption)
+	if err := d.loadIdentity(); err != nil {
+		return fmt.Errorf("failed to load identity: %w", err)
+	}
+
+	// 3. Initialize TLS certificates (blocks until ready if auto-generate is enabled)
+	if d.cfg.Server.TLS.Enabled || d.cfg.Server.TLS.AutoGenerate {
+		if err := d.initCertificates(); err != nil {
+			return fmt.Errorf("failed to initialize certificates: %w", err)
+		}
+	}
+
+	// 4. Initialize storage
 	if err := d.startStorage(ctx); err != nil {
+		d.stopCertificates()
 		return fmt.Errorf("failed to start storage: %w", err)
 	}
 
-	// 3. Initialize P2P networking
+	// 5. Initialize P2P networking
 	if d.cfg.P2P.Enabled {
 		if err := d.startP2P(ctx); err != nil {
 			d.stopStorage()
+			d.stopCertificates()
 			return fmt.Errorf("failed to start P2P: %w", err)
 		}
 	}
 
-	// 4. Initialize cluster (requires P2P for DHT discovery)
+	// 6. Initialize cluster (requires P2P for DHT discovery)
 	if d.cfg.Cluster.Enabled {
 		if err := d.startCluster(ctx); err != nil {
 			d.stopP2P()
 			d.stopStorage()
+			d.stopCertificates()
 			return fmt.Errorf("failed to start cluster: %w", err)
 		}
 	}
 
-	// 5. Wait for storage to be ready (includes waiting for managed PostgreSQL)
+	// 7. Wait for storage to be ready (includes waiting for managed PostgreSQL)
 	if err := d.waitForStorageReady(ctx); err != nil {
 		d.stopCluster()
 		d.stopP2P()
 		d.stopStorage()
+		d.stopCertificates()
 		return fmt.Errorf("storage failed to become ready: %w", err)
 	}
 
@@ -114,7 +133,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 }
 
 // Stop gracefully shuts down all daemon components in reverse order.
-// Order: Cluster -> P2P -> Storage
+// Order: Cluster -> P2P -> Storage -> Certificates
 func (d *Daemon) Stop(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -137,12 +156,17 @@ func (d *Daemon) Stop(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("p2p: %w", err))
 	}
 
-	// 3. Stop storage last
+	// 3. Stop storage
 	if err := d.stopStorage(); err != nil {
 		errs = append(errs, fmt.Errorf("storage: %w", err))
 	}
 
-	// 4. Remove PID file
+	// 4. Stop certificate manager
+	if err := d.stopCertificates(); err != nil {
+		errs = append(errs, fmt.Errorf("certs: %w", err))
+	}
+
+	// 5. Remove PID file
 	if err := d.removePIDFile(); err != nil {
 		d.log.Warn("failed to remove PID file", "error", err)
 	}
@@ -155,6 +179,94 @@ func (d *Daemon) Stop(ctx context.Context) error {
 	}
 
 	d.log.Info("daemon stopped successfully")
+	return nil
+}
+
+// loadIdentity loads or generates the P2P identity.
+// This is needed early for certificate key encryption.
+func (d *Daemon) loadIdentity() error {
+	d.log.Debug("loading P2P identity")
+
+	identity, err := p2p.LoadOrGenerateIdentity(d.cfg.P2P.Identity.KeyPath, d.configDir)
+	if err != nil {
+		return fmt.Errorf("failed to load or generate identity: %w", err)
+	}
+
+	d.p2pIdentity = identity
+	d.log.Info("P2P identity loaded", "key_path", p2p.KeyPath(d.cfg.P2P.Identity.KeyPath, d.configDir))
+
+	return nil
+}
+
+// initCertificates initializes the TLS certificate infrastructure.
+// This blocks until certificates are ready (generates CA/server cert on first run).
+func (d *Daemon) initCertificates() error {
+	d.log.Debug("initializing TLS certificates")
+
+	// Get the raw identity key for CA key encryption
+	identityKey, err := d.p2pIdentity.RawPrivateKey()
+	if err != nil {
+		return fmt.Errorf("failed to get identity key: %w", err)
+	}
+
+	// Determine node ID and peer ID
+	nodeID := d.cfg.Cluster.NodeID
+	if nodeID == "" {
+		nodeID = "standalone"
+	}
+
+	var peerID string
+	if d.p2pIdentity != nil {
+		// Get peer ID from identity
+		pid, err := d.p2pIdentity.PrivKey.GetPublic().Raw()
+		if err == nil {
+			peerID = fmt.Sprintf("%x", pid[:8]) // Short form
+		}
+	}
+
+	// Create certificate manager config
+	certCfg := certs.ManagerConfig{
+		ConfigDir:              d.configDir,
+		NodeID:                 nodeID,
+		PeerID:                 peerID,
+		P2PIdentityKey:         identityKey,
+		ListenAddresses:        d.cfg.P2P.ListenAddresses,
+		CAValidityYears:        d.cfg.Server.TLS.CAValidityYears,
+		ServerCertValidityDays: d.cfg.Server.TLS.ServerCertValidityDays,
+		ClientCertValidityDays: d.cfg.Server.TLS.ClientCertValidityDays,
+		RenewalThresholdDays:   d.cfg.Server.TLS.RenewalThresholdDays,
+	}
+
+	// Create certificate manager
+	certMgr, err := certs.NewManager(certCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create certificate manager: %w", err)
+	}
+
+	// Initialize (generates CA/certs if needed, blocks until ready)
+	if err := certMgr.Initialize(); err != nil {
+		return fmt.Errorf("failed to initialize certificates: %w", err)
+	}
+
+	d.certMgr = certMgr
+
+	d.log.Info("TLS certificates initialized",
+		"ca_fingerprint", certMgr.CAFingerprint()[:16]+"...",
+		"server_fingerprint", certMgr.ServerFingerprint()[:16]+"...",
+	)
+
+	return nil
+}
+
+// stopCertificates cleans up the certificate manager.
+func (d *Daemon) stopCertificates() error {
+	if d.certMgr != nil {
+		if err := d.certMgr.Close(); err != nil {
+			d.log.Error("error closing certificate manager", "error", err)
+			return err
+		}
+		d.certMgr = nil
+	}
 	return nil
 }
 

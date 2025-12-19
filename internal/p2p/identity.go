@@ -40,6 +40,12 @@ type Identity struct {
 	PrivKey crypto.PrivKey
 }
 
+// RawPrivateKey returns the raw bytes of the private key.
+// This can be used for deriving encryption keys (e.g., for CA key encryption).
+func (i *Identity) RawPrivateKey() ([]byte, error) {
+	return i.PrivKey.Raw()
+}
+
 // LoadIdentity loads the node identity from the specified key path.
 // If keyPath is empty, it defaults to configDir/identity.pem.
 func LoadIdentity(keyPath, configDir string) (*Identity, error) {

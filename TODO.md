@@ -860,14 +860,14 @@
 > - P2P connections use libp2p's Noise/TLS built-in security
 
 #### 4.3.1 Certificate Infrastructure
-- [ ] **GRPC-013**: CA generation and management
+- [x] **GRPC-013**: CA generation and management
   - Auto-generate CA on first `bibd` startup if none exists
   - Store CA key encrypted in `<config_dir>/secrets/ca.key.enc`
   - Store CA cert in `<config_dir>/certs/ca.crt`
   - CA validity: 10 years (configurable)
   - Log CA fingerprint on startup for verification
 
-- [ ] **GRPC-014**: Server certificate generation
+- [x] **GRPC-014**: Server certificate generation
   - Generate server cert signed by CA on startup
   - Include node's listen addresses as SANs
   - Include node's peer ID as SAN (for P2P identification)
@@ -875,14 +875,14 @@
   - Auto-renewal 30 days before expiry
   - Store in `<config_dir>/certs/server.{crt,key}`
 
-- [ ] **GRPC-015**: Client certificate generation
+- [x] **GRPC-015**: Client certificate generation
   - `bib cert generate` creates client cert signed by daemon CA
   - Client cert tied to user's SSH public key fingerprint
   - Include user ID in certificate subject
   - Client cert validity: 90 days (configurable)
   - Store in `<config_dir>/certs/client.{crt,key}`
 
-- [ ] **GRPC-016**: Trust-On-First-Use (TOFU) for CLI
+- [x] **GRPC-016**: Trust-On-First-Use (TOFU) for CLI
   - On first connection, CLI prompts to trust server cert
   - Store trusted cert fingerprint in `<config_dir>/trusted_nodes/<node_id>.fingerprint`
   - Warn if certificate changes (possible MITM)
@@ -891,7 +891,7 @@
   - `bib trust remove <node_id>` to untrust
 
 #### 4.3.2 Certificate CLI Commands
-- [ ] **GRPC-017**: Certificate CLI commands (local, no daemon required)
+- [x] **GRPC-017**: Certificate CLI commands (local, no daemon required)
   - `bib cert init` - Initialize CA (for self-hosted scenarios)
   - `bib cert generate --name <name>` - Generate client cert
   - `bib cert list` - List certificates

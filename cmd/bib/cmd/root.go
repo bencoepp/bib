@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"bib/cmd/bib/cmd/admin"
+	certcmd "bib/cmd/bib/cmd/cert"
 	configcmd "bib/cmd/bib/cmd/config"
 	"bib/cmd/bib/cmd/demo"
 	"bib/cmd/bib/cmd/setup"
+	trustcmd "bib/cmd/bib/cmd/trust"
 	"bib/cmd/bib/cmd/tui"
 	"bib/cmd/bib/cmd/version"
 	clii18n "bib/internal/cli/i18n"
@@ -158,9 +160,11 @@ func init() {
 
 	// Add subcommands from subdirectories
 	rootCmd.AddCommand(admin.NewCommand())
+	rootCmd.AddCommand(certcmd.NewCommand())
 	rootCmd.AddCommand(configcmd.NewCommand())
 	rootCmd.AddCommand(demo.NewCommand())
 	rootCmd.AddCommand(setup.NewCommand())
+	rootCmd.AddCommand(trustcmd.NewCommand())
 	rootCmd.AddCommand(tui.NewCommand())
 	rootCmd.AddCommand(version.NewCommand())
 
