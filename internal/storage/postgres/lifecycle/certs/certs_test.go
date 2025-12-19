@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -130,17 +131,20 @@ func TestSaveAndLoad(t *testing.T) {
 		}
 	}
 
-	// Verify key files have restricted permissions
-	for _, f := range []string{"ca.key", "server.key", "client.key"} {
-		path := filepath.Join(tmpDir, f)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Errorf("failed to stat %s: %v", f, err)
-			continue
-		}
-		mode := info.Mode().Perm()
-		if mode != 0600 {
-			t.Errorf("key file %s has permissions %o, want 0600", f, mode)
+	// Verify key files have restricted permissions (Unix only)
+	// Windows doesn't support Unix-style file permissions
+	if runtime.GOOS != "windows" {
+		for _, f := range []string{"ca.key", "server.key", "client.key"} {
+			path := filepath.Join(tmpDir, f)
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Errorf("failed to stat %s: %v", f, err)
+				continue
+			}
+			mode := info.Mode().Perm()
+			if mode != 0600 {
+				t.Errorf("key file %s has permissions %o, want 0600", f, mode)
+			}
 		}
 	}
 

@@ -3,8 +3,24 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+// setTestHomeDir sets the home directory environment variables for testing.
+// On Windows, it sets USERPROFILE; on Unix, it sets HOME.
+// Returns a cleanup function to restore the original values.
+func setTestHomeDir(t *testing.T, tempDir string) func() {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		origUserProfile := os.Getenv("USERPROFILE")
+		os.Setenv("USERPROFILE", tempDir)
+		return func() { os.Setenv("USERPROFILE", origUserProfile) }
+	}
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	return func() { os.Setenv("HOME", origHome) }
+}
 
 // ==================== Types Tests ====================
 
@@ -85,8 +101,13 @@ func TestDefaultBibdConfig(t *testing.T) {
 	if cfg.Server.PIDFile != "~/bibd.pid" {
 		t.Errorf("expected PID file '~/bibd.pid', got %q", cfg.Server.PIDFile)
 	}
-	if cfg.Server.DataDir != "~/.local/share/bibd" {
-		t.Errorf("expected data dir '~/.local/share/bibd', got %q", cfg.Server.DataDir)
+	// Data dir path is platform-specific
+	expectedDataDir := "~/.local/share/bibd"
+	if runtime.GOOS == "windows" {
+		expectedDataDir = "~/AppData/Local/bibd"
+	}
+	if cfg.Server.DataDir != expectedDataDir {
+		t.Errorf("expected data dir %q, got %q", expectedDataDir, cfg.Server.DataDir)
 	}
 	if cfg.Server.TLS.Enabled {
 		t.Error("expected TLS to be disabled")
@@ -202,9 +223,8 @@ func TestGenerateConfig_InvalidFormat(t *testing.T) {
 func TestGenerateConfig_UnknownApp(t *testing.T) {
 	// Create a temp directory for the test
 	tempDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", origHome)
+	cleanup := setTestHomeDir(t, tempDir)
+	defer cleanup()
 
 	_, err := GenerateConfig("unknownapp", "yaml")
 	if err == nil {
@@ -214,9 +234,8 @@ func TestGenerateConfig_UnknownApp(t *testing.T) {
 
 func TestGenerateConfig_BibApp(t *testing.T) {
 	tempDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", origHome)
+	cleanup := setTestHomeDir(t, tempDir)
+	defer cleanup()
 
 	path, err := GenerateConfig(AppBib, "yaml")
 	if err != nil {
@@ -236,9 +255,8 @@ func TestGenerateConfig_BibApp(t *testing.T) {
 
 func TestGenerateConfig_BibdApp(t *testing.T) {
 	tempDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", origHome)
+	cleanup := setTestHomeDir(t, tempDir)
+	defer cleanup()
 
 	path, err := GenerateConfig(AppBibd, "toml")
 	if err != nil {
@@ -257,9 +275,8 @@ func TestGenerateConfig_BibdApp(t *testing.T) {
 
 func TestGenerateConfig_AlreadyExists(t *testing.T) {
 	tempDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", origHome)
+	cleanup := setTestHomeDir(t, tempDir)
+	defer cleanup()
 
 	// Create the first config
 	_, err := GenerateConfig(AppBib, "yaml")
@@ -276,9 +293,8 @@ func TestGenerateConfig_AlreadyExists(t *testing.T) {
 
 func TestGenerateConfigIfNotExists_NewConfig(t *testing.T) {
 	tempDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", origHome)
+	cleanup := setTestHomeDir(t, tempDir)
+	defer cleanup()
 
 	path, created, err := GenerateConfigIfNotExists(AppBib, "yaml")
 	if err != nil {
@@ -296,9 +312,8 @@ func TestGenerateConfigIfNotExists_NewConfig(t *testing.T) {
 
 func TestGenerateConfigIfNotExists_ExistingConfig(t *testing.T) {
 	tempDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", origHome)
+	cleanup := setTestHomeDir(t, tempDir)
+	defer cleanup()
 
 	// Create initial config
 	_, _, err := GenerateConfigIfNotExists(AppBib, "yaml")
@@ -501,16 +516,18 @@ func TestConfigSearchPaths(t *testing.T) {
 		t.Error("expected non-empty paths")
 	}
 
-	// Should contain /etc/bib
-	foundEtc := false
-	for _, p := range paths {
-		if p == "/etc/bib" {
-			foundEtc = true
-			break
+	// On Unix, should contain /etc/bib; on Windows, this path doesn't exist
+	if runtime.GOOS != "windows" {
+		foundEtc := false
+		for _, p := range paths {
+			if p == "/etc/bib" {
+				foundEtc = true
+				break
+			}
 		}
-	}
-	if !foundEtc {
-		t.Error("expected /etc/bib in search paths")
+		if !foundEtc {
+			t.Error("expected /etc/bib in search paths")
+		}
 	}
 }
 
@@ -794,9 +811,8 @@ func TestGenerateConfig_AllFormats(t *testing.T) {
 	for _, format := range SupportedFormats {
 		t.Run(format, func(t *testing.T) {
 			tempDir := t.TempDir()
-			origHome := os.Getenv("HOME")
-			os.Setenv("HOME", tempDir)
-			defer os.Setenv("HOME", origHome)
+			cleanup := setTestHomeDir(t, tempDir)
+			defer cleanup()
 
 			path, err := GenerateConfig(AppBib, format)
 			if err != nil {

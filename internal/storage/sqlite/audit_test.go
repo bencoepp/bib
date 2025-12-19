@@ -26,7 +26,7 @@ func TestAuditRepository_Integration(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -192,7 +192,7 @@ func TestAuditRepository_HashChain(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -245,7 +245,7 @@ func TestAuditRepository_EmptyDatabase(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestNewStore_CreatesAuditRepository(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 

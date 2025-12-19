@@ -9,13 +9,19 @@ CREATE TABLE IF NOT EXISTS audit_log (
     role_used TEXT NOT NULL,
     action TEXT NOT NULL CHECK (action IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DDL', 'AUTH', 'ADMIN')),
     table_name TEXT,
+    query TEXT,
     query_hash TEXT,
     rows_affected INTEGER CHECK (rows_affected >= 0),
     duration_ms INTEGER CHECK (duration_ms >= 0),
     source_component TEXT,
+    actor TEXT,
     metadata TEXT, -- JSON
     prev_hash TEXT,
-    entry_hash TEXT NOT NULL UNIQUE
+    entry_hash TEXT NOT NULL UNIQUE,
+    flag_break_glass INTEGER DEFAULT 0,
+    flag_rate_limited INTEGER DEFAULT 0,
+    flag_suspicious INTEGER DEFAULT 0,
+    flag_alert_triggered INTEGER DEFAULT 0
 );
 
 -- Indexes

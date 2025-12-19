@@ -30,7 +30,7 @@ func TestStore_CreateAndMigrate(t *testing.T) {
 	defer store.Close()
 
 	ctx := context.Background()
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}
 
@@ -369,7 +369,7 @@ func setupTestStore(t *testing.T) *Store {
 	}
 
 	ctx := context.Background()
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}
 
