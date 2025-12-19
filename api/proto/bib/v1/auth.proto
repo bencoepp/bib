@@ -1,0 +1,295 @@
+syntax = "proto3";
+
+package bib.v1;
+
+option go_package = "bib/api/proto/bib/v1;bibv1";
+
+import "google/protobuf/timestamp.proto";
+import "bib/v1/user.proto";
+
+// AuthService provides authentication operations.
+service AuthService {
+  // Authenticate authenticates a user by their public key.
+  // This creates a new session and returns user information.
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+
+  // Register registers a new user (when auto-registration is disabled).
+  // Requires admin authentication.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Logout ends the current session.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // RefreshSession extends the current session's expiry.
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse);
+
+  // ValidateSession checks if a session is still valid.
+  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse);
+
+  // GetAuthConfig returns the authentication configuration.
+  // This allows clients to know if auto-registration is enabled, etc.
+  rpc GetAuthConfig(GetAuthConfigRequest) returns (GetAuthConfigResponse);
+
+  // Challenge requests a challenge for signature-based authentication.
+  // Used for stateless authentication where the client signs a challenge.
+  rpc Challenge(ChallengeRequest) returns (ChallengeResponse);
+
+  // VerifyChallenge verifies a signed challenge and authenticates.
+  rpc VerifyChallenge(VerifyChallengeRequest) returns (VerifyChallengeResponse);
+}
+
+// AuthenticateRequest is the request for Authenticate.
+message AuthenticateRequest {
+  // Public key bytes (Ed25519 or RSA)
+  bytes public_key = 1;
+
+  // Key type: "ed25519" or "rsa"
+  string key_type = 2;
+
+  // User name (used for auto-registration)
+  string name = 3;
+
+  // User email (used for auto-registration, may be required)
+  string email = 4;
+
+  // Preferred locale
+  string locale = 5;
+
+  // Client information
+  string client_ip = 6;
+  string client_agent = 7;
+
+  // Additional metadata
+  map<string, string> metadata = 8;
+}
+
+// AuthenticateResponse is the response for Authenticate.
+message AuthenticateResponse {
+  // The authenticated user
+  User user = 1;
+
+  // The created session
+  Session session = 2;
+
+  // Whether the user was newly registered
+  bool is_new_user = 3;
+
+  // Session token (for stateless auth)
+  string session_token = 4;
+
+  // When the session expires
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+// RegisterRequest is the request for Register (admin only).
+message RegisterRequest {
+  // Public key bytes
+  bytes public_key = 1;
+
+  // Key type: "ed25519" or "rsa"
+  string key_type = 2;
+
+  // Display name
+  string name = 3;
+
+  // Optional email
+  string email = 4;
+
+  // Role (defaults to "user")
+  UserRole role = 5;
+
+  // Initial status (defaults to "active")
+  UserStatus status = 6;
+
+  // Optional locale
+  string locale = 7;
+
+  // Additional metadata
+  map<string, string> metadata = 8;
+}
+
+// RegisterResponse is the response for Register.
+message RegisterResponse {
+  User user = 1;
+}
+
+// LogoutRequest is the request for Logout.
+message LogoutRequest {
+  // Session ID to logout (empty = current session)
+  string session_id = 1;
+}
+
+// LogoutResponse is the response for Logout.
+message LogoutResponse {
+  bool success = 1;
+}
+
+// RefreshSessionRequest is the request for RefreshSession.
+message RefreshSessionRequest {
+  // Session token to refresh (empty = use gRPC metadata)
+  string session_token = 1;
+}
+
+// RefreshSessionResponse is the response for RefreshSession.
+message RefreshSessionResponse {
+  // New session token (if rotated)
+  string session_token = 1;
+
+  // New expiry time
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// ValidateSessionRequest is the request for ValidateSession.
+message ValidateSessionRequest {
+  // Session token to validate
+  string session_token = 1;
+}
+
+// ValidateSessionResponse is the response for ValidateSession.
+message ValidateSessionResponse {
+  // Whether the session is valid
+  bool valid = 1;
+
+  // The user (if valid)
+  User user = 2;
+
+  // The session (if valid)
+  Session session = 3;
+
+  // When the session expires
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// GetAuthConfigRequest is the request for GetAuthConfig.
+message GetAuthConfigRequest {}
+
+// GetAuthConfigResponse is the response for GetAuthConfig.
+message GetAuthConfigResponse {
+  // Whether auto-registration is enabled
+  bool allow_auto_registration = 1;
+
+  // Whether email is required for registration
+  bool require_email = 2;
+
+  // Default role for new users
+  string default_role = 3;
+
+  // Session timeout duration (in seconds)
+  int64 session_timeout_seconds = 4;
+
+  // Supported key types
+  repeated string supported_key_types = 5;
+
+  // Server version
+  string server_version = 6;
+
+  // Node ID
+  string node_id = 7;
+}
+
+// ChallengeRequest is the request for Challenge.
+message ChallengeRequest {
+  // Public key to generate challenge for
+  bytes public_key = 1;
+
+  // Key type: "ed25519" or "rsa"
+  string key_type = 2;
+}
+
+// ChallengeResponse is the response for Challenge.
+message ChallengeResponse {
+  // Challenge bytes to sign
+  bytes challenge = 1;
+
+  // Challenge ID (to correlate with verification)
+  string challenge_id = 2;
+
+  // When the challenge expires
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// VerifyChallengeRequest is the request for VerifyChallenge.
+message VerifyChallengeRequest {
+  // Challenge ID from ChallengeResponse
+  string challenge_id = 1;
+
+  // Signature of the challenge
+  bytes signature = 2;
+
+  // User name (for auto-registration)
+  string name = 3;
+
+  // User email (for auto-registration)
+  string email = 4;
+
+  // Preferred locale
+  string locale = 5;
+
+  // Client information
+  string client_ip = 6;
+  string client_agent = 7;
+
+  // Additional metadata
+  map<string, string> metadata = 8;
+}
+
+// VerifyChallengeResponse is the response for VerifyChallenge.
+message VerifyChallengeResponse {
+  // The authenticated user
+  User user = 1;
+
+  // The created session
+  Session session = 2;
+
+  // Whether the user was newly registered
+  bool is_new_user = 3;
+
+  // Session token
+  string session_token = 4;
+
+  // When the session expires
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+// AuthError represents authentication-specific errors.
+message AuthError {
+  AuthErrorCode code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+// AuthErrorCode represents authentication error codes.
+enum AuthErrorCode {
+  AUTH_ERROR_UNSPECIFIED = 0;
+
+  // User not found and auto-registration is disabled
+  AUTH_ERROR_USER_NOT_FOUND = 1;
+
+  // User account is suspended
+  AUTH_ERROR_USER_SUSPENDED = 2;
+
+  // User account is pending approval
+  AUTH_ERROR_USER_PENDING = 3;
+
+  // Invalid or expired session
+  AUTH_ERROR_SESSION_EXPIRED = 4;
+
+  // Invalid signature
+  AUTH_ERROR_INVALID_SIGNATURE = 5;
+
+  // Invalid or unsupported key type
+  AUTH_ERROR_INVALID_KEY_TYPE = 6;
+
+  // Email is required but not provided
+  AUTH_ERROR_EMAIL_REQUIRED = 7;
+
+  // Challenge expired or invalid
+  AUTH_ERROR_CHALLENGE_EXPIRED = 8;
+
+  // Insufficient permissions
+  AUTH_ERROR_PERMISSION_DENIED = 9;
+
+  // Maximum sessions exceeded
+  AUTH_ERROR_MAX_SESSIONS = 10;
+}
+
