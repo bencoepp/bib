@@ -412,6 +412,32 @@ func (c *Cluster) TakeSnapshot() error {
 	return c.raft.TakeSnapshot()
 }
 
+// Snapshot triggers a manual Raft snapshot (alias for TakeSnapshot).
+func (c *Cluster) Snapshot() error {
+	return c.TakeSnapshot()
+}
+
+// TransferLeadership transfers leadership to another node (leader only).
+func (c *Cluster) TransferLeadership(targetNodeID string) error {
+	if !c.IsLeader() {
+		return ErrNotLeader
+	}
+
+	c.mu.RLock()
+	target, exists := c.members[targetNodeID]
+	c.mu.RUnlock()
+
+	if !exists {
+		return ErrNodeNotFound
+	}
+
+	if target.Role != RoleVoter {
+		return fmt.Errorf("target node is not a voter")
+	}
+
+	return c.raft.TransferLeadership(targetNodeID)
+}
+
 // Restore restores from a snapshot
 func (c *Cluster) Restore(snapshotID string) error {
 	return c.raft.Restore(snapshotID)

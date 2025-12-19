@@ -81,7 +81,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Restoring backup...")
-	if err := mgr.Restore(ctx, opts); err != nil {
+	if err := mgr.RestoreWithOptions(ctx, opts); err != nil {
 		return fmt.Errorf("restore failed: %w", err)
 	}
 

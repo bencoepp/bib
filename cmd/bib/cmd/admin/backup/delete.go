@@ -55,7 +55,7 @@ func runBackupDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Delete backup
-	if err := mgr.Delete(backupID); err != nil {
+	if err := mgr.Delete(cmd.Context(), backupID); err != nil {
 		return fmt.Errorf("failed to delete backup: %w", err)
 	}
 

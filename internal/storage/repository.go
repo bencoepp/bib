@@ -46,6 +46,12 @@ type Store interface {
 	// BannedPeers returns the banned peers repository.
 	BannedPeers() BannedPeerRepository
 
+	// QueryHistory returns the query history repository.
+	QueryHistory() QueryHistoryRepository
+
+	// SavedQueries returns the saved queries repository.
+	SavedQueries() SavedQueryRepository
+
 	// Ping checks database connectivity.
 	Ping(ctx context.Context) error
 
@@ -61,6 +67,9 @@ type Store interface {
 
 	// Stats returns storage statistics.
 	Stats(ctx context.Context) (StorageStats, error)
+
+	// Vacuum performs database vacuum/optimization.
+	Vacuum(ctx context.Context) error
 }
 
 // StorageStats contains storage usage statistics.
@@ -990,6 +999,97 @@ type BannedPeerRepository interface {
 type BannedPeerFilter struct {
 	// IncludeExpired includes expired bans
 	IncludeExpired bool
+
+	// Limit is the maximum number of results
+	Limit int
+
+	// Offset is the number of results to skip
+	Offset int
+}
+
+// =============================================================================
+// Query History
+// =============================================================================
+
+// SavedQuery represents a saved or historical query.
+type SavedQuery struct {
+	// ID is the unique query identifier.
+	ID string `json:"id"`
+
+	// UserID is the user who saved/executed the query.
+	UserID domain.UserID `json:"user_id"`
+
+	// Name is the optional name for saved queries.
+	Name string `json:"name,omitempty"`
+
+	// Description is an optional description.
+	Description string `json:"description,omitempty"`
+
+	// Query is the CEL query expression.
+	Query string `json:"query"`
+
+	// Tags are optional labels for categorization.
+	Tags []string `json:"tags,omitempty"`
+
+	// Duration is the execution duration (for history).
+	Duration int64 `json:"duration,omitempty"`
+
+	// RowCount is the number of rows returned (for history).
+	RowCount int64 `json:"row_count,omitempty"`
+
+	// CreatedAt is when the query was saved/executed.
+	CreatedAt time.Time `json:"created_at"`
+
+	// UpdatedAt is when the query was last modified.
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// QueryHistoryRepository handles query history persistence.
+type QueryHistoryRepository interface {
+	// Add adds a query to history.
+	Add(ctx context.Context, query *SavedQuery) error
+
+	// List lists recent queries for a user.
+	List(ctx context.Context, userID domain.UserID, limit int) ([]*SavedQuery, error)
+
+	// Clear clears query history for a user.
+	Clear(ctx context.Context, userID domain.UserID) error
+
+	// Cleanup removes old history entries.
+	Cleanup(ctx context.Context, before time.Time) (int64, error)
+}
+
+// SavedQueryRepository handles saved query persistence.
+type SavedQueryRepository interface {
+	// Create creates a new saved query.
+	Create(ctx context.Context, query *SavedQuery) error
+
+	// Get retrieves a saved query by ID.
+	Get(ctx context.Context, id string) (*SavedQuery, error)
+
+	// List lists saved queries matching the filter.
+	List(ctx context.Context, filter SavedQueryFilter) ([]*SavedQuery, error)
+
+	// Update updates a saved query.
+	Update(ctx context.Context, query *SavedQuery) error
+
+	// Delete deletes a saved query.
+	Delete(ctx context.Context, id string) error
+
+	// Count returns the number of saved queries matching the filter.
+	Count(ctx context.Context, filter SavedQueryFilter) (int64, error)
+}
+
+// SavedQueryFilter defines filtering options for saved query queries.
+type SavedQueryFilter struct {
+	// UserID filters by owner
+	UserID *domain.UserID
+
+	// Tags filters by tags
+	Tags []string
+
+	// Search performs text search on name/query
+	Search string
 
 	// Limit is the maximum number of results
 	Limit int

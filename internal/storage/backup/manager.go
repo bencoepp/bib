@@ -233,8 +233,17 @@ func (m *Manager) backupSQLite(ctx context.Context, backupID string, timestamp t
 	return metadata, nil
 }
 
-// Restore restores a backup.
-func (m *Manager) Restore(ctx context.Context, opts RestoreOptions) error {
+// Restore restores a backup by ID with default options.
+func (m *Manager) Restore(ctx context.Context, backupID string) error {
+	return m.RestoreWithOptions(ctx, RestoreOptions{
+		BackupID:     backupID,
+		VerifyBefore: true,
+		Force:        false,
+	})
+}
+
+// RestoreWithOptions restores a backup with custom options.
+func (m *Manager) RestoreWithOptions(ctx context.Context, opts RestoreOptions) error {
 	// Load backup metadata
 	metadata, err := m.loadMetadata(opts.BackupID)
 	if err != nil {
@@ -324,7 +333,7 @@ func (m *Manager) restoreSQLite(ctx context.Context, metadata *BackupMetadata) e
 }
 
 // List returns a list of available backups.
-func (m *Manager) List() ([]*BackupMetadata, error) {
+func (m *Manager) List(ctx context.Context) ([]*BackupMetadata, error) {
 	metadataDir := filepath.Join(m.cfg.LocalPath, ".metadata")
 
 	entries, err := os.ReadDir(metadataDir)
@@ -360,7 +369,7 @@ func (m *Manager) List() ([]*BackupMetadata, error) {
 }
 
 // Delete deletes a backup.
-func (m *Manager) Delete(backupID string) error {
+func (m *Manager) Delete(ctx context.Context, backupID string) error {
 	metadata, err := m.loadMetadata(backupID)
 	if err != nil {
 		return fmt.Errorf("failed to load backup metadata: %w", err)
@@ -456,7 +465,8 @@ func (m *Manager) loadMetadata(backupID string) (*BackupMetadata, error) {
 }
 
 func (m *Manager) cleanupOldBackups() error {
-	backups, err := m.List()
+	ctx := context.Background()
+	backups, err := m.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -465,7 +475,7 @@ func (m *Manager) cleanupOldBackups() error {
 	cutoff := time.Now().AddDate(0, 0, -m.cfg.RetentionDays)
 	for _, backup := range backups {
 		if backup.Timestamp.Before(cutoff) {
-			if err := m.Delete(backup.ID); err != nil {
+			if err := m.Delete(ctx, backup.ID); err != nil {
 				return err
 			}
 		}
@@ -474,7 +484,7 @@ func (m *Manager) cleanupOldBackups() error {
 	// Delete by count
 	if len(backups) > m.cfg.MaxBackups {
 		for i := m.cfg.MaxBackups; i < len(backups); i++ {
-			if err := m.Delete(backups[i].ID); err != nil {
+			if err := m.Delete(ctx, backups[i].ID); err != nil {
 				return err
 			}
 		}

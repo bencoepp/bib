@@ -314,6 +314,30 @@ func (rn *RaftNode) Restore(snapshotID string) error {
 	return nil
 }
 
+// TransferLeadership transfers leadership to another node.
+// This is a placeholder - actual implementation requires etcd/raft integration.
+func (rn *RaftNode) TransferLeadership(targetNodeID string) error {
+	rn.mu.RLock()
+	if rn.state != StateLeader {
+		rn.mu.RUnlock()
+		return ErrNotLeader
+	}
+	if _, exists := rn.members[targetNodeID]; !exists {
+		rn.mu.RUnlock()
+		return ErrNodeNotFound
+	}
+	rn.mu.RUnlock()
+
+	// In a real implementation, this would use raft.TransferLeader()
+	// For now, we simulate leadership transfer by setting state
+	rn.mu.Lock()
+	rn.leader = targetNodeID
+	rn.state = StateFollower
+	rn.mu.Unlock()
+
+	return nil
+}
+
 // applyLoop applies committed entries to the FSM
 func (rn *RaftNode) applyLoop() {
 	defer rn.wg.Done()

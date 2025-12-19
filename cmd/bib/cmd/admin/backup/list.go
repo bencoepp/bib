@@ -40,7 +40,7 @@ func runBackupList(cmd *cobra.Command, args []string) error {
 	}
 
 	// List backups
-	backups, err := mgr.List()
+	backups, err := mgr.List(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to list backups: %w", err)
 	}

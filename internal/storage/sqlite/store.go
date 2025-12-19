@@ -34,6 +34,8 @@ type Store struct {
 	topicMembers     *TopicMemberRepository
 	topicInvitations *TopicInvitationRepository
 	bannedPeers      *BannedPeerRepository
+	queryHistory     *QueryHistoryRepository
+	savedQueries     *SavedQueryRepository
 
 	mu     sync.RWMutex
 	closed bool
@@ -98,6 +100,8 @@ func New(cfg storage.SQLiteConfig, dataDir, nodeID string) (*Store, error) {
 	s.topicMembers = &TopicMemberRepository{store: s}
 	s.topicInvitations = &TopicInvitationRepository{store: s}
 	s.bannedPeers = &BannedPeerRepository{store: s}
+	s.queryHistory = &QueryHistoryRepository{store: s}
+	s.savedQueries = &SavedQueryRepository{store: s}
 
 	return s, nil
 }
@@ -168,6 +172,22 @@ func (s *Store) TopicInvitations() storage.TopicInvitationRepository {
 // BannedPeers returns the banned peers repository.
 func (s *Store) BannedPeers() storage.BannedPeerRepository {
 	return s.bannedPeers
+}
+
+// QueryHistory returns the query history repository.
+func (s *Store) QueryHistory() storage.QueryHistoryRepository {
+	return s.queryHistory
+}
+
+// SavedQueries returns the saved queries repository.
+func (s *Store) SavedQueries() storage.SavedQueryRepository {
+	return s.savedQueries
+}
+
+// Vacuum performs database maintenance.
+func (s *Store) Vacuum(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "VACUUM")
+	return err
 }
 
 // Ping checks database connectivity.
