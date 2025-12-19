@@ -556,70 +556,570 @@
 
 ## Phase 4: gRPC API
 
-### 4.1 Protocol Definitions
-- [ ] **GRPC-001**: Proto file structure
+> **Architecture**: The gRPC API serves two purposes:
+> 1. **CLI ↔ Daemon**: The `bib` CLI communicates with `bibd` via gRPC over mTLS
+> 2. **Daemon ↔ Daemon**: Other `bibd` nodes access the API via P2P (libp2p streams wrapping gRPC)
+>
+> **Identity Model**: Users authenticate using their SSH key (Ed25519/RSA). The same key is used
+> for both CLI gRPC authentication and Wish SSH sessions, ensuring consistent identity across interfaces.
+>
+> **Local-Only Commands**: Some CLI commands work without a daemon connection:
+> - `bib setup` - Initial configuration
+> - `bib config` - View/edit local config
+> - `bib cert` - Certificate management
+> - `bib version` - Version information
+
+### 4.0 Prerequisites & Code Generation
+
+- [x] **GRPC-000**: Proto tooling setup
+  - [x] Install buf CLI (`go install github.com/bufbuild/buf/cmd/buf@latest`)
+  - [x] Add protoc-gen-go and protoc-gen-go-grpc plugins
+  - [x] Validate buf.gen.yaml configuration
+  - [x] Create `make proto` target for code generation
+  - [x] Add generated code handling in `.gitignore` (committed by default)
+  - [x] Create `tools/tools.go` for tracking tool dependencies
+  - [x] Create `docs/development/proto-development.md` guide
+
+### 4.1 Protocol Buffer Reorganization
+
+> **Goal**: Separate P2P protocol messages from gRPC service definitions for clarity.
+
+- [ ] **GRPC-001**: Proto file structure reorganization
   ```
-  api/proto/
-  ├── bib/v1/
-  │   ├── common.proto       # Shared types
-  │   ├── nodes.proto        # Node management
-  │   ├── topics.proto       # Topic operations
-  │   ├── datasets.proto     # Dataset operations  
-  │   ├── jobs.proto         # Job scheduling
-  │   ├── query.proto        # Data queries
-  │   └── admin.proto        # Administrative ops
+  api/proto/bib/v1/
+  ├── common.proto           # Shared types (existing, keep)
+  │
+  ├── p2p/                   # P2P protocol messages (libp2p streams)
+  │   ├── discovery.proto    # /bib/discovery/1.0.0 (move existing)
+  │   ├── data.proto         # /bib/data/1.0.0 (move existing)
+  │   ├── sync.proto         # /bib/sync/1.0.0 (move existing)
+  │   ├── pubsub.proto       # GossipSub messages (move existing)
+  │   └── jobs.proto         # /bib/jobs/1.0.0 (move existing)
+  │
+  └── services/              # gRPC service definitions
+      ├── auth.proto         # AuthService (enhance existing)
+      ├── user.proto         # UserService (enhance existing)
+      ├── node.proto         # NodeService (new)
+      ├── topic.proto        # TopicService (new)
+      ├── dataset.proto      # DatasetService (new)
+      ├── job.proto          # JobService (new - placeholder until Phase 3)
+      ├── query.proto        # QueryService (new)
+      ├── admin.proto        # AdminService (new)
+      ├── breakglass.proto   # BreakGlassService (move existing)
+      └── health.proto       # HealthService (new)
   ```
-- [ ] **GRPC-002**: Common types
-  - Pagination, filtering, sorting
-  - Error types
-  - Metadata structures
-- [ ] **GRPC-003**: Service definitions
-  - NodeService: Register, List, Get, Health
-  - TopicService: Create, List, Subscribe, Unsubscribe
-  - DatasetService: Upload, Download, Query, Delete
-  - JobService: Create, List, Get, Cancel, Retry
-  - QueryService: Execute, Stream
-  - AdminService: Config, Metrics, Logs
 
-### 4.2 Authentication & Security
-- [ ] **GRPC-004**: mTLS implementation
-  - Certificate generation tooling (`bib cert generate`)
-  - CA management
-  - Certificate rotation
-- [ ] **GRPC-005**: Certificate management
-  - Store certs in config directory
-  - Auto-renewal with warning
-  - Revocation list support
-- [ ] **GRPC-006**: Authorization layer
-  - Role-based access control (RBAC)
-  - Resource-level permissions
-  - Audit logging integration
+- [ ] **GRPC-002**: Common types enhancement
+  - Add pagination message: `PageRequest { int32 limit, int32 offset, string cursor }`
+  - Add pagination response: `PageInfo { int32 total_count, string next_cursor, bool has_more }`
+  - Add sort options: `SortOrder { string field, bool descending }`
+  - Add filter operators for flexible queries
+  - Add `OperationMetadata` for request tracking (request_id, timestamp, node_id)
+  - Ensure all existing types in common.proto are compatible
 
-### 4.3 Server Implementation
-- [ ] **GRPC-007**: gRPC server setup
-  - TLS configuration
-  - Interceptors (logging, auth, recovery)
-  - Reflection for debugging
-- [ ] **GRPC-008**: Implement NodeService
-- [ ] **GRPC-009**: Implement TopicService
-- [ ] **GRPC-010**: Implement DatasetService
-- [ ] **GRPC-011**: Implement JobService
-- [ ] **GRPC-012**: Implement QueryService
-- [ ] **GRPC-013**: Implement AdminService
-- [ ] **GRPC-014**: Streaming endpoints
-  - Job status streaming
-  - Query result streaming
-  - Real-time logs
+- [ ] **GRPC-003**: Service definitions overview
+  | Service | Priority | Description | Depends On |
+  |---------|----------|-------------|------------|
+  | HealthService | P0 | Health checks, readiness | None |
+  | AuthService | P0 | Authentication, sessions | HealthService |
+  | UserService | P0 | User management | AuthService |
+  | NodeService | P1 | Node info, peer management | AuthService |
+  | TopicService | P1 | Topic CRUD, subscriptions | AuthService |
+  | DatasetService | P1 | Dataset CRUD, versions | TopicService |
+  | AdminService | P2 | Config, metrics, logs | AuthService |
+  | BreakGlassService | P2 | Emergency access | AuthService |
+  | QueryService | P2 | CEL queries | DatasetService |
+  | JobService | P3 | Job management | Phase 3 Scheduler |
 
-### 4.4 Client SDK
-- [ ] **GRPC-015**: Go client library
-  - Connection management
-  - Retry logic
-  - Context propagation
-- [ ] **GRPC-016**: Client in bib CLI
-  - gRPC client initialization
-  - Connection pooling
-  - Error handling
+### 4.2 Service Proto Definitions
+
+#### 4.2.1 HealthService (P0)
+- [ ] **GRPC-004**: HealthService proto definition
+  ```protobuf
+  service HealthService {
+    // Check performs a health check (standard gRPC health check)
+    rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+    
+    // Watch streams health status changes
+    rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+    
+    // GetNodeInfo returns detailed node information
+    rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
+    
+    // Ping is a simple connectivity check
+    rpc Ping(PingRequest) returns (PingResponse);
+  }
+  ```
+  - Include service status (SERVING, NOT_SERVING, UNKNOWN)
+  - Include component health (storage, p2p, cluster)
+  - Include version info, uptime, node mode
+
+#### 4.2.2 AuthService Enhancement (P0)
+- [ ] **GRPC-005**: AuthService enhancement (existing proto)
+  - Review existing `AuthService` in auth.proto
+  - Ensure Challenge/VerifyChallenge flow works for SSH keys
+  - Add `GetPublicKeyInfo` RPC to get key fingerprint/type from bytes
+  - Add session token format specification (JWT or opaque)
+  - Add `ListMySessions` RPC for current user
+  - Document authentication flow:
+    1. Client sends `Challenge(public_key)`
+    2. Server returns challenge bytes + challenge_id
+    3. Client signs challenge with private key
+    4. Client sends `VerifyChallenge(challenge_id, signature)`
+    5. Server returns session token + user info
+
+#### 4.2.3 UserService Enhancement (P0)
+- [ ] **GRPC-006**: UserService enhancement (existing proto)
+  - Review existing `UserService` in user.proto
+  - Ensure admin-only RPCs are marked (CreateUser, DeleteUser, SuspendUser, etc.)
+  - Add `SearchUsers` RPC with text search
+  - Add user preferences storage (theme, locale, etc.)
+
+#### 4.2.4 NodeService (P1)
+- [ ] **GRPC-007**: NodeService proto definition
+  ```protobuf
+  service NodeService {
+    // GetNode returns information about a specific node
+    rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
+    
+    // ListNodes lists known nodes in the network
+    rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+    
+    // GetSelfNode returns this node's information
+    rpc GetSelfNode(GetSelfNodeRequest) returns (GetSelfNodeResponse);
+    
+    // ConnectPeer manually connects to a peer
+    rpc ConnectPeer(ConnectPeerRequest) returns (ConnectPeerResponse);
+    
+    // DisconnectPeer disconnects from a peer
+    rpc DisconnectPeer(DisconnectPeerRequest) returns (DisconnectPeerResponse);
+    
+    // GetNetworkStats returns network statistics
+    rpc GetNetworkStats(GetNetworkStatsRequest) returns (GetNetworkStatsResponse);
+    
+    // StreamNodeEvents streams node join/leave events
+    rpc StreamNodeEvents(StreamNodeEventsRequest) returns (stream NodeEvent);
+  }
+  ```
+
+#### 4.2.5 TopicService (P1)
+- [ ] **GRPC-008**: TopicService proto definition
+  ```protobuf
+  service TopicService {
+    // CreateTopic creates a new topic
+    rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+    
+    // GetTopic retrieves a topic by ID or name
+    rpc GetTopic(GetTopicRequest) returns (GetTopicResponse);
+    
+    // ListTopics lists topics with filtering
+    rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
+    
+    // UpdateTopic updates topic metadata
+    rpc UpdateTopic(UpdateTopicRequest) returns (UpdateTopicResponse);
+    
+    // DeleteTopic soft-deletes a topic
+    rpc DeleteTopic(DeleteTopicRequest) returns (DeleteTopicResponse);
+    
+    // Subscribe subscribes to a topic (selective mode)
+    rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
+    
+    // Unsubscribe unsubscribes from a topic
+    rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+    
+    // ListSubscriptions lists current subscriptions
+    rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+    
+    // StreamTopicUpdates streams topic changes in real-time
+    rpc StreamTopicUpdates(StreamTopicUpdatesRequest) returns (stream TopicUpdate);
+  }
+  ```
+
+#### 4.2.6 DatasetService (P1)
+- [ ] **GRPC-009**: DatasetService proto definition
+  ```protobuf
+  service DatasetService {
+    // CreateDataset creates a new dataset
+    rpc CreateDataset(CreateDatasetRequest) returns (CreateDatasetResponse);
+    
+    // GetDataset retrieves dataset metadata
+    rpc GetDataset(GetDatasetRequest) returns (GetDatasetResponse);
+    
+    // ListDatasets lists datasets with filtering
+    rpc ListDatasets(ListDatasetsRequest) returns (ListDatasetsResponse);
+    
+    // UpdateDataset updates dataset metadata
+    rpc UpdateDataset(UpdateDatasetRequest) returns (UpdateDatasetResponse);
+    
+    // DeleteDataset soft-deletes a dataset
+    rpc DeleteDataset(DeleteDatasetRequest) returns (DeleteDatasetResponse);
+    
+    // UploadDataset uploads dataset content (streaming)
+    rpc UploadDataset(stream UploadDatasetRequest) returns (UploadDatasetResponse);
+    
+    // DownloadDataset downloads dataset content (streaming)
+    rpc DownloadDataset(DownloadDatasetRequest) returns (stream DownloadDatasetResponse);
+    
+    // GetDatasetVersions lists versions of a dataset
+    rpc GetDatasetVersions(GetDatasetVersionsRequest) returns (GetDatasetVersionsResponse);
+    
+    // GetChunk retrieves a specific chunk
+    rpc GetChunk(GetChunkRequest) returns (GetChunkResponse);
+    
+    // VerifyDataset verifies dataset integrity
+    rpc VerifyDataset(VerifyDatasetRequest) returns (VerifyDatasetResponse);
+  }
+  ```
+
+#### 4.2.7 AdminService (P2)
+- [ ] **GRPC-010**: AdminService proto definition
+  ```protobuf
+  service AdminService {
+    // GetConfig returns current configuration (redacted secrets)
+    rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+    
+    // UpdateConfig updates runtime configuration
+    rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+    
+    // GetMetrics returns Prometheus-style metrics
+    rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+    
+    // StreamLogs streams daemon logs in real-time
+    rpc StreamLogs(StreamLogsRequest) returns (stream LogEntry);
+    
+    // GetAuditLogs queries audit trail
+    rpc GetAuditLogs(GetAuditLogsRequest) returns (GetAuditLogsResponse);
+    
+    // TriggerBackup initiates a database backup
+    rpc TriggerBackup(TriggerBackupRequest) returns (TriggerBackupResponse);
+    
+    // ListBackups lists available backups
+    rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse);
+    
+    // GetClusterStatus returns cluster/raft status
+    rpc GetClusterStatus(GetClusterStatusRequest) returns (GetClusterStatusResponse);
+    
+    // Shutdown gracefully shuts down the daemon (admin only)
+    rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  }
+  ```
+
+#### 4.2.8 QueryService (P2)
+- [ ] **GRPC-011**: QueryService proto definition
+  ```protobuf
+  service QueryService {
+    // Execute runs a CEL query and returns results
+    rpc Execute(ExecuteQueryRequest) returns (ExecuteQueryResponse);
+    
+    // ExecuteStream runs a query and streams results
+    rpc ExecuteStream(ExecuteQueryRequest) returns (stream QueryResult);
+    
+    // ValidateQuery validates a CEL expression without executing
+    rpc ValidateQuery(ValidateQueryRequest) returns (ValidateQueryResponse);
+    
+    // ExplainQuery explains query execution plan
+    rpc ExplainQuery(ExplainQueryRequest) returns (ExplainQueryResponse);
+  }
+  ```
+  - Note: Full implementation depends on Phase 3 CEL integration
+
+#### 4.2.9 JobService (P3 - Placeholder)
+- [ ] **GRPC-012**: JobService proto definition (placeholder)
+  ```protobuf
+  service JobService {
+    // CreateJob creates a new job
+    rpc CreateJob(CreateJobRequest) returns (CreateJobResponse);
+    
+    // GetJob retrieves job status
+    rpc GetJob(GetJobRequest) returns (GetJobResponse);
+    
+    // ListJobs lists jobs with filtering
+    rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+    
+    // CancelJob cancels a running job
+    rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+    
+    // RetryJob retries a failed job
+    rpc RetryJob(RetryJobRequest) returns (RetryJobResponse);
+    
+    // StreamJobLogs streams job output in real-time
+    rpc StreamJobLogs(StreamJobLogsRequest) returns (stream JobLogEntry);
+    
+    // StreamJobStatus streams job status updates
+    rpc StreamJobStatus(StreamJobStatusRequest) returns (stream JobStatusUpdate);
+  }
+  ```
+  - Note: Implementation deferred until Phase 3 completion
+
+### 4.3 TLS & Certificate Management
+
+> **Trust Model**: 
+> - bibd auto-generates a self-signed CA on first startup
+> - CLI uses Trust-On-First-Use (TOFU) for daemon connections
+> - Users can pin certificates for security-sensitive deployments
+> - P2P connections use libp2p's Noise/TLS built-in security
+
+#### 4.3.1 Certificate Infrastructure
+- [ ] **GRPC-013**: CA generation and management
+  - Auto-generate CA on first `bibd` startup if none exists
+  - Store CA key encrypted in `<config_dir>/secrets/ca.key.enc`
+  - Store CA cert in `<config_dir>/certs/ca.crt`
+  - CA validity: 10 years (configurable)
+  - Log CA fingerprint on startup for verification
+
+- [ ] **GRPC-014**: Server certificate generation
+  - Generate server cert signed by CA on startup
+  - Include node's listen addresses as SANs
+  - Include node's peer ID as SAN (for P2P identification)
+  - Server cert validity: 1 year (configurable)
+  - Auto-renewal 30 days before expiry
+  - Store in `<config_dir>/certs/server.{crt,key}`
+
+- [ ] **GRPC-015**: Client certificate generation
+  - `bib cert generate` creates client cert signed by daemon CA
+  - Client cert tied to user's SSH public key fingerprint
+  - Include user ID in certificate subject
+  - Client cert validity: 90 days (configurable)
+  - Store in `<config_dir>/certs/client.{crt,key}`
+
+- [ ] **GRPC-016**: Trust-On-First-Use (TOFU) for CLI
+  - On first connection, CLI prompts to trust server cert
+  - Store trusted cert fingerprint in `<config_dir>/trusted_nodes/<node_id>.fingerprint`
+  - Warn if certificate changes (possible MITM)
+  - `bib trust add <node_id> --fingerprint <fp>` for manual trust
+  - `bib trust list` to show trusted nodes
+  - `bib trust remove <node_id>` to untrust
+
+#### 4.3.2 Certificate CLI Commands
+- [ ] **GRPC-017**: Certificate CLI commands (local, no daemon required)
+  - `bib cert init` - Initialize CA (for self-hosted scenarios)
+  - `bib cert generate --name <name>` - Generate client cert
+  - `bib cert list` - List certificates
+  - `bib cert info <cert-file>` - Show certificate details
+  - `bib cert export --format pem|p12` - Export certificates
+  - `bib cert revoke <fingerprint>` - Add to revocation list
+
+### 4.4 gRPC-over-P2P Transport
+
+> **Goal**: Allow bibd nodes to call each other's gRPC APIs over libp2p streams,
+> enabling distributed operations without separate TCP connections.
+
+- [ ] **GRPC-018**: libp2p gRPC transport
+  - Create custom `grpc.DialOption` that uses libp2p streams
+  - Protocol: `/bib/grpc/1.0.0`
+  - Multiplex multiple gRPC calls over single libp2p connection
+  - Use libp2p's built-in authentication (peer ID verification)
+  - Map libp2p peer ID to bibd node identity
+
+- [ ] **GRPC-019**: P2P client wrapper
+  - `p2p.GRPCClient(peerID)` returns standard gRPC `ClientConn`
+  - Automatic peer discovery via DHT
+  - Connection pooling per peer
+  - Fallback to direct TCP if P2P unavailable
+
+- [ ] **GRPC-020**: P2P authorization
+  - Verify calling peer's node ID against allowed nodes list
+  - Node-level permissions (read-only peers, trusted peers)
+  - Rate limiting per peer
+  - Audit log for P2P API calls
+
+### 4.5 Server Implementation
+
+#### 4.5.1 gRPC Server Setup
+- [ ] **GRPC-021**: gRPC server infrastructure
+  - Create `internal/grpc/server.go` with server lifecycle
+  - Configure TLS from generated certificates
+  - Listen on configurable port (default: 4000)
+  - Optional Unix socket for local CLI (faster, no TLS overhead)
+  - Graceful shutdown with connection draining
+
+- [ ] **GRPC-022**: gRPC interceptors
+  - **Logging interceptor**: Log all RPC calls with timing
+  - **Auth interceptor**: Validate session token, extract user context
+  - **Recovery interceptor**: Catch panics, return proper errors
+  - **Audit interceptor**: Write to audit log for sensitive operations
+  - **Rate limit interceptor**: Per-user rate limiting
+  - **Request ID interceptor**: Add/propagate request IDs
+  - **Metrics interceptor**: Prometheus metrics for all RPCs
+
+- [ ] **GRPC-023**: Error handling
+  - Map domain errors to gRPC status codes
+  - Include error details in `google.rpc.Status`
+  - Localized error messages (using i18n)
+  - Don't leak internal error details to clients
+  - Log full error context server-side
+
+- [ ] **GRPC-024**: gRPC reflection & debugging
+  - Enable reflection in development mode
+  - Disable in production by default (configurable)
+  - Health check endpoint for load balancers
+
+#### 4.5.2 Service Implementations
+
+- [ ] **GRPC-025**: Implement HealthService
+  - `internal/grpc/services/health.go`
+  - Check storage connectivity
+  - Check P2P host status
+  - Check cluster membership (if enabled)
+  - Return aggregate health status
+
+- [ ] **GRPC-026**: Implement AuthService
+  - `internal/grpc/services/auth.go`
+  - Integrate with existing `internal/auth/service.go`
+  - Challenge generation with crypto/rand
+  - Challenge verification with SSH key
+  - Session token generation (JWT with node signing key)
+  - Session storage in database
+
+- [ ] **GRPC-027**: Implement UserService
+  - `internal/grpc/services/user.go`
+  - Delegate to `storage.UserRepository`
+  - RBAC checks for admin operations
+  - Input validation
+
+- [ ] **GRPC-028**: Implement NodeService
+  - `internal/grpc/services/node.go`
+  - Integrate with `internal/p2p/host.go`
+  - Expose peer store data
+  - Manual peer connection/disconnection
+
+- [ ] **GRPC-029**: Implement TopicService
+  - `internal/grpc/services/topic.go`
+  - Delegate to `storage.TopicRepository`
+  - Subscription management via `internal/p2p/mode_selective.go`
+  - Real-time updates via gRPC streams
+
+- [ ] **GRPC-030**: Implement DatasetService
+  - `internal/grpc/services/dataset.go`
+  - Delegate to `storage.DatasetRepository`
+  - Chunked upload/download streaming
+  - Integrate with blob storage
+
+- [ ] **GRPC-031**: Implement AdminService
+  - `internal/grpc/services/admin.go`
+  - Config read (redact secrets)
+  - Metrics aggregation
+  - Log streaming
+  - Backup triggers
+
+- [ ] **GRPC-032**: Implement QueryService (partial)
+  - `internal/grpc/services/query.go`
+  - Basic query validation
+  - Simple queries without CEL (field filters)
+  - Full CEL support deferred to Phase 3
+
+- [ ] **GRPC-033**: Implement JobService (stub)
+  - `internal/grpc/services/job.go`
+  - Return "not implemented" until Phase 3
+  - Define interface for future implementation
+
+- [ ] **GRPC-034**: Integrate BreakGlassService
+  - Move existing proto to `services/` folder
+  - Implement service delegating to `internal/storage/breakglass`
+
+### 4.6 Daemon Integration
+
+- [ ] **GRPC-035**: Add gRPC server to daemon lifecycle
+  - Update `cmd/bibd/daemon.go` to start gRPC server
+  - Start after storage and P2P initialization
+  - Stop before storage shutdown
+  - Log gRPC server address on startup
+
+- [ ] **GRPC-036**: Configuration for gRPC
+  ```yaml
+  # config.yaml additions
+  grpc:
+    enabled: true
+    host: "0.0.0.0"
+    port: 4000
+    unix_socket: ""                    # Optional: /var/run/bibd/grpc.sock
+    max_recv_msg_size: 16777216        # 16MB
+    max_send_msg_size: 16777216        # 16MB
+    keepalive:
+      time: 30s
+      timeout: 10s
+    reflection: false                  # Enable for debugging
+    rate_limit:
+      enabled: true
+      requests_per_second: 100
+      burst: 200
+  ```
+
+### 4.7 Client Library & CLI Integration
+
+#### 4.7.1 Go Client Library
+- [ ] **GRPC-037**: Client library structure
+  ```
+  internal/grpc/client/
+  ├── client.go        # Main client with connection management
+  ├── auth.go          # Auth-related helpers
+  ├── options.go       # Connection options (TLS, retry, timeout)
+  ├── interceptors.go  # Client-side interceptors
+  └── errors.go        # Error handling helpers
+  ```
+
+- [ ] **GRPC-038**: Client connection management
+  - Support multiple connection targets (direct, P2P, Unix socket)
+  - Connection pooling with health checks
+  - Automatic reconnection with backoff
+  - Context propagation (request ID, user info)
+
+- [ ] **GRPC-039**: Client authentication
+  - Load user's SSH key from config or SSH agent
+  - Perform Challenge/VerifyChallenge flow
+  - Cache session token with refresh
+  - Token storage in `<config_dir>/session.token`
+
+#### 4.7.2 CLI Integration
+- [ ] **GRPC-040**: CLI client initialization
+  - Create gRPC client in `cmd/bib/cmd/root.go`
+  - Skip for local-only commands (setup, config, cert, version)
+  - Lazy connection on first RPC call
+  - Handle connection errors gracefully
+
+- [ ] **GRPC-041**: CLI daemon connection configuration
+  ```yaml
+  # bib config.yaml
+  connection:
+    default_node: ""                   # Default node to connect to
+    timeout: 30s
+    retry_attempts: 3
+    tls:
+      skip_verify: false               # Dangerous: disable TLS verification
+      ca_file: ""                      # Custom CA file
+      cert_file: ""                    # Client certificate
+      key_file: ""                     # Client key
+  ```
+
+- [ ] **GRPC-042**: CLI node selection
+  - `bib --node <addr>` flag for explicit node selection
+  - Auto-discover local node via mDNS
+  - Use favorite nodes from config
+  - `bib connect <addr>` to set default node
+
+### 4.8 Testing & Documentation
+
+- [ ] **GRPC-043**: gRPC integration tests
+  - Test each service with mock storage
+  - Test authentication flow
+  - Test streaming endpoints
+  - Test error handling
+
+- [ ] **GRPC-044**: P2P gRPC transport tests
+  - Test gRPC calls between two bibd instances
+  - Test connection failures and recovery
+  - Test concurrent calls
+
+- [ ] **GRPC-045**: API documentation
+  - Generate proto documentation (buf docs or protoc-gen-doc)
+  - Document authentication flow
+  - Document error codes
+  - Provide example requests/responses
+
+- [ ] **GRPC-046**: Client SDK documentation
+  - Usage examples
+  - Connection options
+  - Error handling best practices
 
 ---
 

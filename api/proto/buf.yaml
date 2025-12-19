@@ -1,13 +1,21 @@
 version: v1
 name: buf.build/bib/bib
-deps:
-  - buf.build/googleapis/googleapis
+
+# Note: googleapis is used for google.protobuf.Timestamp, etc.
+# These are bundled with protobuf, so no explicit dep needed
+deps: []
+
 breaking:
   use:
     - FILE
+
 lint:
   use:
-    - DEFAULT
+    - STANDARD
   except:
     - PACKAGE_VERSION_SUFFIX
-
+    # Allow our existing enum naming convention
+    - ENUM_VALUE_PREFIX
+    # Allow flexible RPC request/response naming
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME

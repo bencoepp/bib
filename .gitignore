@@ -26,6 +26,14 @@ go.work.sum
 # Dependency directories
 vendor/
 
+# Generated protobuf code
+# Note: We commit generated code for easier builds without buf
+# Uncomment if you prefer to generate on-demand:
+# /api/gen/
+
+# Buf cache
+.buf/
+
 # IDE and editor files
 .idea/
 .vscode/
