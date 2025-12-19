@@ -669,14 +669,14 @@
     5. Server returns session token + user info
 
 #### 4.2.3 UserService Enhancement (P0)
-- [ ] **GRPC-006**: UserService enhancement (existing proto)
+- [x] **GRPC-006**: UserService enhancement (existing proto)
   - Review existing `UserService` in user.proto
   - Ensure admin-only RPCs are marked (CreateUser, DeleteUser, SuspendUser, etc.)
   - Add `SearchUsers` RPC with text search
   - Add user preferences storage (theme, locale, etc.)
 
 #### 4.2.4 NodeService (P1)
-- [ ] **GRPC-007**: NodeService proto definition
+- [x] **GRPC-007**: NodeService proto definition
   ```protobuf
   service NodeService {
     // GetNode returns information about a specific node
@@ -703,7 +703,7 @@
   ```
 
 #### 4.2.5 TopicService (P1)
-- [ ] **GRPC-008**: TopicService proto definition
+- [x] **GRPC-008**: TopicService proto definition
   ```protobuf
   service TopicService {
     // CreateTopic creates a new topic
@@ -736,7 +736,7 @@
   ```
 
 #### 4.2.6 DatasetService (P1)
-- [ ] **GRPC-009**: DatasetService proto definition
+- [x] **GRPC-009**: DatasetService proto definition
   ```protobuf
   service DatasetService {
     // CreateDataset creates a new dataset
@@ -772,7 +772,7 @@
   ```
 
 #### 4.2.7 AdminService (P2)
-- [ ] **GRPC-010**: AdminService proto definition
+- [x] **GRPC-010**: AdminService proto definition
   ```protobuf
   service AdminService {
     // GetConfig returns current configuration (redacted secrets)
@@ -805,7 +805,7 @@
   ```
 
 #### 4.2.8 QueryService (P2)
-- [ ] **GRPC-011**: QueryService proto definition
+- [x] **GRPC-011**: QueryService proto definition
   ```protobuf
   service QueryService {
     // Execute runs a CEL query and returns results
@@ -824,7 +824,7 @@
   - Note: Full implementation depends on Phase 3 CEL integration
 
 #### 4.2.9 JobService (P3 - Placeholder)
-- [ ] **GRPC-012**: JobService proto definition (placeholder)
+- [x] **GRPC-012**: JobService proto definition (placeholder)
   ```protobuf
   service JobService {
     // CreateJob creates a new job
