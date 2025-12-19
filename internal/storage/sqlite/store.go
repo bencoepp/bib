@@ -23,13 +23,17 @@ type Store struct {
 	cfg    storage.SQLiteConfig
 	nodeID string
 
-	topics   *TopicRepository
-	datasets *DatasetRepository
-	jobs     *JobRepository
-	nodes    *NodeRepository
-	users    *UserRepository
-	sessions *SessionRepository
-	audit    *AuditRepository
+	topics           *TopicRepository
+	datasets         *DatasetRepository
+	jobs             *JobRepository
+	nodes            *NodeRepository
+	users            *UserRepository
+	sessions         *SessionRepository
+	audit            *AuditRepository
+	userPreferences  *UserPreferencesRepository
+	topicMembers     *TopicMemberRepository
+	topicInvitations *TopicInvitationRepository
+	bannedPeers      *BannedPeerRepository
 
 	mu     sync.RWMutex
 	closed bool
@@ -90,6 +94,10 @@ func New(cfg storage.SQLiteConfig, dataDir, nodeID string) (*Store, error) {
 	s.users = &UserRepository{store: s}
 	s.sessions = &SessionRepository{store: s}
 	s.audit = &AuditRepository{store: s, nodeID: nodeID, hashChain: true}
+	s.userPreferences = &UserPreferencesRepository{store: s}
+	s.topicMembers = &TopicMemberRepository{store: s}
+	s.topicInvitations = &TopicInvitationRepository{store: s}
+	s.bannedPeers = &BannedPeerRepository{store: s}
 
 	return s, nil
 }
@@ -140,6 +148,26 @@ func (s *Store) Sessions() storage.SessionRepository {
 // Audit returns the audit repository.
 func (s *Store) Audit() storage.AuditRepository {
 	return s.audit
+}
+
+// UserPreferences returns the user preferences repository.
+func (s *Store) UserPreferences() storage.UserPreferencesRepository {
+	return s.userPreferences
+}
+
+// TopicMembers returns the topic membership repository.
+func (s *Store) TopicMembers() storage.TopicMemberRepository {
+	return s.topicMembers
+}
+
+// TopicInvitations returns the topic invitations repository.
+func (s *Store) TopicInvitations() storage.TopicInvitationRepository {
+	return s.topicInvitations
+}
+
+// BannedPeers returns the banned peers repository.
+func (s *Store) BannedPeers() storage.BannedPeerRepository {
+	return s.bannedPeers
 }
 
 // Ping checks database connectivity.
