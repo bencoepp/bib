@@ -44,6 +44,55 @@ Sessions track authenticated connections:
 | `EndedAt` | When session ended (null if active) |
 | `LastActivityAt` | Last activity time |
 
+## gRPC API
+
+The user identity system exposes two gRPC services:
+
+### AuthService (`auth.proto`)
+
+Handles authentication operations:
+
+| RPC | Description |
+|-----|-------------|
+| `Authenticate` | Authenticate with public key, create session |
+| `Register` | Register new user (admin only) |
+| `Logout` | End current session |
+| `RefreshSession` | Extend session expiry |
+| `ValidateSession` | Check if session is valid |
+| `GetAuthConfig` | Get authentication configuration |
+| `Challenge` | Request challenge for signature auth |
+| `VerifyChallenge` | Verify signed challenge |
+
+### UserService (`user.proto`)
+
+Handles user management:
+
+| RPC | Description |
+|-----|-------------|
+| `GetUser` | Get user by ID |
+| `GetUserByPublicKey` | Get user by public key |
+| `ListUsers` | List users with filtering |
+| `CreateUser` | Create user (admin only) |
+| `UpdateUser` | Update user profile |
+| `DeleteUser` | Soft-delete user (admin only) |
+| `SuspendUser` | Suspend user (admin only) |
+| `ActivateUser` | Activate user (admin only) |
+| `SetUserRole` | Change user role (admin only) |
+| `GetCurrentUser` | Get authenticated user |
+| `UpdateCurrentUser` | Update own profile |
+| `ListSessions` | List user sessions |
+| `EndSession` | End specific session |
+| `EndAllSessions` | End all sessions |
+
+### Generating Go Code
+
+```bash
+cd api/proto
+buf generate
+```
+
+This generates Go code in `api/gen/go/`.
+
 ## Configuration
 
 ### bibd Configuration
@@ -244,8 +293,12 @@ keyBytes, keyType, err := auth.ParseAuthorizedKey([]byte("ssh-ed25519 AAAA..."))
 
 | File | Description |
 |------|-------------|
+| `api/proto/bib/v1/user.proto` | User and Session protobuf definitions |
+| `api/proto/bib/v1/auth.proto` | Authentication service protobuf definitions |
+| `api/proto/buf.yaml` | Buf configuration |
+| `api/proto/buf.gen.yaml` | Buf code generation configuration |
 | `internal/domain/user.go` | User domain entity |
-| `internal/storage/user_repository.go` | UserRepository and SessionRepository interfaces |
+| `internal/storage/repository.go` | UserRepository and SessionRepository interfaces |
 | `internal/storage/sqlite/users.go` | SQLite UserRepository implementation |
 | `internal/storage/sqlite/sessions.go` | SQLite SessionRepository implementation |
 | `internal/storage/postgres/users.go` | PostgreSQL UserRepository implementation |
