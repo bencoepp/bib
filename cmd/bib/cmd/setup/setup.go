@@ -25,20 +25,12 @@ var (
 
 // Cmd represents the setup command
 var Cmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Set up configuration interactively",
-	Long: `Set up configuration for bib or bibd interactively.
-
-Use --daemon to configure the bibd daemon instead of the bib CLI.
-Use --cluster to initialize a new HA cluster (returns a join token).
-Use --cluster-join <token> to join an existing cluster.
-
-Examples:
-  bib setup                           # Configure bib CLI
-  bib setup --daemon                  # Configure bibd daemon
-  bib setup --daemon --cluster        # Initialize new cluster (outputs join token)
-  bib setup --daemon --cluster-join <token>  # Join existing cluster`,
-	RunE: runSetup,
+	Use:         "setup",
+	Short:       "setup.short",
+	Long:        "setup.long",
+	Example:     "setup.example",
+	Annotations: map[string]string{"i18n": "true"},
+	RunE:        runSetup,
 }
 
 // NewCommand returns the setup command

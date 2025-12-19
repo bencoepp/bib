@@ -16,9 +16,10 @@ import (
 
 // Cmd represents the demo command
 var Cmd = &cobra.Command{
-	Use:   "demo",
-	Short: "Showcase TUI components",
-	Long:  `Interactive demonstration of all TUI components. Use this to verify the component library is working correctly.`,
+	Use:         "demo",
+	Short:       "demo.short",
+	Long:        "demo.long",
+	Annotations: map[string]string{"i18n": "true"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		themeName, _ := cmd.Flags().GetString("theme")
 

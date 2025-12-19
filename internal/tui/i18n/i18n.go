@@ -2,10 +2,12 @@
 //
 // The package supports:
 //   - Loading translations from YAML files
-//   - Pluralization rules
+//   - Pluralization rules (with locale-specific rules for Russian, etc.)
 //   - Template interpolation with variables
 //   - Fallback to default locale
 //   - Lazy loading of locale files
+//   - Embedded locale files for en, de, fr, ru, zh-tw
+//   - System locale detection
 package i18n
 
 import (
@@ -13,12 +15,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed locales/*.yaml
+var embeddedLocales embed.FS
+
+// SupportedLocales lists all available locales.
+var SupportedLocales = []string{"en", "de", "fr", "ru", "zh-tw"}
 
 // Default locale
 const DefaultLocale = "en"
@@ -74,6 +83,8 @@ func New(opts ...Option) *I18n {
 		fallback:      DefaultLocale,
 		translations:  make(map[string]map[string]any),
 		loadedLocales: make(map[string]bool),
+		embeddedFS:    &embeddedLocales,
+		embeddedRoot:  "locales",
 	}
 
 	for _, opt := range opts {
@@ -325,12 +336,46 @@ func (i *I18n) argsToMap(args ...any) map[string]any {
 }
 
 // getPluralKey returns the pluralized key for a count.
-// Uses simple English rules: count == 1 ? "one" : "other"
+// Supports locale-specific plural rules:
+//   - English/German/French: one (count == 1), other (count != 1)
+//   - Russian: one, few, many (Slavic rules)
+//   - Chinese: other (no plural forms)
 func (i *I18n) getPluralKey(key string, count int) string {
-	if count == 1 {
-		return key + ".one"
+	switch i.locale {
+	case "ru":
+		return key + "." + i.getPluralFormRussian(count)
+	case "zh-tw":
+		// Chinese has no plural forms
+		return key + ".other"
+	default:
+		// English, German, French use simple one/other
+		if count == 1 {
+			return key + ".one"
+		}
+		return key + ".other"
 	}
-	return key + ".other"
+}
+
+// getPluralFormRussian returns the plural form for Russian.
+// Russian has three plural forms:
+//   - one: 1, 21, 31, 41, ... (but not 11, 111, ...)
+//   - few: 2-4, 22-24, 32-34, ... (but not 12-14, 112-114, ...)
+//   - many: 0, 5-20, 25-30, 35-40, ... and 11-14, 111-114, ...
+func (i *I18n) getPluralFormRussian(count int) string {
+	if count < 0 {
+		count = -count
+	}
+
+	mod10 := count % 10
+	mod100 := count % 100
+
+	if mod10 == 1 && mod100 != 11 {
+		return "one"
+	}
+	if mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20) {
+		return "few"
+	}
+	return "many"
 }
 
 // Global singleton instance
@@ -360,4 +405,110 @@ func T(key string, args ...any) string {
 // TPlural is a shortcut for Global().TPlural()
 func TPlural(key string, count int, args ...any) string {
 	return Global().TPlural(key, count, args...)
+}
+
+// LocaleDisplayNames maps locale codes to their display names.
+var LocaleDisplayNames = map[string]string{
+	"en":    "English",
+	"de":    "Deutsch",
+	"fr":    "Français",
+	"ru":    "Русский",
+	"zh-tw": "繁體中文",
+}
+
+// AvailableLocales returns all supported locale codes.
+func AvailableLocales() []string {
+	return SupportedLocales
+}
+
+// LocaleDisplayName returns the display name for a locale code.
+func LocaleDisplayName(locale string) string {
+	if name, ok := LocaleDisplayNames[locale]; ok {
+		return name
+	}
+	return locale
+}
+
+// IsValidLocale checks if a locale code is supported.
+func IsValidLocale(locale string) bool {
+	for _, l := range SupportedLocales {
+		if l == locale {
+			return true
+		}
+	}
+	return false
+}
+
+// DetectSystemLocale attempts to detect the system's locale from environment variables.
+// It checks LANGUAGE, LC_ALL, LC_MESSAGES, and LANG in that order.
+// Returns the best matching supported locale, or DefaultLocale if none found.
+func DetectSystemLocale() string {
+	// Environment variables to check in priority order
+	envVars := []string{"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"}
+
+	for _, envVar := range envVars {
+		if locale := os.Getenv(envVar); locale != "" {
+			if detected := matchLocale(locale); detected != "" {
+				return detected
+			}
+		}
+	}
+
+	// On Windows, try to use the system's regional settings
+	if runtime.GOOS == "windows" {
+		// Windows doesn't use POSIX locale env vars consistently
+		// Fall back to default
+		return DefaultLocale
+	}
+
+	return DefaultLocale
+}
+
+// matchLocale tries to match a system locale string to a supported locale.
+// It handles formats like "de_DE.UTF-8", "de_DE", "de", "zh_TW.UTF-8", etc.
+func matchLocale(sysLocale string) string {
+	// Normalize: lowercase and remove encoding suffix
+	locale := strings.ToLower(sysLocale)
+	if idx := strings.Index(locale, "."); idx != -1 {
+		locale = locale[:idx]
+	}
+
+	// Direct match check
+	if IsValidLocale(locale) {
+		return locale
+	}
+
+	// Handle underscore variants (e.g., "zh_tw" -> "zh-tw")
+	locale = strings.ReplaceAll(locale, "_", "-")
+	if IsValidLocale(locale) {
+		return locale
+	}
+
+	// Try just the language code (e.g., "de_DE" -> "de")
+	if idx := strings.IndexAny(locale, "-_"); idx != -1 {
+		langCode := locale[:idx]
+		if IsValidLocale(langCode) {
+			return langCode
+		}
+	}
+
+	// No match found
+	return ""
+}
+
+// ResolveLocale determines the effective locale to use.
+// Priority: flag (if non-empty) > config (if non-empty) > system detection
+func ResolveLocale(flagLocale, configLocale string) string {
+	// Flag takes highest priority
+	if flagLocale != "" && IsValidLocale(flagLocale) {
+		return flagLocale
+	}
+
+	// Config takes second priority
+	if configLocale != "" && IsValidLocale(configLocale) {
+		return configLocale
+	}
+
+	// Fall back to system detection
+	return DetectSystemLocale()
 }

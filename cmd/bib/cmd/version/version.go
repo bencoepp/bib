@@ -36,10 +36,11 @@ type VersionInfo struct {
 
 // Cmd represents the version command
 var Cmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print version information",
-	Long:  `Print the version, commit hash, build date, and additional runtime information of bib.`,
-	RunE:  runVersion,
+	Use:         "version",
+	Short:       "version.short",
+	Long:        "version.long",
+	Annotations: map[string]string{"i18n": "true"},
+	RunE:        runVersion,
 }
 
 // NewCommand returns the version command

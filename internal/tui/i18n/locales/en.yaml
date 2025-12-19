@@ -242,3 +242,90 @@ keys:
   search: "/"
   command: ":"
 
+# CLI Command Translations
+# Keys follow pattern: cmd.<command-path>.<short|long|example>
+cmd:
+  bib:
+    short: "bib is a CLI client"
+    long: "bib is a command-line interface client that communicates with the bibd daemon."
+    flags:
+      config: "config file (default is $HOME/.config/bib/config.yaml)"
+      output: "output format (json, yaml, table, quiet)"
+      verbose: "verbose output (includes full log output)"
+      locale: "UI locale (en, de, fr, ru, zh-tw). Overrides config and system locale"
+
+  tui:
+    short: "Launch interactive dashboard"
+    long: |
+      Launch the full-screen interactive TUI dashboard.
+
+      The dashboard provides a visual interface for managing bib resources,
+      including jobs, datasets, cluster status, and more.
+
+      Navigation:
+        Tab/Shift+Tab  Switch between pages
+        1-9            Jump to page by number
+        /              Open command palette
+        ?              Show help
+        q              Quit
+
+      Available pages:
+        Dashboard      Overview with stats and recent activity
+        Jobs           View and manage jobs
+        Datasets       Browse datasets
+        Cluster        Cluster status and nodes
+        Logs           View logs
+        Settings       Configuration
+
+      Locale can be set via:
+        - Global --locale flag (e.g., bib --locale de tui)
+        - Config file (locale: "de")
+        - System locale (auto-detected from LANG, LC_ALL, etc.)
+    example: |
+      # Launch dashboard with default theme
+      bib tui
+
+      # Launch with specific theme
+      bib tui --theme nord
+
+      # Launch with German locale (via global flag)
+      bib --locale de tui
+    flags:
+      theme: "color theme (dark, light, nord, dracula, gruvbox)"
+
+  version:
+    short: "Print version information"
+    long: "Print the version, commit hash, build date, and additional runtime information of bib."
+
+  setup:
+    short: "Set up configuration interactively"
+    long: |
+      Set up configuration for bib or bibd interactively.
+
+      Use --daemon to configure the bibd daemon instead of the bib CLI.
+      Use --cluster to initialize a new HA cluster (returns a join token).
+      Use --cluster-join <token> to join an existing cluster.
+    example: |
+      bib setup                           # Configure bib CLI
+      bib setup --daemon                  # Configure bibd daemon
+      bib setup --daemon --cluster        # Initialize new cluster (outputs join token)
+      bib setup --daemon --cluster-join <token>  # Join existing cluster
+    flags:
+      daemon: "configure bibd daemon instead of bib CLI"
+      format: "config file format (yaml, toml, json)"
+      cluster: "initialize a new HA cluster (outputs join token)"
+      cluster-join: "join an existing cluster using this token"
+
+  config:
+    short: "Manage configuration"
+    long: "View and manage bib configuration settings."
+
+  admin:
+    short: "Administrative commands for bibd management"
+    long: "Administrative commands for managing the bibd daemon, including backup, restore, and maintenance operations."
+
+  demo:
+    short: "Showcase TUI components"
+    long: "Interactive demo of TUI components and themes for development and testing."
+
+

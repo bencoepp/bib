@@ -2,11 +2,10 @@
 package tui
 
 import (
-	"fmt"
-
+	"bib/internal/cli/i18n"
 	"bib/internal/config"
 	"bib/internal/tui/app"
-	"bib/internal/tui/i18n"
+	tuii18n "bib/internal/tui/i18n"
 	"bib/internal/tui/pages"
 	"bib/internal/tui/themes"
 
@@ -15,47 +14,21 @@ import (
 )
 
 var (
-	tuiTheme  string
-	tuiLocale string
+	tuiTheme string
 )
 
 // NewCommand creates the tui command.
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "tui",
-		Short: "Launch interactive dashboard",
-		Long: `Launch the full-screen interactive TUI dashboard.
-
-The dashboard provides a visual interface for managing bib resources,
-including jobs, datasets, cluster status, and more.
-
-Navigation:
-  Tab/Shift+Tab  Switch between pages
-  1-9            Jump to page by number
-  /              Open command palette
-  ?              Show help
-  q              Quit
-
-Available pages:
-  Dashboard      Overview with stats and recent activity
-  Jobs           View and manage jobs
-  Datasets       Browse datasets
-  Cluster        Cluster status and nodes
-  Logs           View logs
-  Settings       Configuration`,
-		Example: `  # Launch dashboard with default theme
-  bib tui
-
-  # Launch with specific theme
-  bib tui --theme nord
-
-  # Launch with specific locale
-  bib tui --locale de`,
-		RunE: runTUI,
+		Use:         "tui",
+		Short:       "tui.short",
+		Long:        "tui.long",
+		Example:     "tui.example",
+		Annotations: i18n.MarkForTranslation(),
+		RunE:        runTUI,
 	}
 
 	cmd.Flags().StringVarP(&tuiTheme, "theme", "t", "dark", "color theme (dark, light, nord, dracula, gruvbox)")
-	cmd.Flags().StringVarP(&tuiLocale, "locale", "l", "en", "locale for UI text")
 
 	return cmd
 }
@@ -75,13 +48,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		themes.Global().SetActive(themes.PresetDark)
 	}
 
-	// Set locale
-	if tuiLocale != "" && tuiLocale != "en" {
-		if err := i18n.Global().SetLocale(tuiLocale); err != nil {
-			// Warn but continue with default
-			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: locale %q not available, using English\n", tuiLocale)
-		}
-	}
+	// i18n is already initialized globally in root.go with the resolved locale
 
 	// Load config
 	cfg, err := config.LoadBib("")
@@ -94,7 +61,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	application := app.New(
 		app.WithConfig(cfg),
 		app.WithTheme(themes.Global().Active()),
-		app.WithI18n(i18n.Global()),
+		app.WithI18n(tuii18n.Global()),
 	)
 
 	// Register pages

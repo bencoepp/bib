@@ -307,6 +307,7 @@ type BibConfig struct {
 	Log        LogConfig        `mapstructure:"log"`
 	Identity   IdentityConfig   `mapstructure:"identity"`
 	Output     OutputConfig     `mapstructure:"output"`
+	Locale     string           `mapstructure:"locale"`     // UI locale (en, de, fr, ru, zh-tw). Empty = auto-detect from system
 	Server     string           `mapstructure:"server"`     // bibd server address to connect to (legacy)
 	Connection ConnectionConfig `mapstructure:"connection"` // Connection settings with favorite nodes
 }

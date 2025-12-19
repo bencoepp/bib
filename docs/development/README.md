@@ -8,6 +8,7 @@ This section provides documentation for developers contributing to Bib.
 |----------|-------------|
 | [Developer Guide](developer-guide.md) | Codebase overview for contributors |
 | [TUI Components](tui-components.md) | Terminal UI component system documentation |
+| [CLI i18n](cli-i18n.md) | Internationalization guide for CLI commands |
 
 ## Project Structure
 

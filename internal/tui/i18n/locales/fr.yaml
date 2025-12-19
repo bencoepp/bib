@@ -1,0 +1,329 @@
+# French translations for bib TUI
+# Français
+
+# Common UI elements
+common:
+  ok: "OK"
+  cancel: "Annuler"
+  confirm: "Confirmer"
+  save: "Enregistrer"
+  delete: "Supprimer"
+  edit: "Modifier"
+  create: "Créer"
+  back: "Retour"
+  next: "Suivant"
+  finish: "Terminer"
+  skip: "Ignorer"
+  retry: "Réessayer"
+  close: "Fermer"
+  loading: "Chargement..."
+  search: "Rechercher..."
+  no_results: "Aucun résultat trouvé"
+  yes: "Oui"
+  no: "Non"
+
+# Status messages
+status:
+  success: "Succès"
+  error: "Erreur"
+  warning: "Avertissement"
+  info: "Info"
+  connecting: "Connexion..."
+  connected: "Connecté"
+  disconnected: "Déconnecté"
+  saving: "Enregistrement..."
+  saved: "Enregistré"
+
+# Wizard general
+wizard:
+  step: "Étape {{ .current }} sur {{ .total }}"
+  progress: "{{ .percent }}% terminé"
+  skip_step: "Ignorer cette étape"
+  required_field: "Ce champ est obligatoire"
+
+  # Setup wizard for bib CLI
+  setup_bib:
+    title: "Assistant de configuration Bib"
+    welcome:
+      title: "Bienvenue"
+      content: "Configurons bib pour votre environnement. Cet assistant vous guidera à travers la configuration initiale."
+      help: "Vous pouvez appuyer sur Échap pour revenir en arrière ou Ctrl+C pour annuler à tout moment."
+    identity:
+      title: "Identité"
+      description: "Configurez votre identité"
+      help: "Votre identité est utilisée pour la signature et l'attribution des modifications. Ces informations peuvent être visibles par d'autres dans un environnement collaboratif."
+      name:
+        label: "Nom"
+        placeholder: "Jean Dupont"
+        help: "Votre nom d'affichage"
+      email:
+        label: "E-mail"
+        placeholder: "jean@exemple.fr"
+        help: "Votre adresse e-mail"
+    output:
+      title: "Paramètres de sortie"
+      description: "Configurez les paramètres de sortie"
+      help: "Ces paramètres contrôlent comment bib affiche les informations. Le format tableau est recommandé pour l'utilisation interactive, JSON/YAML pour les scripts."
+      format:
+        label: "Format de sortie"
+        help: "Format de sortie par défaut pour les commandes"
+        options:
+          table: "Tableau"
+          json: "JSON"
+          yaml: "YAML"
+          text: "Texte"
+      color:
+        label: "Activer les couleurs"
+        help: "Utiliser une sortie colorée dans le terminal"
+    connection:
+      title: "Connexion"
+      description: "Configurer la connexion à bibd"
+      help: "Spécifiez l'adresse du démon bibd auquel vous souhaitez vous connecter."
+      server_addr:
+        label: "Adresse du serveur"
+        placeholder: "localhost:8080"
+        help: "Adresse du démon bibd"
+    complete:
+      title: "Configuration terminée"
+      content: "Votre configuration a été enregistrée dans {{ .path }}."
+      next_steps: "Prochaines étapes :"
+
+  # Setup wizard for bibd daemon
+  setup_bibd:
+    title: "Configuration du démon Bibd"
+    server:
+      title: "Paramètres du serveur"
+      description: "Configurer les paramètres du serveur"
+      help: "Ces paramètres contrôlent comment le démon écoute les connexions. Utilisez 0.0.0.0 pour accepter les connexions de n'importe quelle interface."
+      host:
+        label: "Adresse de liaison"
+        placeholder: "0.0.0.0"
+        help: "Adresse à laquelle lier le serveur"
+      port:
+        label: "Port"
+        placeholder: "8080"
+        help: "Numéro de port pour le serveur"
+      data_dir:
+        label: "Répertoire des données"
+        placeholder: "~/.local/share/bibd"
+        help: "Répertoire pour stocker les données"
+    tls:
+      title: "Chiffrement TLS"
+      description: "Configurer le chiffrement TLS"
+      help: "TLS chiffre les connexions entre les clients et le démon. Recommandé pour une utilisation en production."
+      enabled:
+        label: "Activer TLS"
+        help: "Activer le chiffrement TLS pour toutes les connexions"
+      cert_file:
+        label: "Fichier de certificat"
+        placeholder: "/chemin/vers/cert.pem"
+        help: "Chemin vers le fichier de certificat TLS"
+      key_file:
+        label: "Fichier de clé"
+        placeholder: "/chemin/vers/key.pem"
+        help: "Chemin vers le fichier de clé privée TLS"
+    storage:
+      title: "Backend de stockage"
+      description: "Configurer le backend de stockage"
+      help: "SQLite est léger et ne nécessite aucune configuration. PostgreSQL est recommandé pour la production et permet une réplication complète des données."
+      backend:
+        label: "Backend"
+        options:
+          sqlite: "SQLite"
+          postgres: "PostgreSQL"
+    p2p:
+      title: "Réseau P2P"
+      description: "Configurer le réseau P2P"
+      help: "Le réseau P2P permet aux nœuds de se découvrir mutuellement et de partager des données sans serveur central."
+      enabled:
+        label: "Activer P2P"
+        help: "Activer le réseau pair-à-pair"
+      mode:
+        label: "Mode P2P"
+        options:
+          proxy: "Proxy - Transférer les requêtes, ressources minimales"
+          selective: "Sélectif - S'abonner à des sujets spécifiques"
+          full: "Complet - Répliquer toutes les données (nécessite PostgreSQL)"
+
+# TUI Dashboard
+dashboard:
+  title: "Tableau de bord Bib"
+  tabs:
+    overview: "Aperçu"
+    jobs: "Tâches"
+    datasets: "Jeux de données"
+    cluster: "Cluster"
+    logs: "Journaux"
+    settings: "Paramètres"
+  overview:
+    welcome: "Bienvenue sur Bib"
+    quick_stats: "Statistiques rapides"
+    recent_activity: "Activité récente"
+    active_jobs: "Tâches actives"
+    total_datasets: "Total des jeux de données"
+    cluster_nodes: "Nœuds du cluster"
+    storage_used: "Stockage utilisé"
+  jobs:
+    title: "Tâches"
+    no_jobs: "Aucune tâche trouvée"
+    status:
+      pending: "En attente"
+      running: "En cours"
+      completed: "Terminé"
+      failed: "Échoué"
+      cancelled: "Annulé"
+  datasets:
+    title: "Jeux de données"
+    no_datasets: "Aucun jeu de données trouvé"
+  cluster:
+    title: "État du cluster"
+    not_clustered: "Ne fait pas partie d'un cluster"
+    nodes: "Nœuds"
+    leader: "Leader"
+    replication_lag: "Retard de réplication"
+  logs:
+    title: "Journaux"
+    level:
+      debug: "Débogage"
+      info: "Info"
+      warn: "Avertissement"
+      error: "Erreur"
+
+# Commands
+commands:
+  help:
+    title: "Aide"
+    description: "Appuyez sur ? pour l'aide"
+  quit:
+    title: "Quitter"
+    confirm: "Êtes-vous sûr de vouloir quitter ?"
+  search:
+    title: "Recherche"
+    placeholder: "Tapez pour rechercher..."
+  command_palette:
+    title: "Palette de commandes"
+    placeholder: "Tapez une commande..."
+
+# Errors
+errors:
+  config_not_found: "Fichier de configuration introuvable"
+  config_invalid: "Le fichier de configuration est invalide"
+  connection_failed: "Échec de la connexion à bibd à {{ .address }}"
+  not_found: "{{ .resource }} introuvable : {{ .id }}"
+  permission_denied: "Permission refusée"
+  timeout: "Délai d'attente dépassé après {{ .duration }}"
+  validation: "Erreur de validation"
+  unknown: "Une erreur inattendue s'est produite"
+
+# Validation messages
+validation:
+  required: "Ce champ est obligatoire"
+  min_length: "Doit contenir au moins {{ .min }} caractères"
+  max_length: "Doit contenir au maximum {{ .max }} caractères"
+  email: "Doit être une adresse e-mail valide"
+  url: "Doit être une URL valide"
+  port: "Doit être un numéro de port valide (1-65535)"
+  path: "Doit être un chemin de fichier valide"
+  alphanumeric: "Ne doit contenir que des lettres et des chiffres"
+
+# Keybindings
+keys:
+  tab: "tab"
+  shift_tab: "maj+tab"
+  enter: "entrée"
+  escape: "échap"
+  space: "espace"
+  up: "↑"
+  down: "↓"
+  left: "←"
+  right: "→"
+  help: "?"
+  quit: "q"
+  search: "/"
+  command: ":"
+
+# Traductions des commandes CLI
+cmd:
+  bib:
+    short: "bib est un client CLI"
+    long: "bib est un client en ligne de commande qui communique avec le démon bibd."
+    flags:
+      config: "fichier de configuration (par défaut $HOME/.config/bib/config.yaml)"
+      output: "format de sortie (json, yaml, table, quiet)"
+      verbose: "sortie détaillée (inclut la sortie complète des journaux)"
+      locale: "langue de l'interface (en, de, fr, ru, zh-tw). Remplace la configuration et la langue système"
+
+  tui:
+    short: "Lancer le tableau de bord interactif"
+    long: |
+      Lance le tableau de bord TUI interactif en plein écran.
+
+      Le tableau de bord fournit une interface visuelle pour gérer les ressources bib,
+      y compris les tâches, les jeux de données, l'état du cluster, et plus encore.
+
+      Navigation :
+        Tab/Maj+Tab    Basculer entre les pages
+        1-9            Aller à la page par numéro
+        /              Ouvrir la palette de commandes
+        ?              Afficher l'aide
+        q              Quitter
+
+      Pages disponibles :
+        Tableau de bord  Aperçu avec statistiques et activité récente
+        Tâches           Afficher et gérer les tâches
+        Jeux de données  Parcourir les jeux de données
+        Cluster          État du cluster et nœuds
+        Journaux         Afficher les journaux
+        Paramètres       Configuration
+
+      La langue peut être définie via :
+        - Flag global --locale (ex: bib --locale fr tui)
+        - Fichier de configuration (locale: "fr")
+        - Langue système (détectée automatiquement depuis LANG, LC_ALL, etc.)
+    example: |
+      # Lancer le tableau de bord avec le thème par défaut
+      bib tui
+
+      # Lancer avec un thème spécifique
+      bib tui --theme nord
+
+      # Lancer avec la langue française (via flag global)
+      bib --locale fr tui
+    flags:
+      theme: "thème de couleurs (dark, light, nord, dracula, gruvbox)"
+
+  version:
+    short: "Afficher les informations de version"
+    long: "Affiche la version, le hash du commit, la date de build et des informations d'exécution supplémentaires de bib."
+
+  setup:
+    short: "Configurer de manière interactive"
+    long: |
+      Configure bib ou bibd de manière interactive.
+
+      Utilisez --daemon pour configurer le démon bibd au lieu du CLI bib.
+      Utilisez --cluster pour initialiser un nouveau cluster HA (retourne un jeton de jonction).
+      Utilisez --cluster-join <jeton> pour rejoindre un cluster existant.
+    example: |
+      bib setup                           # Configurer le CLI bib
+      bib setup --daemon                  # Configurer le démon bibd
+      bib setup --daemon --cluster        # Initialiser un nouveau cluster (affiche le jeton)
+      bib setup --daemon --cluster-join <jeton>  # Rejoindre un cluster existant
+    flags:
+      daemon: "configurer le démon bibd au lieu du CLI bib"
+      format: "format du fichier de configuration (yaml, toml, json)"
+      cluster: "initialiser un nouveau cluster HA (affiche le jeton de jonction)"
+      cluster-join: "rejoindre un cluster existant avec ce jeton"
+
+  config:
+    short: "Gérer la configuration"
+    long: "Afficher et gérer les paramètres de configuration de bib."
+
+  admin:
+    short: "Commandes administratives pour la gestion de bibd"
+    long: "Commandes administratives pour gérer le démon bibd, y compris la sauvegarde, la restauration et les opérations de maintenance."
+
+  demo:
+    short: "Démontrer les composants TUI"
+    long: "Démonstration interactive des composants TUI et des thèmes pour le développement et les tests."
+

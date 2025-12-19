@@ -1,0 +1,329 @@
+# Traditional Chinese translations for bib TUI
+# 繁體中文
+
+# Common UI elements
+common:
+  ok: "確定"
+  cancel: "取消"
+  confirm: "確認"
+  save: "儲存"
+  delete: "刪除"
+  edit: "編輯"
+  create: "建立"
+  back: "返回"
+  next: "下一步"
+  finish: "完成"
+  skip: "略過"
+  retry: "重試"
+  close: "關閉"
+  loading: "載入中..."
+  search: "搜尋..."
+  no_results: "找不到結果"
+  yes: "是"
+  no: "否"
+
+# Status messages
+status:
+  success: "成功"
+  error: "錯誤"
+  warning: "警告"
+  info: "資訊"
+  connecting: "連線中..."
+  connected: "已連線"
+  disconnected: "已斷線"
+  saving: "儲存中..."
+  saved: "已儲存"
+
+# Wizard general
+wizard:
+  step: "步驟 {{ .current }} / {{ .total }}"
+  progress: "{{ .percent }}% 已完成"
+  skip_step: "略過此步驟"
+  required_field: "此欄位為必填"
+
+  # Setup wizard for bib CLI
+  setup_bib:
+    title: "Bib 設定精靈"
+    welcome:
+      title: "歡迎"
+      content: "讓我們為您的環境設定 bib。此精靈將引導您完成初始設定。"
+      help: "您可以按 Esc 返回或按 Ctrl+C 隨時取消。"
+    identity:
+      title: "身分"
+      description: "設定您的身分"
+      help: "您的身分用於簽署和歸屬變更。在協作環境中，這些資訊可能對其他人可見。"
+      name:
+        label: "姓名"
+        placeholder: "王小明"
+        help: "您的顯示名稱"
+      email:
+        label: "電子郵件"
+        placeholder: "xiaoming@example.tw"
+        help: "您的電子郵件地址"
+    output:
+      title: "輸出設定"
+      description: "設定輸出設定"
+      help: "這些設定控制 bib 如何顯示資訊。建議互動使用時使用表格格式，腳本使用 JSON/YAML。"
+      format:
+        label: "輸出格式"
+        help: "命令的預設輸出格式"
+        options:
+          table: "表格"
+          json: "JSON"
+          yaml: "YAML"
+          text: "文字"
+      color:
+        label: "啟用顏色"
+        help: "在終端機中使用彩色輸出"
+    connection:
+      title: "連線"
+      description: "設定 bibd 連線"
+      help: "指定您要連線的 bibd 守護程式地址。"
+      server_addr:
+        label: "伺服器地址"
+        placeholder: "localhost:8080"
+        help: "bibd 守護程式的地址"
+    complete:
+      title: "設定完成"
+      content: "您的設定已儲存至 {{ .path }}。"
+      next_steps: "下一步："
+
+  # Setup wizard for bibd daemon
+  setup_bibd:
+    title: "Bibd 守護程式設定"
+    server:
+      title: "伺服器設定"
+      description: "設定伺服器設定"
+      help: "這些設定控制守護程式如何監聽連線。使用 0.0.0.0 接受來自任何介面的連線。"
+      host:
+        label: "綁定地址"
+        placeholder: "0.0.0.0"
+        help: "伺服器綁定的地址"
+      port:
+        label: "連接埠"
+        placeholder: "8080"
+        help: "伺服器的連接埠號"
+      data_dir:
+        label: "資料目錄"
+        placeholder: "~/.local/share/bibd"
+        help: "儲存資料的目錄"
+    tls:
+      title: "TLS 加密"
+      description: "設定 TLS 加密"
+      help: "TLS 加密用戶端和守護程式之間的連線。建議用於生產環境。"
+      enabled:
+        label: "啟用 TLS"
+        help: "為所有連線啟用 TLS 加密"
+      cert_file:
+        label: "憑證檔案"
+        placeholder: "/path/to/cert.pem"
+        help: "TLS 憑證檔案的路徑"
+      key_file:
+        label: "金鑰檔案"
+        placeholder: "/path/to/key.pem"
+        help: "TLS 私鑰檔案的路徑"
+    storage:
+      title: "儲存後端"
+      description: "設定儲存後端"
+      help: "SQLite 輕量且無需設定。PostgreSQL 建議用於生產環境，並支援完整資料複寫。"
+      backend:
+        label: "後端"
+        options:
+          sqlite: "SQLite"
+          postgres: "PostgreSQL"
+    p2p:
+      title: "P2P 網路"
+      description: "設定 P2P 網路"
+      help: "P2P 網路允許節點相互發現並在沒有中央伺服器的情況下共享資料。"
+      enabled:
+        label: "啟用 P2P"
+        help: "啟用點對點網路"
+      mode:
+        label: "P2P 模式"
+        options:
+          proxy: "代理 - 轉發請求，資源佔用最小"
+          selective: "選擇性 - 訂閱特定主題"
+          full: "完整 - 複寫所有資料（需要 PostgreSQL）"
+
+# TUI Dashboard
+dashboard:
+  title: "Bib 儀表板"
+  tabs:
+    overview: "概覽"
+    jobs: "工作"
+    datasets: "資料集"
+    cluster: "叢集"
+    logs: "日誌"
+    settings: "設定"
+  overview:
+    welcome: "歡迎使用 Bib"
+    quick_stats: "快速統計"
+    recent_activity: "最近活動"
+    active_jobs: "進行中的工作"
+    total_datasets: "資料集總數"
+    cluster_nodes: "叢集節點"
+    storage_used: "已使用儲存空間"
+  jobs:
+    title: "工作"
+    no_jobs: "找不到工作"
+    status:
+      pending: "待處理"
+      running: "執行中"
+      completed: "已完成"
+      failed: "失敗"
+      cancelled: "已取消"
+  datasets:
+    title: "資料集"
+    no_datasets: "找不到資料集"
+  cluster:
+    title: "叢集狀態"
+    not_clustered: "不是叢集的一部分"
+    nodes: "節點"
+    leader: "領導者"
+    replication_lag: "複寫延遲"
+  logs:
+    title: "日誌"
+    level:
+      debug: "偵錯"
+      info: "資訊"
+      warn: "警告"
+      error: "錯誤"
+
+# Commands
+commands:
+  help:
+    title: "說明"
+    description: "按 ? 取得說明"
+  quit:
+    title: "結束"
+    confirm: "您確定要結束嗎？"
+  search:
+    title: "搜尋"
+    placeholder: "輸入以搜尋..."
+  command_palette:
+    title: "命令面板"
+    placeholder: "輸入命令..."
+
+# Errors
+errors:
+  config_not_found: "找不到設定檔"
+  config_invalid: "設定檔無效"
+  connection_failed: "無法連線到 {{ .address }} 的 bibd"
+  not_found: "找不到 {{ .resource }}：{{ .id }}"
+  permission_denied: "權限被拒絕"
+  timeout: "操作在 {{ .duration }} 後逾時"
+  validation: "驗證錯誤"
+  unknown: "發生意外錯誤"
+
+# Validation messages
+validation:
+  required: "此欄位為必填"
+  min_length: "必須至少 {{ .min }} 個字元"
+  max_length: "必須最多 {{ .max }} 個字元"
+  email: "必須是有效的電子郵件地址"
+  url: "必須是有效的 URL"
+  port: "必須是有效的連接埠號 (1-65535)"
+  path: "必須是有效的檔案路徑"
+  alphanumeric: "只能包含字母和數字"
+
+# Keybindings
+keys:
+  tab: "tab"
+  shift_tab: "shift+tab"
+  enter: "enter"
+  escape: "esc"
+  space: "空白鍵"
+  up: "↑"
+  down: "↓"
+  left: "←"
+  right: "→"
+  help: "?"
+  quit: "q"
+  search: "/"
+  command: ":"
+
+# CLI 指令翻譯
+cmd:
+  bib:
+    short: "bib 是一個 CLI 用戶端"
+    long: "bib 是一個與 bibd 守護程式通訊的命令列用戶端。"
+    flags:
+      config: "設定檔 (預設為 $HOME/.config/bib/config.yaml)"
+      output: "輸出格式 (json, yaml, table, quiet)"
+      verbose: "詳細輸出 (包含完整日誌輸出)"
+      locale: "介面語言 (en, de, fr, ru, zh-tw)。覆蓋設定和系統語言"
+
+  tui:
+    short: "啟動互動式儀表板"
+    long: |
+      啟動全螢幕互動式 TUI 儀表板。
+
+      儀表板提供視覺化介面來管理 bib 資源，
+      包括工作、資料集、叢集狀態等。
+
+      導航：
+        Tab/Shift+Tab  在頁面間切換
+        1-9            按編號跳轉到頁面
+        /              開啟命令面板
+        ?              顯示說明
+        q              結束
+
+      可用頁面：
+        儀表板      概覽，含統計資料和最近活動
+        工作        檢視和管理工作
+        資料集      瀏覽資料集
+        叢集        叢集狀態和節點
+        日誌        檢視日誌
+        設定        組態設定
+
+      語言可透過以下方式設定：
+        - 全域 --locale 旗標 (例如：bib --locale zh-tw tui)
+        - 設定檔 (locale: "zh-tw")
+        - 系統語言 (自動從 LANG、LC_ALL 等偵測)
+    example: |
+      # 使用預設主題啟動儀表板
+      bib tui
+
+      # 使用特定主題啟動
+      bib tui --theme nord
+
+      # 使用繁體中文啟動 (透過全域旗標)
+      bib --locale zh-tw tui
+    flags:
+      theme: "色彩主題 (dark, light, nord, dracula, gruvbox)"
+
+  version:
+    short: "顯示版本資訊"
+    long: "顯示 bib 的版本、提交雜湊、建置日期和其他執行時期資訊。"
+
+  setup:
+    short: "互動式設定組態"
+    long: |
+      互動式設定 bib 或 bibd 的組態。
+
+      使用 --daemon 來設定 bibd 守護程式而非 bib CLI。
+      使用 --cluster 來初始化新的 HA 叢集 (輸出加入權杖)。
+      使用 --cluster-join <權杖> 來加入現有叢集。
+    example: |
+      bib setup                           # 設定 bib CLI
+      bib setup --daemon                  # 設定 bibd 守護程式
+      bib setup --daemon --cluster        # 初始化新叢集 (輸出加入權杖)
+      bib setup --daemon --cluster-join <權杖>  # 加入現有叢集
+    flags:
+      daemon: "設定 bibd 守護程式而非 bib CLI"
+      format: "設定檔格式 (yaml, toml, json)"
+      cluster: "初始化新的 HA 叢集 (輸出加入權杖)"
+      cluster-join: "使用此權杖加入現有叢集"
+
+  config:
+    short: "管理組態"
+    long: "檢視和管理 bib 組態設定。"
+
+  admin:
+    short: "bibd 管理的系統管理指令"
+    long: "用於管理 bibd 守護程式的系統管理指令，包括備份、還原和維護操作。"
+
+  demo:
+    short: "展示 TUI 元件"
+    long: "用於開發和測試的 TUI 元件和主題互動式展示。"
+

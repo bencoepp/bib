@@ -12,20 +12,10 @@ var (
 
 // Cmd represents the config command
 var Cmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage configuration",
-	Long: `View and manage bib configuration.
-
-Use --daemon to manage bibd daemon configuration instead of bib CLI.
-
-Subcommands:
-  show      Display current configuration
-  get       Get a specific configuration value
-  set       Set a configuration value
-  path      Show config file path
-  init      Generate default configuration
-  validate  Validate configuration
-  edit      Interactively edit configuration (TUI)`,
+	Use:         "config",
+	Short:       "config.short",
+	Long:        "config.long",
+	Annotations: map[string]string{"i18n": "true"},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
