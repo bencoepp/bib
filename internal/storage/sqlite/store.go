@@ -36,6 +36,7 @@ type Store struct {
 	bannedPeers      *BannedPeerRepository
 	queryHistory     *QueryHistoryRepository
 	savedQueries     *SavedQueryRepository
+	allowedPeers     *AllowedPeerRepository
 
 	mu     sync.RWMutex
 	closed bool
@@ -102,6 +103,7 @@ func New(cfg storage.SQLiteConfig, dataDir, nodeID string) (*Store, error) {
 	s.bannedPeers = &BannedPeerRepository{store: s}
 	s.queryHistory = &QueryHistoryRepository{store: s}
 	s.savedQueries = &SavedQueryRepository{store: s}
+	s.allowedPeers = &AllowedPeerRepository{store: s}
 
 	return s, nil
 }
@@ -182,6 +184,11 @@ func (s *Store) QueryHistory() storage.QueryHistoryRepository {
 // SavedQueries returns the saved queries repository.
 func (s *Store) SavedQueries() storage.SavedQueryRepository {
 	return s.savedQueries
+}
+
+// AllowedPeers returns the allowed peers repository.
+func (s *Store) AllowedPeers() storage.AllowedPeerRepository {
+	return s.allowedPeers
 }
 
 // Vacuum performs database maintenance.

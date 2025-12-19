@@ -114,6 +114,9 @@ type P2PConfig struct {
 	// Proxy mode configuration
 	Proxy ProxyConfig `mapstructure:"proxy"`
 
+	// GRPC configuration for gRPC-over-P2P
+	GRPC P2PGRPCConfig `mapstructure:"grpc"`
+
 	// Metrics configuration for P2P networking
 	Metrics P2PMetricsConfig `mapstructure:"metrics"`
 }
@@ -123,6 +126,61 @@ type P2PMetricsConfig struct {
 	// BandwidthMetering enables tracking of bytes sent/received.
 	// This has some performance overhead and is disabled by default.
 	BandwidthMetering bool `mapstructure:"bandwidth_metering"`
+}
+
+// P2PGRPCConfig holds configuration for gRPC-over-P2P transport.
+type P2PGRPCConfig struct {
+	// Enabled controls whether gRPC-over-P2P is active.
+	// Default: true (when P2P is enabled)
+	Enabled bool `mapstructure:"enabled"`
+
+	// DialTimeout is the timeout for establishing gRPC connections over P2P.
+	// Default: 30s
+	DialTimeout time.Duration `mapstructure:"dial_timeout"`
+
+	// MaxConnsPerPeer is the maximum number of gRPC connections per peer.
+	// Default: 2
+	MaxConnsPerPeer int `mapstructure:"max_conns_per_peer"`
+
+	// IdleTimeout is how long idle connections are kept before closing.
+	// Default: 5m
+	IdleTimeout time.Duration `mapstructure:"idle_timeout"`
+
+	// TCPFallback configures fallback to direct TCP when P2P fails.
+	TCPFallback TCPFallbackConfig `mapstructure:"tcp_fallback"`
+
+	// RateLimit configures per-peer rate limiting.
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
+
+	// AllowedPeers are peer IDs that are always allowed (bootstrap from config).
+	// These are in addition to peers stored in the database.
+	AllowedPeers []string `mapstructure:"allowed_peers"`
+}
+
+// TCPFallbackConfig holds configuration for TCP fallback.
+type TCPFallbackConfig struct {
+	// Enabled controls whether TCP fallback is active.
+	// Default: false
+	Enabled bool `mapstructure:"enabled"`
+
+	// Timeout is the timeout for TCP fallback connections.
+	// Default: 10s
+	Timeout time.Duration `mapstructure:"timeout"`
+}
+
+// RateLimitConfig holds rate limiting configuration for P2P gRPC.
+type RateLimitConfig struct {
+	// Enabled controls whether rate limiting is active.
+	// Default: true
+	Enabled bool `mapstructure:"enabled"`
+
+	// RequestsPerSecond is the maximum requests per second per peer.
+	// Default: 100
+	RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+
+	// BurstSize is the maximum burst size.
+	// Default: 200
+	BurstSize int `mapstructure:"burst_size"`
 }
 
 // P2PIdentityConfig holds node P2P identity configuration

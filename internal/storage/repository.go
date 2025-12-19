@@ -52,6 +52,9 @@ type Store interface {
 	// SavedQueries returns the saved queries repository.
 	SavedQueries() SavedQueryRepository
 
+	// AllowedPeers returns the allowed peers repository for P2P gRPC authorization.
+	AllowedPeers() AllowedPeerRepository
+
 	// Ping checks database connectivity.
 	Ping(ctx context.Context) error
 
@@ -1096,4 +1099,53 @@ type SavedQueryFilter struct {
 
 	// Offset is the number of results to skip
 	Offset int
+}
+
+// =============================================================================
+// Allowed Peers (for P2P gRPC authorization)
+// =============================================================================
+
+// AllowedPeerRepository handles allowed peer persistence for P2P gRPC authorization.
+type AllowedPeerRepository interface {
+	// Add adds a peer to the allowed list.
+	Add(ctx context.Context, peer *AllowedPeer) error
+
+	// Remove removes a peer from the allowed list.
+	Remove(ctx context.Context, peerID string) error
+
+	// Get retrieves an allowed peer by ID.
+	Get(ctx context.Context, peerID string) (*AllowedPeer, error)
+
+	// List lists all allowed peers.
+	List(ctx context.Context) ([]*AllowedPeer, error)
+
+	// IsAllowed checks if a peer is in the allowed list and not expired.
+	IsAllowed(ctx context.Context, peerID string) (bool, error)
+
+	// Cleanup removes expired entries.
+	Cleanup(ctx context.Context) error
+
+	// Count returns the number of allowed peers.
+	Count(ctx context.Context) (int64, error)
+}
+
+// AllowedPeer represents a peer in the allowed list for P2P gRPC access.
+type AllowedPeer struct {
+	// PeerID is the libp2p peer ID.
+	PeerID string `json:"peer_id"`
+
+	// Name is a human-readable name for the peer (optional).
+	Name string `json:"name,omitempty"`
+
+	// AddedAt is when the peer was added to the allowed list.
+	AddedAt time.Time `json:"added_at"`
+
+	// AddedBy is who added the peer (peer ID or "config" for bootstrap).
+	AddedBy string `json:"added_by"`
+
+	// ExpiresAt is when the permission expires (zero means never).
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// Metadata holds additional information.
+	Metadata map[string]any `json:"metadata,omitempty"`
 }

@@ -39,6 +39,7 @@ type Store struct {
 	bannedPeers      *BannedPeerRepository
 	queryHistory     *QueryHistoryRepository
 	savedQueries     *SavedQueryRepository
+	allowedPeers     *AllowedPeerRepository
 
 	mu     sync.RWMutex
 	closed bool
@@ -110,6 +111,7 @@ func New(ctx context.Context, cfg storage.PostgresConfig, dataDir, nodeID string
 	s.bannedPeers = &BannedPeerRepository{store: s}
 	s.queryHistory = &QueryHistoryRepository{store: s}
 	s.savedQueries = &SavedQueryRepository{store: s}
+	s.allowedPeers = &AllowedPeerRepository{store: s}
 
 	return s, nil
 }
@@ -135,6 +137,7 @@ func NewWithPool(pool *pgxpool.Pool, nodeID string) *Store {
 	s.bannedPeers = &BannedPeerRepository{store: s}
 	s.queryHistory = &QueryHistoryRepository{store: s}
 	s.savedQueries = &SavedQueryRepository{store: s}
+	s.allowedPeers = &AllowedPeerRepository{store: s}
 
 	return s
 }
@@ -223,6 +226,11 @@ func (s *Store) QueryHistory() storage.QueryHistoryRepository {
 // SavedQueries returns the saved queries repository.
 func (s *Store) SavedQueries() storage.SavedQueryRepository {
 	return s.savedQueries
+}
+
+// AllowedPeers returns the allowed peers repository.
+func (s *Store) AllowedPeers() storage.AllowedPeerRepository {
+	return s.allowedPeers
 }
 
 // Vacuum performs database maintenance.

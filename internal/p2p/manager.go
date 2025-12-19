@@ -50,6 +50,10 @@ type NodeManager interface {
 
 	// ListBannedPeers returns all banned peers.
 	ListBannedPeers() ([]*BannedPeerInfo, error)
+
+	// GRPCClient returns the P2P gRPC client for calling remote peers.
+	// Returns nil if gRPC-over-P2P is not enabled.
+	GRPCClient() *GRPCClient
 }
 
 // NodeManagerInfo contains information about a node.
@@ -233,6 +237,9 @@ func DefaultNodeManagerConfigDefaults() DefaultNodeManagerConfig {
 type defaultNodeManager struct {
 	host *Host
 	cfg  DefaultNodeManagerConfig
+
+	// gRPC client for P2P calls
+	grpcClient *GRPCClient
 
 	// Cached stats
 	statsMu        sync.RWMutex
@@ -580,6 +587,17 @@ func (nm *defaultNodeManager) ListBannedPeers() ([]*BannedPeerInfo, error) {
 	}
 
 	return result, nil
+}
+
+// GRPCClient returns the P2P gRPC client.
+func (nm *defaultNodeManager) GRPCClient() *GRPCClient {
+	return nm.grpcClient
+}
+
+// SetGRPCClient sets the P2P gRPC client.
+// This should be called during initialization.
+func (nm *defaultNodeManager) SetGRPCClient(client *GRPCClient) {
+	nm.grpcClient = client
 }
 
 // ErrPeerBanned is returned when trying to connect to a banned peer.

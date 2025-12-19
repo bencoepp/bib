@@ -22,6 +22,7 @@ const (
 	ProtocolData      = "/bib/data/1.0.0"
 	ProtocolJobs      = "/bib/jobs/1.0.0"
 	ProtocolSync      = "/bib/sync/1.0.0"
+	ProtocolGRPC      = "/bib/grpc/1.0.0"
 )
 
 // SupportedProtocols returns all supported protocol versions.
@@ -31,6 +32,7 @@ func SupportedProtocols() []protocol.ID {
 		ProtocolData,
 		ProtocolJobs,
 		ProtocolSync,
+		ProtocolGRPC,
 	}
 }
 

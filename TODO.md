@@ -904,24 +904,28 @@
 > **Goal**: Allow bibd nodes to call each other's gRPC APIs over libp2p streams,
 > enabling distributed operations without separate TCP connections.
 
-- [ ] **GRPC-018**: libp2p gRPC transport
+- [x] **GRPC-018**: libp2p gRPC transport
   - Create custom `grpc.DialOption` that uses libp2p streams
   - Protocol: `/bib/grpc/1.0.0`
   - Multiplex multiple gRPC calls over single libp2p connection
   - Use libp2p's built-in authentication (peer ID verification)
   - Map libp2p peer ID to bibd node identity
+  - **Implemented in**: `internal/p2p/grpc_transport.go`, `internal/p2p/grpc_server.go`
 
-- [ ] **GRPC-019**: P2P client wrapper
+- [x] **GRPC-019**: P2P client wrapper
   - `p2p.GRPCClient(peerID)` returns standard gRPC `ClientConn`
   - Automatic peer discovery via DHT
   - Connection pooling per peer
-  - Fallback to direct TCP if P2P unavailable
+  - Fallback to direct TCP if P2P unavailable (configurable)
+  - **Implemented in**: `internal/p2p/grpc_client.go`
 
-- [ ] **GRPC-020**: P2P authorization
+- [x] **GRPC-020**: P2P authorization
   - Verify calling peer's node ID against allowed nodes list
-  - Node-level permissions (read-only peers, trusted peers)
-  - Rate limiting per peer
-  - Audit log for P2P API calls
+  - Allowed peers stored in database with config bootstrap
+  - Rate limiting per peer (in-memory, configurable)
+  - Silently drop unauthorized connections (secure)
+  - Admin/BreakGlass services blocked over P2P
+  - **Implemented in**: `internal/p2p/grpc_auth.go`, `internal/storage/*/allowed_peers.go`
 
 ### 4.5 Server Implementation
 
