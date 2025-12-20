@@ -74,7 +74,7 @@ func NewTestServer(t testing.TB, ctx context.Context) *TestServer {
 			Password: pgCfg.Password,
 			SSLMode:  "disable",
 		},
-		MaxConnections: 10,
+		MaxConnections: 50, // Increased for concurrent test scenarios
 	}
 
 	store, err := postgres.New(ctx, storeCfg, dataDir, "test-node")

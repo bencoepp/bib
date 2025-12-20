@@ -84,10 +84,13 @@ func TestConcurrency_ParallelAuthentication(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
+			reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
 			pubKey, privKey := generateTestKeyPair(t)
 
 			// Challenge
-			challengeResp, err := authClient.Challenge(ctx, &services.ChallengeRequest{
+			challengeResp, err := authClient.Challenge(reqCtx, &services.ChallengeRequest{
 				PublicKey: pubKey,
 			})
 			if err != nil {
@@ -99,7 +102,7 @@ func TestConcurrency_ParallelAuthentication(t *testing.T) {
 			sig := signChallengeBytes(t, privKey, challengeResp.Challenge)
 
 			// Verify
-			_, err = authClient.VerifyChallenge(ctx, &services.VerifyChallengeRequest{
+			_, err = authClient.VerifyChallenge(reqCtx, &services.VerifyChallengeRequest{
 				ChallengeId: challengeResp.ChallengeId,
 				Signature:   sig,
 				Name:        fmt.Sprintf("ParallelUser%d", id),
@@ -146,7 +149,11 @@ func TestConcurrency_ParallelTopicOperations(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 
-				resp, err := topicClient.CreateTopic(adminCtx, &services.CreateTopicRequest{
+				// Create per-request context with its own timeout
+				reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+				defer cancel()
+
+				resp, err := topicClient.CreateTopic(reqCtx, &services.CreateTopicRequest{
 					Name:        fmt.Sprintf("concurrent-topic-%d", id),
 					Description: fmt.Sprintf("Topic %d", id),
 				})
@@ -177,7 +184,10 @@ func TestConcurrency_ParallelTopicOperations(t *testing.T) {
 			go func(id string) {
 				defer wg.Done()
 
-				_, err := topicClient.GetTopic(adminCtx, &services.GetTopicRequest{
+				reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+				defer cancel()
+
+				_, err := topicClient.GetTopic(reqCtx, &services.GetTopicRequest{
 					Id: id,
 				})
 				if err == nil {
@@ -202,8 +212,11 @@ func TestConcurrency_ParallelTopicOperations(t *testing.T) {
 			go func(id string, idx int) {
 				defer wg.Done()
 
+				reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+				defer cancel()
+
 				desc := fmt.Sprintf("Updated by goroutine %d", idx)
-				_, _ = topicClient.UpdateTopic(adminCtx, &services.UpdateTopicRequest{
+				_, _ = topicClient.UpdateTopic(reqCtx, &services.UpdateTopicRequest{
 					Id:          id,
 					Description: &desc,
 				})
@@ -226,7 +239,10 @@ func TestConcurrency_ParallelTopicOperations(t *testing.T) {
 			go func(id string) {
 				defer wg.Done()
 
-				_, err := topicClient.DeleteTopic(adminCtx, &services.DeleteTopicRequest{
+				reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+				defer cancel()
+
+				_, err := topicClient.DeleteTopic(reqCtx, &services.DeleteTopicRequest{
 					Id: id,
 				})
 				if err == nil {
@@ -277,7 +293,9 @@ func TestConcurrency_MixedOperations(t *testing.T) {
 			switch id % 3 {
 			case 0:
 				// Health ping
-				_, err := healthClient.Ping(ctx, &services.PingRequest{
+				reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				defer cancel()
+				_, err := healthClient.Ping(reqCtx, &services.PingRequest{
 					Payload: []byte(fmt.Sprintf("ping-%d", id)),
 				})
 				if err == nil {
@@ -286,8 +304,10 @@ func TestConcurrency_MixedOperations(t *testing.T) {
 
 			case 1:
 				// Auth challenge
+				reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				defer cancel()
 				pubKey, _ := generateTestKeyPair(t)
-				_, err := authClient.Challenge(ctx, &services.ChallengeRequest{
+				_, err := authClient.Challenge(reqCtx, &services.ChallengeRequest{
 					PublicKey: pubKey,
 				})
 				if err == nil {
@@ -297,7 +317,9 @@ func TestConcurrency_MixedOperations(t *testing.T) {
 			case 2:
 				// Topic list
 				if len(topicIDs) > 0 {
-					_, err := topicClient.GetTopic(adminCtx, &services.GetTopicRequest{
+					reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+					defer cancel()
+					_, err := topicClient.GetTopic(reqCtx, &services.GetTopicRequest{
 						Id: topicIDs[id%len(topicIDs)],
 					})
 					if err == nil {
@@ -385,8 +407,11 @@ func TestConcurrency_SessionManagement(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
+			reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
 			// Challenge
-			challengeResp, err := authClient.Challenge(ctx, &services.ChallengeRequest{
+			challengeResp, err := authClient.Challenge(reqCtx, &services.ChallengeRequest{
 				PublicKey: pubKey,
 			})
 			if err != nil {
@@ -397,7 +422,7 @@ func TestConcurrency_SessionManagement(t *testing.T) {
 			sig := signChallengeBytes(t, privKey, challengeResp.Challenge)
 
 			// Verify
-			verifyResp, err := authClient.VerifyChallenge(ctx, &services.VerifyChallengeRequest{
+			verifyResp, err := authClient.VerifyChallenge(reqCtx, &services.VerifyChallengeRequest{
 				ChallengeId: challengeResp.ChallengeId,
 				Signature:   sig,
 				Name:        "SessionUser",
@@ -423,7 +448,10 @@ func TestConcurrency_SessionManagement(t *testing.T) {
 		go func(tok string) {
 			defer wg.Done()
 
-			resp, err := authClient.ValidateSession(ctx, &services.ValidateSessionRequest{
+			reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			resp, err := authClient.ValidateSession(reqCtx, &services.ValidateSessionRequest{
 				SessionToken: tok,
 			})
 			if err == nil && resp.Valid {
@@ -457,8 +485,11 @@ func TestConcurrency_RapidCreateDelete(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
+			reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+			defer cancel()
+
 			// Create
-			createResp, err := topicClient.CreateTopic(adminCtx, &services.CreateTopicRequest{
+			createResp, err := topicClient.CreateTopic(reqCtx, &services.CreateTopicRequest{
 				Name: fmt.Sprintf("rapid-topic-%d-%d", id, time.Now().UnixNano()),
 			})
 			if err != nil {
@@ -466,7 +497,7 @@ func TestConcurrency_RapidCreateDelete(t *testing.T) {
 			}
 
 			// Immediately delete
-			_, err = topicClient.DeleteTopic(adminCtx, &services.DeleteTopicRequest{
+			_, err = topicClient.DeleteTopic(reqCtx, &services.DeleteTopicRequest{
 				Id: createResp.Topic.Id,
 			})
 			if err != nil {
@@ -515,10 +546,12 @@ func TestConcurrency_DatabaseContention(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < writesPerWriter; j++ {
-				_, err := datasetClient.CreateDataset(adminCtx, &services.CreateDatasetRequest{
+				reqCtx, cancel := context.WithTimeout(adminCtx, 30*time.Second)
+				_, err := datasetClient.CreateDataset(reqCtx, &services.CreateDatasetRequest{
 					TopicId: topicID,
 					Name:    fmt.Sprintf("contention-dataset-%d-%d", id, j),
 				})
+				cancel()
 				if err == nil {
 					atomic.AddInt32(&successCount, 1)
 				}
