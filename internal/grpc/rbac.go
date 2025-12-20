@@ -71,15 +71,16 @@ var methodPermissions = map[string]MethodPermission{
 	"/bib.v1.services.HealthService/GetNodeInfo": {RequiresAuth: false},
 
 	// AuthService - authentication endpoints (public for challenge, self for session management)
-	"/bib.v1.services.AuthService/Challenge":        {RequiresAuth: false},
-	"/bib.v1.services.AuthService/VerifyChallenge":  {RequiresAuth: false},
-	"/bib.v1.services.AuthService/GetAuthConfig":    {RequiresAuth: false},
-	"/bib.v1.services.AuthService/GetPublicKeyInfo": {RequiresAuth: false},
-	"/bib.v1.services.AuthService/Logout":           {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/GetSession":       {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/RefreshSession":   {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/ValidateSession":  {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/ListMySessions":   {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/Challenge":         {RequiresAuth: false},
+	"/bib.v1.services.AuthService/VerifyChallenge":   {RequiresAuth: false},
+	"/bib.v1.services.AuthService/GetAuthConfig":     {RequiresAuth: false},
+	"/bib.v1.services.AuthService/GetPublicKeyInfo":  {RequiresAuth: false},
+	"/bib.v1.services.AuthService/Logout":            {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/GetSession":        {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/RefreshSession":    {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/ValidateSession":   {RequiresAuth: false},
+	"/bib.v1.services.AuthService/ListMySessions":    {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/RevokeAllSessions": {RequiresAuth: true, AllowSelf: true},
 
 	// UserService - admin endpoints except for self-management
 	"/bib.v1.services.UserService/GetUser":               {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},

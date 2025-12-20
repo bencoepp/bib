@@ -188,6 +188,11 @@ func (s *Service) GetSession(ctx context.Context, sessionID string) (*storage.Se
 		return nil, err
 	}
 
+	// Check if session has been explicitly ended (e.g., via logout)
+	if session.EndedAt != nil {
+		return nil, domain.ErrSessionNotFound
+	}
+
 	// Check if session is expired
 	if s.cfg.SessionTimeout > 0 {
 		if time.Since(session.LastActivityAt) > s.cfg.SessionTimeout {
