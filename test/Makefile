@@ -52,6 +52,10 @@ test-integration-p2p:
 	@echo "Running P2P integration tests..."
 	go test $(TEST_FLAGS) -tags=integration -timeout $(TEST_TIMEOUT) ./test/integration/p2p/...
 
+test-integration-grpc:
+	@echo "Running gRPC integration tests..."
+	go test $(TEST_FLAGS) -tags=integration -timeout $(TEST_TIMEOUT) ./test/integration/grpc/...
+
 test-integration-cluster:
 	@echo "Running cluster integration tests..."
 	go test $(TEST_FLAGS) -tags=integration -timeout $(TEST_TIMEOUT) ./test/integration/cluster/...
@@ -165,6 +169,7 @@ test-help:
 	@echo ""
 	@echo "  test-integration-storage   Run storage integration tests"
 	@echo "  test-integration-p2p       Run P2P integration tests"
+	@echo "  test-integration-grpc      Run gRPC integration tests"
 	@echo "  test-integration-cluster   Run cluster integration tests"
 	@echo ""
 	@echo "  test-docker-up         Start test infrastructure"

@@ -64,17 +64,22 @@ type MethodPermission struct {
 // Format: /package.Service/Method
 var methodPermissions = map[string]MethodPermission{
 	// HealthService - public endpoints
-	"/bib.v1.services.HealthService/Check":     {RequiresAuth: false},
-	"/bib.v1.services.HealthService/Watch":     {RequiresAuth: false},
-	"/bib.v1.services.HealthService/GetStatus": {RequiresAuth: false},
+	"/bib.v1.services.HealthService/Check":       {RequiresAuth: false},
+	"/bib.v1.services.HealthService/Watch":       {RequiresAuth: false},
+	"/bib.v1.services.HealthService/GetStatus":   {RequiresAuth: false},
+	"/bib.v1.services.HealthService/Ping":        {RequiresAuth: false},
+	"/bib.v1.services.HealthService/GetNodeInfo": {RequiresAuth: false},
 
 	// AuthService - authentication endpoints (public for challenge, self for session management)
-	"/bib.v1.services.AuthService/Challenge":       {RequiresAuth: false},
-	"/bib.v1.services.AuthService/VerifyChallenge": {RequiresAuth: false},
-	"/bib.v1.services.AuthService/Logout":          {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/GetSession":      {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/RefreshSession":  {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.AuthService/ListMySessions":  {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/Challenge":        {RequiresAuth: false},
+	"/bib.v1.services.AuthService/VerifyChallenge":  {RequiresAuth: false},
+	"/bib.v1.services.AuthService/GetAuthConfig":    {RequiresAuth: false},
+	"/bib.v1.services.AuthService/GetPublicKeyInfo": {RequiresAuth: false},
+	"/bib.v1.services.AuthService/Logout":           {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/GetSession":       {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/RefreshSession":   {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/ValidateSession":  {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.AuthService/ListMySessions":   {RequiresAuth: true, AllowSelf: true},
 
 	// UserService - admin endpoints except for self-management
 	"/bib.v1.services.UserService/GetUser":               {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
@@ -123,16 +128,50 @@ var methodPermissions = map[string]MethodPermission{
 	"/bib.v1.services.TopicService/GetTopicStats":      {RequiresAuth: true},
 	"/bib.v1.services.TopicService/SearchTopics":       {RequiresAuth: true},
 
+	// DatasetService - authenticated for most operations
+	"/bib.v1.services.DatasetService/CreateDataset":       {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/GetDataset":          {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/ListDatasets":        {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/UpdateDataset":       {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/DeleteDataset":       {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/UploadDataset":       {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/DownloadDataset":     {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/GetDatasetVersions":  {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/GetVersion":          {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/GetChunk":            {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/VerifyDataset":       {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/SearchDatasets":      {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/GetDatasetStats":     {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/CopyDataset":         {RequiresAuth: true},
+	"/bib.v1.services.DatasetService/StreamDatasetEvents": {RequiresAuth: true},
+
+	// QueryService - authenticated users
+	"/bib.v1.services.QueryService/Execute":          {RequiresAuth: true},
+	"/bib.v1.services.QueryService/ExecuteStream":    {RequiresAuth: true},
+	"/bib.v1.services.QueryService/ValidateQuery":    {RequiresAuth: true},
+	"/bib.v1.services.QueryService/ExplainQuery":     {RequiresAuth: true},
+	"/bib.v1.services.QueryService/ListFunctions":    {RequiresAuth: true},
+	"/bib.v1.services.QueryService/GetQueryHistory":  {RequiresAuth: true},
+	"/bib.v1.services.QueryService/SaveQuery":        {RequiresAuth: true},
+	"/bib.v1.services.QueryService/ListSavedQueries": {RequiresAuth: true},
+	"/bib.v1.services.QueryService/DeleteSavedQuery": {RequiresAuth: true},
+
 	// AdminService - all admin-only
-	"/bib.v1.services.AdminService/GetConfig":        {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/UpdateConfig":     {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/GetMetrics":       {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/StreamLogs":       {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/GetAuditLogs":     {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/TriggerBackup":    {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/ListBackups":      {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/GetClusterStatus": {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.AdminService/Shutdown":         {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/GetConfig":          {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/UpdateConfig":       {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/GetMetrics":         {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/StreamLogs":         {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/GetAuditLogs":       {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/TriggerBackup":      {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/ListBackups":        {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/RestoreBackup":      {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/DeleteBackup":       {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/GetClusterStatus":   {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/TriggerSnapshot":    {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/TransferLeadership": {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/Shutdown":           {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/GetSystemInfo":      {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.AdminService/RunMaintenance":     {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
 }
 
 // RBACInterceptor creates a unary interceptor that enforces role-based access control.

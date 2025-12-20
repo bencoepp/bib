@@ -1168,27 +1168,31 @@
 
 ### 4.8 Testing & Documentation
 
-- [ ] **GRPC-043**: gRPC integration tests
+- [x] **GRPC-043**: gRPC integration tests
   - Test each service with mock storage
   - Test authentication flow
   - Test streaming endpoints
   - Test error handling
+  - **Implemented in**: `internal/grpc/*_test.go`, `test/integration/grpc/grpc_test.go`
 
-- [ ] **GRPC-044**: P2P gRPC transport tests
+- [x] **GRPC-044**: P2P gRPC transport tests
   - Test gRPC calls between two bibd instances
   - Test connection failures and recovery
   - Test concurrent calls
+  - **Implemented in**: `test/integration/grpc/p2p_transport_test.go`
 
-- [ ] **GRPC-045**: API documentation
+- [x] **GRPC-045**: API documentation
   - Generate proto documentation (buf docs or protoc-gen-doc)
   - Document authentication flow
   - Document error codes
   - Provide example requests/responses
+  - **Implemented in**: `docs/api/README.md`, `docs/api/auth-flow.md`, `docs/api/error-codes.md`, `docs/api/health-service.md`, `docs/api/auth-service.md`, `docs/api/topic-service.md`, `docs/api/dataset-service.md`
 
-- [ ] **GRPC-046**: Client SDK documentation
+- [x] **GRPC-046**: Client SDK documentation
   - Usage examples
   - Connection options
   - Error handling best practices
+  - **Implemented in**: `docs/api/client-sdk.md`
 
 ---
 
