@@ -13,6 +13,8 @@ import (
 
 	services "bib/api/gen/go/bib/v1/services"
 	"bib/internal/config"
+	"bib/internal/grpc/interfaces"
+	"bib/internal/grpc/middleware"
 	"bib/internal/version"
 
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -43,9 +45,9 @@ type Server struct {
 	grpcMetrics     *grpc_prometheus.ServerMetrics
 
 	// Interceptor dependencies
-	healthProvider  HealthProvider
-	auditMiddleware *AuditMiddleware
-	rbacConfig      RBACConfig
+	healthProvider  interfaces.HealthProvider
+	auditMiddleware *middleware.AuditMiddleware
+	rbacConfig      middleware.RBACConfig
 	getUserFunc     func(ctx context.Context, token string) (*interface{}, error)
 
 	// Lifecycle
@@ -68,13 +70,13 @@ type ServerConfig struct {
 	TLSConfig *tls.Config
 
 	// HealthProvider provides health check information.
-	HealthProvider HealthProvider
+	HealthProvider interfaces.HealthProvider
 
 	// AuditMiddleware provides audit logging (optional).
-	AuditMiddleware *AuditMiddleware
+	AuditMiddleware *middleware.AuditMiddleware
 
 	// RBACConfig holds RBAC settings.
-	RBACConfig RBACConfig
+	RBACConfig middleware.RBACConfig
 
 	// GetUserFromToken extracts user from session token for RBAC.
 	// Required if RBAC is enabled.
@@ -184,23 +186,23 @@ func (s *Server) buildUnaryInterceptors() []grpc.UnaryServerInterceptor {
 	}
 
 	// 2. Recovery (catch panics early)
-	interceptors = append(interceptors, RecoveryUnaryInterceptor())
+	interceptors = append(interceptors, middleware.RecoveryUnaryInterceptor())
 
 	// 3. Request ID
-	interceptors = append(interceptors, RequestIDUnaryInterceptor())
+	interceptors = append(interceptors, middleware.RequestIDUnaryInterceptor())
 
 	// 4. Logging
-	interceptors = append(interceptors, LoggingUnaryInterceptor())
+	interceptors = append(interceptors, middleware.LoggingUnaryInterceptor())
 
 	// 5. Rate limiting (per-user, after we know the user)
 	if s.cfg.RateLimit.Enabled {
-		limiter := NewRateLimiter(s.cfg.RateLimit.RequestsPerSecond, s.cfg.RateLimit.Burst)
-		interceptors = append(interceptors, RateLimitUnaryInterceptor(limiter))
+		limiter := middleware.NewRateLimiter(s.cfg.RateLimit.RequestsPerSecond, s.cfg.RateLimit.Burst)
+		interceptors = append(interceptors, middleware.RateLimitUnaryInterceptor(limiter, middleware.UserFromContext))
 	}
 
 	// 6. Audit (for mutations)
 	if s.auditMiddleware != nil {
-		interceptors = append(interceptors, AuditUnaryInterceptor(s.auditMiddleware))
+		interceptors = append(interceptors, middleware.AuditUnaryInterceptor(s.auditMiddleware))
 	}
 
 	return interceptors
@@ -216,23 +218,23 @@ func (s *Server) buildStreamInterceptors() []grpc.StreamServerInterceptor {
 	}
 
 	// 2. Recovery
-	interceptors = append(interceptors, RecoveryStreamInterceptor())
+	interceptors = append(interceptors, middleware.RecoveryStreamInterceptor())
 
 	// 3. Request ID
-	interceptors = append(interceptors, RequestIDStreamInterceptor())
+	interceptors = append(interceptors, middleware.RequestIDStreamInterceptor())
 
 	// 4. Logging
-	interceptors = append(interceptors, LoggingStreamInterceptor())
+	interceptors = append(interceptors, middleware.LoggingStreamInterceptor())
 
 	// 5. Rate limiting
 	if s.cfg.RateLimit.Enabled {
-		limiter := NewRateLimiter(s.cfg.RateLimit.RequestsPerSecond, s.cfg.RateLimit.Burst)
-		interceptors = append(interceptors, RateLimitStreamInterceptor(limiter))
+		limiter := middleware.NewRateLimiter(s.cfg.RateLimit.RequestsPerSecond, s.cfg.RateLimit.Burst)
+		interceptors = append(interceptors, middleware.RateLimitStreamInterceptor(limiter, middleware.UserFromContext))
 	}
 
 	// 6. Audit
 	if s.auditMiddleware != nil {
-		interceptors = append(interceptors, AuditStreamInterceptor(s.auditMiddleware))
+		interceptors = append(interceptors, middleware.AuditStreamInterceptor(s.auditMiddleware))
 	}
 
 	return interceptors

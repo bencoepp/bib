@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package middleware provides gRPC interceptors for the bib daemon.
+package middleware
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"bib/internal/domain"
 
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
@@ -143,12 +145,19 @@ func getPeerAddress(ctx context.Context) string {
 
 func logRPCCall(requestID, method, peer string, code codes.Code, duration time.Duration, err error) {
 	// TODO: Replace with proper structured logging via logger package
+	if requestID == "" {
+		requestID = "unknown"
+	}
+	prefix := requestID
+	if len(requestID) > 8 {
+		prefix = requestID[:8]
+	}
 	if err != nil {
 		fmt.Printf("[gRPC] %s %s from %s - %s (%v) error: %v\n",
-			requestID[:8], method, peer, code, duration, err)
+			prefix, method, peer, code, duration, err)
 	} else {
 		fmt.Printf("[gRPC] %s %s from %s - %s (%v)\n",
-			requestID[:8], method, peer, code, duration)
+			prefix, method, peer, code, duration)
 	}
 }
 
@@ -164,9 +173,14 @@ func RecoveryUnaryInterceptor() grpc.UnaryServerInterceptor {
 				requestID := RequestIDFromContext(ctx)
 				stack := string(debug.Stack())
 
+				prefix := requestID
+				if len(requestID) > 8 {
+					prefix = requestID[:8]
+				}
+
 				// Log the panic with full stack trace
 				fmt.Printf("[gRPC] PANIC %s %s: %v\n%s\n",
-					requestID[:8], info.FullMethod, r, stack)
+					prefix, info.FullMethod, r, stack)
 
 				// Return internal error (don't leak panic details to client)
 				err = status.Errorf(codes.Internal, "internal server error (request_id: %s)", requestID)
@@ -185,8 +199,13 @@ func RecoveryStreamInterceptor() grpc.StreamServerInterceptor {
 				requestID := RequestIDFromContext(ss.Context())
 				stack := string(debug.Stack())
 
+				prefix := requestID
+				if len(requestID) > 8 {
+					prefix = requestID[:8]
+				}
+
 				fmt.Printf("[gRPC] PANIC %s %s: %v\n%s\n",
-					requestID[:8], info.FullMethod, r, stack)
+					prefix, info.FullMethod, r, stack)
 
 				err = status.Errorf(codes.Internal, "internal server error (request_id: %s)", requestID)
 			}
@@ -252,9 +271,9 @@ func (rl *RateLimiter) cleanup() {
 }
 
 // RateLimitUnaryInterceptor applies rate limiting to unary RPCs.
-func RateLimitUnaryInterceptor(limiter *RateLimiter) grpc.UnaryServerInterceptor {
+func RateLimitUnaryInterceptor(limiter *RateLimiter, getUserFromCtx func(ctx context.Context) (*domain.User, bool)) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		key := getRateLimitKey(ctx)
+		key := getRateLimitKey(ctx, getUserFromCtx)
 
 		if !limiter.Allow(key) {
 			return nil, status.Error(codes.ResourceExhausted, "rate limit exceeded")
@@ -265,9 +284,9 @@ func RateLimitUnaryInterceptor(limiter *RateLimiter) grpc.UnaryServerInterceptor
 }
 
 // RateLimitStreamInterceptor applies rate limiting to streaming RPCs.
-func RateLimitStreamInterceptor(limiter *RateLimiter) grpc.StreamServerInterceptor {
+func RateLimitStreamInterceptor(limiter *RateLimiter, getUserFromCtx func(ctx context.Context) (*domain.User, bool)) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		key := getRateLimitKey(ss.Context())
+		key := getRateLimitKey(ss.Context(), getUserFromCtx)
 
 		if !limiter.Allow(key) {
 			return status.Error(codes.ResourceExhausted, "rate limit exceeded")
@@ -277,10 +296,12 @@ func RateLimitStreamInterceptor(limiter *RateLimiter) grpc.StreamServerIntercept
 	}
 }
 
-func getRateLimitKey(ctx context.Context) string {
+func getRateLimitKey(ctx context.Context, getUserFromCtx func(ctx context.Context) (*domain.User, bool)) string {
 	// First, try to get user ID from context (set by auth interceptor)
-	if user, ok := UserFromContext(ctx); ok && user != nil {
-		return "user:" + user.ID.String()
+	if getUserFromCtx != nil {
+		if user, ok := getUserFromCtx(ctx); ok && user != nil {
+			return "user:" + user.ID.String()
+		}
 	}
 
 	// Fall back to peer address
@@ -291,4 +312,16 @@ func getRateLimitKey(ctx context.Context) string {
 	return "unknown"
 }
 
-// Note: wrappedServerStream is defined in rbac.go and shared across interceptors
+// ============================================================================
+// Wrapped Server Stream
+// ============================================================================
+
+// wrappedServerStream wraps a grpc.ServerStream to override the context.
+type wrappedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedServerStream) Context() context.Context {
+	return w.ctx
+}

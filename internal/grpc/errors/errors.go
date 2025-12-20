@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package errors provides error handling utilities for gRPC services.
+package errors
 
 import (
 	"errors"
@@ -97,6 +97,10 @@ var domainErrorMapping = map[error]struct {
 	domain.ErrInvalidRepeatCount:  {codes.InvalidArgument, "Invalid repeat count"},
 	domain.ErrInvalidInterval:     {codes.InvalidArgument, "Invalid interval"},
 	domain.ErrInvalidTimeRange:    {codes.InvalidArgument, "End time must be after start time"},
+
+	// Job errors
+	domain.ErrInvalidJobID: {codes.InvalidArgument, "Invalid job ID"},
+	domain.ErrJobNotFound:  {codes.NotFound, "Job not found"},
 }
 
 // MapDomainError converts a domain error to a gRPC status error with rich details.
@@ -280,7 +284,7 @@ func codeToReason(code codes.Code) string {
 	}
 }
 
-// MinQueryLengthError is a specific validation error for search queries.
+// MinQueryLength is the minimum allowed length for search queries.
 const MinQueryLength = 3
 
 // ErrQueryTooShort is returned when a search query is too short.

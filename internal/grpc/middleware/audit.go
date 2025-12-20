@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package middleware provides gRPC interceptors for the bib daemon.
+package middleware
 
 import (
 	"context"
@@ -255,8 +255,59 @@ func (am *AuditMiddleware) calculateEntryHash(entry *storage.AuditEntry) string 
 	return hex.EncodeToString(hash[:])
 }
 
+// LogServiceAction logs a service-level action for auditing.
+// This implements the interfaces.AuditLogger interface.
+func (am *AuditMiddleware) LogServiceAction(ctx context.Context, action, resourceType, resourceID string, details map[string]interface{}) error {
+	if am == nil || !am.cfg.Enabled {
+		return nil
+	}
+
+	actor := "anonymous"
+	if user, ok := UserFromContext(ctx); ok {
+		actor = string(user.ID)
+	}
+
+	clientIP := ""
+	if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+		clientIP = p.Addr.String()
+	}
+
+	operationID := generateOperationID()
+	lastHash, _ := am.auditRepo.GetLastHash(ctx)
+
+	metadata := map[string]any{
+		"resource_id": resourceID,
+		"client_ip":   clientIP,
+	}
+	// Merge in any additional details
+	for k, v := range details {
+		metadata[k] = v
+	}
+
+	entry := &storage.AuditEntry{
+		Timestamp:       time.Now().UTC(),
+		NodeID:          am.cfg.NodeID,
+		OperationID:     operationID,
+		RoleUsed:        "grpc",
+		Action:          action,
+		TableName:       resourceType,
+		Query:           action + " " + resourceType,
+		QueryHash:       hashString(action + resourceType),
+		RowsAffected:    1,
+		DurationMS:      0,
+		SourceComponent: "grpc",
+		Actor:           actor,
+		Metadata:        metadata,
+		PrevHash:        lastHash,
+	}
+
+	entry.EntryHash = am.calculateEntryHash(entry)
+
+	return am.auditRepo.Log(ctx, entry)
+}
+
 // LogMutation logs a mutation operation directly from a service.
-// Use this when you need more control over the audit entry.
+// Deprecated: Use LogServiceAction instead.
 func (am *AuditMiddleware) LogMutation(ctx context.Context, action, resource, resourceID, description string) error {
 	if am == nil || !am.cfg.Enabled {
 		return nil

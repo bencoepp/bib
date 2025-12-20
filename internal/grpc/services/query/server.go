@@ -1,10 +1,12 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package query implements the QueryService gRPC service.
+package query
 
 import (
 	"context"
 
 	services "bib/api/gen/go/bib/v1/services"
+	grpcerrors "bib/internal/grpc/errors"
+	"bib/internal/grpc/interfaces"
 	"bib/internal/storage"
 
 	"github.com/google/cel-go/cel"
@@ -12,30 +14,30 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// QueryServiceServer implements the QueryService gRPC service.
-type QueryServiceServer struct {
+// Config holds configuration for the query service server.
+type Config struct {
+	Store       storage.Store
+	AuditLogger interfaces.AuditLogger
+}
+
+// Server implements the QueryService gRPC service.
+type Server struct {
 	services.UnimplementedQueryServiceServer
 	store       storage.Store
-	auditLogger *AuditMiddleware
+	auditLogger interfaces.AuditLogger
 	celEnv      *cel.Env
 }
 
-// QueryServiceConfig holds configuration for the QueryServiceServer.
-type QueryServiceConfig struct {
-	Store       storage.Store
-	AuditLogger *AuditMiddleware
-}
-
-// NewQueryServiceServer creates a new QueryServiceServer.
-func NewQueryServiceServer() *QueryServiceServer {
-	s := &QueryServiceServer{}
+// NewServer creates a new query service server.
+func NewServer() *Server {
+	s := &Server{}
 	s.initCELEnv()
 	return s
 }
 
-// NewQueryServiceServerWithConfig creates a new QueryServiceServer with dependencies.
-func NewQueryServiceServerWithConfig(cfg QueryServiceConfig) *QueryServiceServer {
-	s := &QueryServiceServer{
+// NewServerWithConfig creates a new query service server with dependencies.
+func NewServerWithConfig(cfg Config) *Server {
+	s := &Server{
 		store:       cfg.Store,
 		auditLogger: cfg.AuditLogger,
 	}
@@ -44,7 +46,7 @@ func NewQueryServiceServerWithConfig(cfg QueryServiceConfig) *QueryServiceServer
 }
 
 // initCELEnv initializes the CEL environment with bib-specific functions
-func (s *QueryServiceServer) initCELEnv() {
+func (s *Server) initCELEnv() {
 	// Create a basic CEL environment with standard functions
 	// This will be expanded in Phase 3 with bib-specific functions
 	env, err := cel.NewEnv()
@@ -54,13 +56,13 @@ func (s *QueryServiceServer) initCELEnv() {
 }
 
 // Execute runs a CEL query and returns results.
-func (s *QueryServiceServer) Execute(ctx context.Context, req *services.ExecuteQueryRequest) (*services.ExecuteQueryResponse, error) {
+func (s *Server) Execute(ctx context.Context, req *services.ExecuteQueryRequest) (*services.ExecuteQueryResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
 	if req.GetExpression() == "" {
-		return nil, NewValidationError("expression is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("expression is required", map[string]string{
 			"expression": "must not be empty",
 		})
 	}
@@ -77,7 +79,9 @@ func (s *QueryServiceServer) Execute(ctx context.Context, req *services.ExecuteQ
 
 	// Audit log
 	if s.auditLogger != nil {
-		_ = s.auditLogger.LogMutation(ctx, "EXECUTE", "query", "", "Executed CEL query")
+		_ = s.auditLogger.LogServiceAction(ctx, "EXECUTE", "query", "", map[string]interface{}{
+			"expression": req.GetExpression(),
+		})
 	}
 
 	// For now, return a placeholder response
@@ -89,13 +93,13 @@ func (s *QueryServiceServer) Execute(ctx context.Context, req *services.ExecuteQ
 }
 
 // ExecuteStream runs a query and streams results.
-func (s *QueryServiceServer) ExecuteStream(req *services.ExecuteQueryRequest, stream services.QueryService_ExecuteStreamServer) error {
+func (s *Server) ExecuteStream(req *services.ExecuteQueryRequest, stream services.QueryService_ExecuteStreamServer) error {
 	if s.store == nil {
 		return status.Error(codes.Unavailable, "service not initialized")
 	}
 
 	if req.GetExpression() == "" {
-		return NewValidationError("expression is required", map[string]string{
+		return grpcerrors.NewValidationError("expression is required", map[string]string{
 			"expression": "must not be empty",
 		})
 	}
@@ -120,9 +124,9 @@ func (s *QueryServiceServer) ExecuteStream(req *services.ExecuteQueryRequest, st
 }
 
 // Validate validates a CEL expression without executing.
-func (s *QueryServiceServer) Validate(_ context.Context, req *services.ValidateQueryRequest) (*services.ValidateQueryResponse, error) {
+func (s *Server) Validate(_ context.Context, req *services.ValidateQueryRequest) (*services.ValidateQueryResponse, error) {
 	if req.GetExpression() == "" {
-		return nil, NewValidationError("expression is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("expression is required", map[string]string{
 			"expression": "must not be empty",
 		})
 	}
@@ -152,9 +156,9 @@ func (s *QueryServiceServer) Validate(_ context.Context, req *services.ValidateQ
 }
 
 // Explain explains query execution plan.
-func (s *QueryServiceServer) Explain(_ context.Context, req *services.ExplainQueryRequest) (*services.ExplainQueryResponse, error) {
+func (s *Server) Explain(_ context.Context, req *services.ExplainQueryRequest) (*services.ExplainQueryResponse, error) {
 	if req.GetExpression() == "" {
-		return nil, NewValidationError("expression is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("expression is required", map[string]string{
 			"expression": "must not be empty",
 		})
 	}
@@ -176,7 +180,7 @@ func (s *QueryServiceServer) Explain(_ context.Context, req *services.ExplainQue
 }
 
 // ListFunctions lists available CEL functions.
-func (s *QueryServiceServer) ListFunctions(_ context.Context, req *services.ListFunctionsRequest) (*services.ListFunctionsResponse, error) {
+func (s *Server) ListFunctions(_ context.Context, req *services.ListFunctionsRequest) (*services.ListFunctionsResponse, error) {
 	functions := []*services.FunctionInfo{
 		{
 			Name:        "size",
@@ -239,7 +243,7 @@ func (s *QueryServiceServer) ListFunctions(_ context.Context, req *services.List
 }
 
 // GetHistory returns recent queries.
-func (s *QueryServiceServer) GetHistory(_ context.Context, _ *services.GetQueryHistoryRequest) (*services.GetQueryHistoryResponse, error) {
+func (s *Server) GetHistory(_ context.Context, _ *services.GetQueryHistoryRequest) (*services.GetQueryHistoryResponse, error) {
 	// Query history will be implemented with storage layer support
 	return &services.GetQueryHistoryResponse{
 		Entries: []*services.QueryHistoryEntry{},
@@ -247,7 +251,7 @@ func (s *QueryServiceServer) GetHistory(_ context.Context, _ *services.GetQueryH
 }
 
 // SaveQuery saves a named query.
-func (s *QueryServiceServer) SaveQuery(ctx context.Context, req *services.SaveQueryRequest) (*services.SaveQueryResponse, error) {
+func (s *Server) SaveQuery(ctx context.Context, req *services.SaveQueryRequest) (*services.SaveQueryResponse, error) {
 	violations := make(map[string]string)
 	if req.GetName() == "" {
 		violations["name"] = "must not be empty"
@@ -256,7 +260,7 @@ func (s *QueryServiceServer) SaveQuery(ctx context.Context, req *services.SaveQu
 		violations["expression"] = "must not be empty"
 	}
 	if len(violations) > 0 {
-		return nil, NewValidationError("invalid save query request", violations)
+		return nil, grpcerrors.NewValidationError("invalid save query request", violations)
 	}
 
 	// Validate query syntax
@@ -269,7 +273,9 @@ func (s *QueryServiceServer) SaveQuery(ctx context.Context, req *services.SaveQu
 
 	// Audit log
 	if s.auditLogger != nil {
-		_ = s.auditLogger.LogMutation(ctx, "CREATE", "saved_query", "", "Saved query: "+req.GetName())
+		_ = s.auditLogger.LogServiceAction(ctx, "CREATE", "saved_query", "", map[string]interface{}{
+			"name": req.GetName(),
+		})
 	}
 
 	return &services.SaveQueryResponse{
@@ -281,7 +287,7 @@ func (s *QueryServiceServer) SaveQuery(ctx context.Context, req *services.SaveQu
 }
 
 // ListSavedQueries lists saved queries.
-func (s *QueryServiceServer) ListSavedQueries(_ context.Context, _ *services.ListSavedQueriesRequest) (*services.ListSavedQueriesResponse, error) {
+func (s *Server) ListSavedQueries(_ context.Context, _ *services.ListSavedQueriesRequest) (*services.ListSavedQueriesResponse, error) {
 	// Saved queries will be implemented with storage layer support
 	return &services.ListSavedQueriesResponse{
 		Queries: []*services.SavedQuery{},
@@ -289,16 +295,16 @@ func (s *QueryServiceServer) ListSavedQueries(_ context.Context, _ *services.Lis
 }
 
 // DeleteSavedQuery deletes a saved query.
-func (s *QueryServiceServer) DeleteSavedQuery(ctx context.Context, req *services.DeleteSavedQueryRequest) (*services.DeleteSavedQueryResponse, error) {
+func (s *Server) DeleteSavedQuery(ctx context.Context, req *services.DeleteSavedQueryRequest) (*services.DeleteSavedQueryResponse, error) {
 	if req.GetId() == "" {
-		return nil, NewValidationError("id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("id is required", map[string]string{
 			"id": "must not be empty",
 		})
 	}
 
 	// Audit log
 	if s.auditLogger != nil {
-		_ = s.auditLogger.LogMutation(ctx, "DELETE", "saved_query", req.GetId(), "Deleted saved query")
+		_ = s.auditLogger.LogServiceAction(ctx, "DELETE", "saved_query", req.GetId(), nil)
 	}
 
 	return &services.DeleteSavedQueryResponse{

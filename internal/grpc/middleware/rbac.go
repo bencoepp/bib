@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package middleware provides gRPC interceptors for the bib daemon.
+package middleware
 
 import (
 	"context"
@@ -97,8 +97,8 @@ var methodPermissions = map[string]MethodPermission{
 	"/bib.v1.services.UserService/UpdateCurrentUser":     {RequiresAuth: true, AllowSelf: true, AllowBootstrap: true},
 	"/bib.v1.services.UserService/GetUserPreferences":    {RequiresAuth: true, AllowSelf: true},
 	"/bib.v1.services.UserService/UpdateUserPreferences": {RequiresAuth: true, AllowSelf: true},
-	"/bib.v1.services.UserService/ListUserSessions":      {RequiresAuth: true, AllowSelf: true}, // Admin or self
-	"/bib.v1.services.UserService/EndUserSession":        {RequiresAuth: true, AllowSelf: true}, // Admin or self
+	"/bib.v1.services.UserService/ListUserSessions":      {RequiresAuth: true, AllowSelf: true},
+	"/bib.v1.services.UserService/EndUserSession":        {RequiresAuth: true, AllowSelf: true},
 	"/bib.v1.services.UserService/EndAllUserSessions":    {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
 
 	// NodeService - mostly read-only, admin for management
@@ -117,10 +117,10 @@ var methodPermissions = map[string]MethodPermission{
 
 	// TopicService - admin for create/delete, owner-based for updates
 	"/bib.v1.services.TopicService/CreateTopic":        {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
-	"/bib.v1.services.TopicService/GetTopic":           {RequiresAuth: true}, // Visibility checked in handler
-	"/bib.v1.services.TopicService/ListTopics":         {RequiresAuth: true}, // Visibility filtered in handler
-	"/bib.v1.services.TopicService/UpdateTopic":        {RequiresAuth: true}, // Owner check in handler
-	"/bib.v1.services.TopicService/DeleteTopic":        {RequiresAuth: true}, // Owner check in handler
+	"/bib.v1.services.TopicService/GetTopic":           {RequiresAuth: true},
+	"/bib.v1.services.TopicService/ListTopics":         {RequiresAuth: true},
+	"/bib.v1.services.TopicService/UpdateTopic":        {RequiresAuth: true},
+	"/bib.v1.services.TopicService/DeleteTopic":        {RequiresAuth: true},
 	"/bib.v1.services.TopicService/Subscribe":          {RequiresAuth: true},
 	"/bib.v1.services.TopicService/Unsubscribe":        {RequiresAuth: true},
 	"/bib.v1.services.TopicService/ListSubscriptions":  {RequiresAuth: true},
@@ -173,6 +173,19 @@ var methodPermissions = map[string]MethodPermission{
 	"/bib.v1.services.AdminService/Shutdown":           {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
 	"/bib.v1.services.AdminService/GetSystemInfo":      {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
 	"/bib.v1.services.AdminService/RunMaintenance":     {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+
+	// JobService - authenticated users
+	"/bib.v1.services.JobService/CreateJob":        {RequiresAuth: true},
+	"/bib.v1.services.JobService/GetJob":           {RequiresAuth: true},
+	"/bib.v1.services.JobService/ListJobs":         {RequiresAuth: true},
+	"/bib.v1.services.JobService/CancelJob":        {RequiresAuth: true},
+	"/bib.v1.services.JobService/RetryJob":         {RequiresAuth: true},
+	"/bib.v1.services.JobService/StreamJobUpdates": {RequiresAuth: true},
+
+	// BreakGlassService - admin only
+	"/bib.v1.services.BreakGlassService/InitiateBreakGlass":  {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.BreakGlassService/EndBreakGlass":       {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
+	"/bib.v1.services.BreakGlassService/GetBreakGlassStatus": {RequiresAuth: true, RequiredRole: domain.UserRoleAdmin},
 }
 
 // RBACInterceptor creates a unary interceptor that enforces role-based access control.
@@ -262,19 +275,9 @@ func RBACStreamInterceptor(cfg RBACConfig, getUserFromToken func(ctx context.Con
 	}
 }
 
-// wrappedServerStream wraps a grpc.ServerStream to override the context.
-type wrappedServerStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (w *wrappedServerStream) Context() context.Context {
-	return w.ctx
-}
-
 // extractAndValidateUser extracts the session token from metadata and validates the user.
 func extractAndValidateUser(ctx context.Context, getUserFromToken func(ctx context.Context, token string) (*domain.User, error)) (*domain.User, error) {
-	token := extractToken(ctx)
+	token := ExtractToken(ctx)
 	if token == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing authentication token")
 	}
@@ -287,8 +290,8 @@ func extractAndValidateUser(ctx context.Context, getUserFromToken func(ctx conte
 	return user, nil
 }
 
-// extractToken extracts the session token from gRPC metadata.
-func extractToken(ctx context.Context) string {
+// ExtractToken extracts the session token from gRPC metadata.
+func ExtractToken(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ""

@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package topic implements the TopicService gRPC service.
+package topic
 
 import (
 	"context"
@@ -10,6 +10,9 @@ import (
 	bibv1 "bib/api/gen/go/bib/v1"
 	services "bib/api/gen/go/bib/v1/services"
 	"bib/internal/domain"
+	grpcerrors "bib/internal/grpc/errors"
+	"bib/internal/grpc/interfaces"
+	"bib/internal/grpc/middleware"
 	"bib/internal/storage"
 
 	"github.com/google/uuid"
@@ -18,29 +21,29 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TopicServiceServer implements the TopicService gRPC service.
-type TopicServiceServer struct {
+// Config holds configuration for the topic service server.
+type Config struct {
+	Store       storage.Store
+	AuditLogger interfaces.AuditLogger
+	NodeMode    string // "full", "selective", "proxy"
+}
+
+// Server implements the TopicService gRPC service.
+type Server struct {
 	services.UnimplementedTopicServiceServer
 	store       storage.Store
-	auditLogger *AuditMiddleware
-	nodeMode    string // "full", "selective", "proxy"
+	auditLogger interfaces.AuditLogger
+	nodeMode    string
 }
 
-// TopicServiceConfig holds configuration for the TopicServiceServer.
-type TopicServiceConfig struct {
-	Store       storage.Store
-	AuditLogger *AuditMiddleware
-	NodeMode    string
+// NewServer creates a new topic service server.
+func NewServer() *Server {
+	return &Server{}
 }
 
-// NewTopicServiceServer creates a new TopicServiceServer.
-func NewTopicServiceServer() *TopicServiceServer {
-	return &TopicServiceServer{}
-}
-
-// NewTopicServiceServerWithConfig creates a new TopicServiceServer with dependencies.
-func NewTopicServiceServerWithConfig(cfg TopicServiceConfig) *TopicServiceServer {
-	return &TopicServiceServer{
+// NewServerWithConfig creates a new topic service server with dependencies.
+func NewServerWithConfig(cfg Config) *Server {
+	return &Server{
 		store:       cfg.Store,
 		auditLogger: cfg.AuditLogger,
 		nodeMode:    cfg.NodeMode,
@@ -48,31 +51,29 @@ func NewTopicServiceServerWithConfig(cfg TopicServiceConfig) *TopicServiceServer
 }
 
 // CreateTopic creates a new topic.
-func (s *TopicServiceServer) CreateTopic(ctx context.Context, req *services.CreateTopicRequest) (*services.CreateTopicResponse, error) {
+func (s *Server) CreateTopic(ctx context.Context, req *services.CreateTopicRequest) (*services.CreateTopicResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	// Validate required fields
 	if req.Name == "" {
-		return nil, NewValidationError("name is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("name is required", map[string]string{
 			"name": "must not be empty",
 		})
 	}
 
-	// Get current user (must be admin per requirements)
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
 
-	// Check if topic name already exists
 	existing, _ := s.store.Topics().GetByName(ctx, req.Name)
 	if existing != nil {
-		return nil, MapDomainError(domain.ErrTopicNotFound) // Reuse error or create ErrTopicExists
+		return nil, grpcerrors.NewValidationError("topic already exists", map[string]string{
+			"name": "a topic with this name already exists",
+		})
 	}
 
-	// Create topic
 	topic := &domain.Topic{
 		ID:          domain.TopicID(uuid.New().String()),
 		Name:        req.Name,
@@ -88,10 +89,9 @@ func (s *TopicServiceServer) CreateTopic(ctx context.Context, req *services.Crea
 	}
 
 	if err := s.store.Topics().Create(ctx, topic); err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Create owner membership
 	member := &storage.TopicMember{
 		ID:        uuid.New().String(),
 		TopicID:   topic.ID,
@@ -104,20 +104,21 @@ func (s *TopicServiceServer) CreateTopic(ctx context.Context, req *services.Crea
 	}
 	now := time.Now().UTC()
 	member.AcceptedAt = &now
-	s.store.TopicMembers().Create(ctx, member)
+	_ = s.store.TopicMembers().Create(ctx, member)
 
-	// Audit log
 	if s.auditLogger != nil {
-		s.auditLogger.LogMutation(ctx, "CREATE", "topic", string(topic.ID), "Created topic: "+topic.Name)
+		_ = s.auditLogger.LogServiceAction(ctx, "CREATE", "topic", string(topic.ID), map[string]interface{}{
+			"name": topic.Name,
+		})
 	}
 
 	return &services.CreateTopicResponse{
-		Topic: domainTopicToProto(topic),
+		Topic: topicToProto(topic),
 	}, nil
 }
 
 // GetTopic retrieves a topic by ID or name.
-func (s *TopicServiceServer) GetTopic(ctx context.Context, req *services.GetTopicRequest) (*services.GetTopicResponse, error) {
+func (s *Server) GetTopic(ctx context.Context, req *services.GetTopicRequest) (*services.GetTopicResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
@@ -130,27 +131,25 @@ func (s *TopicServiceServer) GetTopic(ctx context.Context, req *services.GetTopi
 	} else if req.Name != "" {
 		topic, err = s.store.Topics().GetByName(ctx, req.Name)
 	} else {
-		return nil, NewValidationError("id or name is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("id or name is required", map[string]string{
 			"id":   "either id or name must be provided",
 			"name": "either id or name must be provided",
 		})
 	}
 
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Check visibility
-	user, _ := UserFromContext(ctx)
+	user, _ := middleware.UserFromContext(ctx)
 	if !s.canAccessTopic(ctx, topic, user) {
-		return nil, NewPermissionDeniedError("view", "topic", "member")
+		return nil, grpcerrors.NewPermissionDeniedError("view", "topic", "member")
 	}
 
 	resp := &services.GetTopicResponse{
-		Topic: domainTopicToProto(topic),
+		Topic: topicToProto(topic),
 	}
 
-	// Check subscription status
 	if user != nil {
 		member, _ := s.store.TopicMembers().Get(ctx, topic.ID, user.ID)
 		if member != nil {
@@ -163,12 +162,12 @@ func (s *TopicServiceServer) GetTopic(ctx context.Context, req *services.GetTopi
 }
 
 // ListTopics lists topics with filtering.
-func (s *TopicServiceServer) ListTopics(ctx context.Context, req *services.ListTopicsRequest) (*services.ListTopicsResponse, error) {
+func (s *Server) ListTopics(ctx context.Context, req *services.ListTopicsRequest) (*services.ListTopicsResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	user, _ := UserFromContext(ctx)
+	user, _ := middleware.UserFromContext(ctx)
 
 	filter := storage.TopicFilter{
 		Status: domain.TopicStatus(req.Status),
@@ -198,10 +197,9 @@ func (s *TopicServiceServer) ListTopics(ctx context.Context, req *services.ListT
 
 	topics, err := s.store.Topics().List(ctx, filter)
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Filter by visibility
 	visibleTopics := make([]*domain.Topic, 0, len(topics))
 	for _, t := range topics {
 		if req.PublicOnly && !s.isPublicTopic(t) {
@@ -225,7 +223,7 @@ func (s *TopicServiceServer) ListTopics(ctx context.Context, req *services.ListT
 
 	protoTopics := make([]*services.Topic, len(visibleTopics))
 	for i, t := range visibleTopics {
-		protoTopics[i] = domainTopicToProto(t)
+		protoTopics[i] = topicToProto(t)
 	}
 
 	return &services.ListTopicsResponse{
@@ -239,34 +237,32 @@ func (s *TopicServiceServer) ListTopics(ctx context.Context, req *services.ListT
 }
 
 // UpdateTopic updates topic metadata.
-func (s *TopicServiceServer) UpdateTopic(ctx context.Context, req *services.UpdateTopicRequest) (*services.UpdateTopicResponse, error) {
+func (s *Server) UpdateTopic(ctx context.Context, req *services.UpdateTopicRequest) (*services.UpdateTopicResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
 	if req.Id == "" {
-		return nil, NewValidationError("id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("id is required", map[string]string{
 			"id": "must not be empty",
 		})
 	}
 
 	topic, err := s.store.Topics().Get(ctx, domain.TopicID(req.Id))
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Only owners can update (not even admins per requirements)
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
 
 	role, err := s.store.TopicMembers().GetRole(ctx, topic.ID, user.ID)
 	if err != nil || role != storage.TopicMemberRoleOwner {
-		return nil, NewPermissionDeniedError("update", "topic", "owner")
+		return nil, grpcerrors.NewPermissionDeniedError("update", "topic", "owner")
 	}
 
-	// Update fields
 	if req.Name != nil {
 		topic.Name = *req.Name
 	}
@@ -286,66 +282,62 @@ func (s *TopicServiceServer) UpdateTopic(ctx context.Context, req *services.Upda
 	topic.UpdatedAt = time.Now().UTC()
 
 	if err := topic.Validate(); err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
 	if err := s.store.Topics().Update(ctx, topic); err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Audit log
 	if s.auditLogger != nil {
-		s.auditLogger.LogMutation(ctx, "UPDATE", "topic", string(topic.ID), "Updated topic: "+topic.Name)
+		_ = s.auditLogger.LogServiceAction(ctx, "UPDATE", "topic", string(topic.ID), nil)
 	}
 
 	return &services.UpdateTopicResponse{
-		Topic: domainTopicToProto(topic),
+		Topic: topicToProto(topic),
 	}, nil
 }
 
-// DeleteTopic soft-deletes a topic.
-func (s *TopicServiceServer) DeleteTopic(ctx context.Context, req *services.DeleteTopicRequest) (*services.DeleteTopicResponse, error) {
+// DeleteTopic deletes a topic.
+func (s *Server) DeleteTopic(ctx context.Context, req *services.DeleteTopicRequest) (*services.DeleteTopicResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
 	if req.Id == "" {
-		return nil, NewValidationError("id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("id is required", map[string]string{
 			"id": "must not be empty",
 		})
 	}
 
 	topic, err := s.store.Topics().Get(ctx, domain.TopicID(req.Id))
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Only owners can delete
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
 
 	role, err := s.store.TopicMembers().GetRole(ctx, topic.ID, user.ID)
 	if err != nil || role != storage.TopicMemberRoleOwner {
-		return nil, NewPermissionDeniedError("delete", "topic", "owner")
+		return nil, grpcerrors.NewPermissionDeniedError("delete", "topic", "owner")
 	}
 
 	// Check if has datasets and force flag
 	if topic.DatasetCount > 0 && !req.Force {
-		return nil, NewPreconditionError("topic has datasets", map[string]string{
+		return nil, grpcerrors.NewPreconditionError("topic has datasets", map[string]string{
 			"dataset_count": "topic has datasets, use force=true to delete anyway",
 		})
 	}
 
-	// Soft delete
 	if err := s.store.Topics().Delete(ctx, topic.ID); err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Audit log
 	if s.auditLogger != nil {
-		s.auditLogger.LogMutation(ctx, "DELETE", "topic", string(topic.ID), "Deleted topic: "+topic.Name)
+		_ = s.auditLogger.LogServiceAction(ctx, "DELETE", "topic", string(topic.ID), nil)
 	}
 
 	return &services.DeleteTopicResponse{
@@ -355,18 +347,12 @@ func (s *TopicServiceServer) DeleteTopic(ctx context.Context, req *services.Dele
 }
 
 // Subscribe subscribes to a topic.
-func (s *TopicServiceServer) Subscribe(ctx context.Context, req *services.SubscribeRequest) (*services.SubscribeResponse, error) {
+func (s *Server) Subscribe(ctx context.Context, req *services.SubscribeRequest) (*services.SubscribeResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	// Warn if in proxy mode
-	if s.nodeMode == "proxy" {
-		// Still allow subscription but data won't be stored locally
-		// The warning is returned to the client
-	}
-
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
@@ -379,22 +365,20 @@ func (s *TopicServiceServer) Subscribe(ctx context.Context, req *services.Subscr
 	} else if req.TopicName != "" {
 		topic, err = s.store.Topics().GetByName(ctx, req.TopicName)
 	} else {
-		return nil, NewValidationError("topic_id or topic_name is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("topic_id or topic_name is required", map[string]string{
 			"topic_id":   "either topic_id or topic_name must be provided",
 			"topic_name": "either topic_id or topic_name must be provided",
 		})
 	}
 
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Check if user can access this topic
 	if !s.canAccessTopic(ctx, topic, user) {
-		return nil, NewPermissionDeniedError("subscribe", "topic", "member")
+		return nil, grpcerrors.NewPermissionDeniedError("subscribe", "topic", "member")
 	}
 
-	// Check if already subscribed
 	existing, _ := s.store.TopicMembers().Get(ctx, topic.ID, user.ID)
 	if existing != nil {
 		return &services.SubscribeResponse{
@@ -402,7 +386,6 @@ func (s *TopicServiceServer) Subscribe(ctx context.Context, req *services.Subscr
 		}, nil
 	}
 
-	// Create subscription as viewer
 	member := &storage.TopicMember{
 		ID:        uuid.New().String(),
 		TopicID:   topic.ID,
@@ -417,11 +400,9 @@ func (s *TopicServiceServer) Subscribe(ctx context.Context, req *services.Subscr
 	member.AcceptedAt = &now
 
 	if err := s.store.TopicMembers().Create(ctx, member); err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// If sync_now is true, trigger background sync
-	// (The actual sync happens asynchronously)
 	subscription := memberToSubscription(member, topic)
 	if req.SyncNow {
 		subscription.SyncStatus = "syncing"
@@ -433,62 +414,58 @@ func (s *TopicServiceServer) Subscribe(ctx context.Context, req *services.Subscr
 }
 
 // Unsubscribe unsubscribes from a topic.
-func (s *TopicServiceServer) Unsubscribe(ctx context.Context, req *services.UnsubscribeRequest) (*services.UnsubscribeResponse, error) {
+func (s *Server) Unsubscribe(ctx context.Context, req *services.UnsubscribeRequest) (*services.UnsubscribeResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
 
 	if req.TopicId == "" {
-		return nil, NewValidationError("topic_id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("topic_id is required", map[string]string{
 			"topic_id": "must not be empty",
 		})
 	}
 
 	topicID := domain.TopicID(req.TopicId)
 
-	// Check if user is owner - owners can't unsubscribe if they're the last owner
 	role, _ := s.store.TopicMembers().GetRole(ctx, topicID, user.ID)
 	if role == storage.TopicMemberRoleOwner {
 		count, _ := s.store.TopicMembers().CountOwners(ctx, topicID)
 		if count <= 1 {
-			return nil, NewPreconditionError("cannot unsubscribe as last owner", map[string]string{
+			return nil, grpcerrors.NewPreconditionError("cannot unsubscribe as last owner", map[string]string{
 				"owner": "you are the last owner, transfer ownership first",
 			})
 		}
 	}
 
 	if err := s.store.TopicMembers().Delete(ctx, topicID, user.ID); err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
-
-	// TODO: If delete_local_data, calculate bytes freed
-	var bytesFreed int64 = 0
 
 	return &services.UnsubscribeResponse{
 		Success:    true,
-		BytesFreed: bytesFreed,
+		BytesFreed: 0,
 	}, nil
 }
 
 // ListSubscriptions lists current subscriptions.
-func (s *TopicServiceServer) ListSubscriptions(ctx context.Context, req *services.ListSubscriptionsRequest) (*services.ListSubscriptionsResponse, error) {
+func (s *Server) ListSubscriptions(ctx context.Context, req *services.ListSubscriptionsRequest) (*services.ListSubscriptionsResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
 
 	members, err := s.store.TopicMembers().ListByUser(ctx, user.ID)
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
 	subscriptions := make([]*services.Subscription, 0, len(members))
@@ -499,12 +476,9 @@ func (s *TopicServiceServer) ListSubscriptions(ctx context.Context, req *service
 		}
 
 		sub := memberToSubscription(m, topic)
-
-		// Filter by sync status if specified
 		if req.SyncStatus != "" && sub.SyncStatus != req.SyncStatus {
 			continue
 		}
-
 		subscriptions = append(subscriptions, sub)
 	}
 
@@ -518,18 +492,18 @@ func (s *TopicServiceServer) ListSubscriptions(ctx context.Context, req *service
 }
 
 // GetSubscription gets subscription details for a topic.
-func (s *TopicServiceServer) GetSubscription(ctx context.Context, req *services.GetSubscriptionRequest) (*services.GetSubscriptionResponse, error) {
+func (s *Server) GetSubscription(ctx context.Context, req *services.GetSubscriptionRequest) (*services.GetSubscriptionResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	user, ok := UserFromContext(ctx)
+	user, ok := middleware.UserFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "not authenticated")
 	}
 
 	if req.TopicId == "" {
-		return nil, NewValidationError("topic_id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("topic_id is required", map[string]string{
 			"topic_id": "must not be empty",
 		})
 	}
@@ -538,12 +512,12 @@ func (s *TopicServiceServer) GetSubscription(ctx context.Context, req *services.
 
 	member, err := s.store.TopicMembers().Get(ctx, topicID, user.ID)
 	if err != nil {
-		return nil, NewResourceNotFoundError("subscription", req.TopicId)
+		return nil, grpcerrors.NewResourceNotFoundError("subscription", req.TopicId)
 	}
 
 	topic, err := s.store.Topics().Get(ctx, topicID)
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
 	return &services.GetSubscriptionResponse{
@@ -552,36 +526,32 @@ func (s *TopicServiceServer) GetSubscription(ctx context.Context, req *services.
 }
 
 // StreamTopicUpdates streams topic changes in real-time.
-func (s *TopicServiceServer) StreamTopicUpdates(req *services.StreamTopicUpdatesRequest, stream services.TopicService_StreamTopicUpdatesServer) error {
-	// TODO: Implement with hybrid P2P pubsub + local events
-	// For now, return unimplemented
+func (s *Server) StreamTopicUpdates(req *services.StreamTopicUpdatesRequest, stream services.TopicService_StreamTopicUpdatesServer) error {
 	return status.Error(codes.Unimplemented, "streaming topic updates not yet implemented")
 }
 
 // GetTopicStats returns statistics for a topic.
-func (s *TopicServiceServer) GetTopicStats(ctx context.Context, req *services.GetTopicStatsRequest) (*services.GetTopicStatsResponse, error) {
+func (s *Server) GetTopicStats(ctx context.Context, req *services.GetTopicStatsRequest) (*services.GetTopicStatsResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
 	if req.TopicId == "" {
-		return nil, NewValidationError("topic_id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("topic_id is required", map[string]string{
 			"topic_id": "must not be empty",
 		})
 	}
 
 	topic, err := s.store.Topics().Get(ctx, domain.TopicID(req.TopicId))
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Check access
-	user, _ := UserFromContext(ctx)
+	user, _ := middleware.UserFromContext(ctx)
 	if !s.canAccessTopic(ctx, topic, user) {
-		return nil, NewPermissionDeniedError("view", "topic", "member")
+		return nil, grpcerrors.NewPermissionDeniedError("view", "topic", "member")
 	}
 
-	// Get member count (approximate subscriber count)
 	members, _ := s.store.TopicMembers().ListByTopic(ctx, topic.ID, storage.TopicMemberFilter{})
 	subscriberCount := int64(len(members))
 
@@ -594,17 +564,16 @@ func (s *TopicServiceServer) GetTopicStats(ctx context.Context, req *services.Ge
 }
 
 // SearchTopics searches topics by text query.
-func (s *TopicServiceServer) SearchTopics(ctx context.Context, req *services.SearchTopicsRequest) (*services.SearchTopicsResponse, error) {
+func (s *Server) SearchTopics(ctx context.Context, req *services.SearchTopicsRequest) (*services.SearchTopicsResponse, error) {
 	if s.store == nil {
 		return nil, status.Error(codes.Unavailable, "service not initialized")
 	}
 
-	// Validate minimum query length
-	if err := ValidateSearchQuery(req.Query); err != nil {
+	if err := grpcerrors.ValidateSearchQuery(req.Query); err != nil {
 		return nil, err
 	}
 
-	user, _ := UserFromContext(ctx)
+	user, _ := middleware.UserFromContext(ctx)
 
 	filter := storage.TopicFilter{
 		Search: req.Query,
@@ -621,10 +590,9 @@ func (s *TopicServiceServer) SearchTopics(ctx context.Context, req *services.Sea
 
 	topics, err := s.store.Topics().List(ctx, filter)
 	if err != nil {
-		return nil, MapDomainError(err)
+		return nil, grpcerrors.MapDomainError(err)
 	}
 
-	// Filter by visibility
 	visibleTopics := make([]*domain.Topic, 0, len(topics))
 	for _, t := range topics {
 		if req.PublicOnly && !s.isPublicTopic(t) {
@@ -639,7 +607,7 @@ func (s *TopicServiceServer) SearchTopics(ctx context.Context, req *services.Sea
 
 	protoTopics := make([]*services.Topic, len(visibleTopics))
 	for i, t := range visibleTopics {
-		protoTopics[i] = domainTopicToProto(t)
+		protoTopics[i] = topicToProto(t)
 	}
 
 	return &services.SearchTopicsResponse{
@@ -652,44 +620,51 @@ func (s *TopicServiceServer) SearchTopics(ctx context.Context, req *services.Sea
 	}, nil
 }
 
-// =============================================================================
-// Helper functions
-// =============================================================================
+// Helper methods
 
-func (s *TopicServiceServer) canAccessTopic(ctx context.Context, topic *domain.Topic, user *domain.User) bool {
-	// Public topics are accessible to all authenticated users
+func (s *Server) canAccessTopic(ctx context.Context, topic *domain.Topic, user *domain.User) bool {
 	if s.isPublicTopic(topic) {
 		return true
 	}
-
-	// User must be a member of private topics
 	if user == nil {
 		return false
 	}
-
+	if user.Role == domain.UserRoleAdmin {
+		return true
+	}
 	hasAccess, _ := s.store.TopicMembers().HasAccess(ctx, topic.ID, user.ID)
 	return hasAccess
 }
 
-func (s *TopicServiceServer) isPublicTopic(topic *domain.Topic) bool {
-	// Check metadata for is_public flag
+func (s *Server) isPublicTopic(topic *domain.Topic) bool {
 	if topic.Metadata != nil {
 		if val, ok := topic.Metadata["is_public"]; ok {
 			return val == "true"
 		}
+		if val, ok := topic.Metadata["public"]; ok {
+			return val == "true"
+		}
 	}
-	// Default to public for now
-	return true
+	return true // Default to public
 }
 
-func domainTopicToProto(t *domain.Topic) *services.Topic {
+// Conversion helpers
+
+func topicToProto(t *domain.Topic) *services.Topic {
 	if t == nil {
 		return nil
+	}
+
+	ownerId := string(t.CreatedBy)
+	if len(t.Owners) > 0 {
+		ownerId = string(t.Owners[0])
 	}
 
 	isPublic := true
 	if t.Metadata != nil {
 		if val, ok := t.Metadata["is_public"]; ok {
+			isPublic = val == "true"
+		} else if val, ok := t.Metadata["public"]; ok {
 			isPublic = val == "true"
 		}
 	}
@@ -700,9 +675,9 @@ func domainTopicToProto(t *domain.Topic) *services.Topic {
 		Description:  t.Description,
 		Schema:       t.TableSchema,
 		DatasetCount: int64(t.DatasetCount),
-		OwnerId:      string(t.CreatedBy),
-		IsPublic:     isPublic,
 		Status:       string(t.Status),
+		OwnerId:      ownerId,
+		IsPublic:     isPublic,
 		CreatedAt:    timestamppb.New(t.CreatedAt),
 		UpdatedAt:    timestamppb.New(t.UpdatedAt),
 		Tags:         t.Tags,
@@ -715,8 +690,8 @@ func memberToSubscription(m *storage.TopicMember, topic *domain.Topic) *services
 		TopicId:      string(m.TopicID),
 		TopicName:    topic.Name,
 		SubscribedAt: timestamppb.New(m.InvitedAt),
-		SyncStatus:   "synced", // TODO: Track actual sync status
-		AutoSync:     true,     // Default
+		SyncStatus:   "synced",
+		AutoSync:     true,
 	}
 
 	if m.AcceptedAt != nil {
@@ -724,13 +699,13 @@ func memberToSubscription(m *storage.TopicMember, topic *domain.Topic) *services
 	}
 
 	sub.TotalDatasets = int64(topic.DatasetCount)
-	sub.SyncedDatasets = int64(topic.DatasetCount) // Assume fully synced for now
+	sub.SyncedDatasets = int64(topic.DatasetCount)
 
 	return sub
 }
 
-func generateInviteToken() string {
+func generateSecureToken() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }

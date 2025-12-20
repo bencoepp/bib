@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package interfaces defines contracts for the gRPC layer.
+package interfaces
 
 import (
 	"context"
@@ -79,4 +79,14 @@ type ComponentHealthStatus struct {
 
 	// SubComponents contains health status of sub-components.
 	SubComponents map[string]ComponentHealthStatus
+}
+
+// AuditLogger defines the interface for audit logging in services.
+type AuditLogger interface {
+	// LogServiceAction logs a service-level action for auditing.
+	LogServiceAction(ctx context.Context, action, resourceType, resourceID string, details map[string]interface{}) error
+
+	// LogMutation logs a mutation operation directly from a service.
+	// Deprecated: Use LogServiceAction instead.
+	LogMutation(ctx context.Context, action, resource, resourceID, description string) error
 }

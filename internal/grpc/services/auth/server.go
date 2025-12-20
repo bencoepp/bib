@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package auth implements the AuthService gRPC service.
+package auth
 
 import (
 	"context"
@@ -26,8 +26,17 @@ const (
 	challengeTTL = 30 * time.Second
 )
 
-// AuthServiceServer implements the AuthService gRPC service.
-type AuthServiceServer struct {
+// Config holds configuration for the auth service server.
+type Config struct {
+	AuthService *auth.Service
+	AuthConfig  config.AuthConfig
+	NodeID      string
+	NodeMode    string
+	Version     string
+}
+
+// Server implements the AuthService gRPC service.
+type Server struct {
 	services.UnimplementedAuthServiceServer
 
 	authService    *auth.Service
@@ -38,25 +47,16 @@ type AuthServiceServer struct {
 	version        string
 }
 
-// AuthServiceConfig holds configuration for the AuthServiceServer.
-type AuthServiceConfig struct {
-	AuthService *auth.Service
-	AuthConfig  config.AuthConfig
-	NodeID      string
-	NodeMode    string
-	Version     string
-}
-
-// NewAuthServiceServer creates a new AuthServiceServer.
-func NewAuthServiceServer() *AuthServiceServer {
-	return &AuthServiceServer{
+// NewServer creates a new auth service server.
+func NewServer() *Server {
+	return &Server{
 		challengeStore: auth.NewChallengeStore(challengeTTL),
 	}
 }
 
-// NewAuthServiceServerWithConfig creates a new AuthServiceServer with dependencies.
-func NewAuthServiceServerWithConfig(cfg AuthServiceConfig) *AuthServiceServer {
-	return &AuthServiceServer{
+// NewServerWithConfig creates a new auth service server with dependencies.
+func NewServerWithConfig(cfg Config) *Server {
+	return &Server{
 		authService:    cfg.AuthService,
 		challengeStore: auth.NewChallengeStore(challengeTTL),
 		cfg:            cfg.AuthConfig,
@@ -67,7 +67,7 @@ func NewAuthServiceServerWithConfig(cfg AuthServiceConfig) *AuthServiceServer {
 }
 
 // Challenge requests a challenge for signature-based authentication.
-func (s *AuthServiceServer) Challenge(_ context.Context, req *services.ChallengeRequest) (*services.ChallengeResponse, error) {
+func (s *Server) Challenge(_ context.Context, req *services.ChallengeRequest) (*services.ChallengeResponse, error) {
 	if s.challengeStore == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
@@ -97,7 +97,7 @@ func (s *AuthServiceServer) Challenge(_ context.Context, req *services.Challenge
 }
 
 // VerifyChallenge verifies a signed challenge and returns a session token.
-func (s *AuthServiceServer) VerifyChallenge(ctx context.Context, req *services.VerifyChallengeRequest) (*services.VerifyChallengeResponse, error) {
+func (s *Server) VerifyChallenge(ctx context.Context, req *services.VerifyChallengeRequest) (*services.VerifyChallengeResponse, error) {
 	if s.challengeStore == nil || s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
@@ -168,7 +168,7 @@ func (s *AuthServiceServer) VerifyChallenge(ctx context.Context, req *services.V
 }
 
 // Logout ends the current session.
-func (s *AuthServiceServer) Logout(ctx context.Context, req *services.LogoutRequest) (*services.LogoutResponse, error) {
+func (s *Server) Logout(ctx context.Context, req *services.LogoutRequest) (*services.LogoutResponse, error) {
 	if s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
@@ -177,7 +177,7 @@ func (s *AuthServiceServer) Logout(ctx context.Context, req *services.LogoutRequ
 	if sessionID == "" {
 		// Use current session from metadata
 		var err error
-		sessionID, err = extractSessionToken(ctx)
+		sessionID, err = ExtractSessionToken(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -191,12 +191,12 @@ func (s *AuthServiceServer) Logout(ctx context.Context, req *services.LogoutRequ
 }
 
 // RefreshSession extends the current session's expiry.
-func (s *AuthServiceServer) RefreshSession(ctx context.Context, _ *services.RefreshSessionRequest) (*services.RefreshSessionResponse, error) {
+func (s *Server) RefreshSession(ctx context.Context, _ *services.RefreshSessionRequest) (*services.RefreshSessionResponse, error) {
 	if s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
 
-	sessionID, err := extractSessionToken(ctx)
+	sessionID, err := ExtractSessionToken(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (s *AuthServiceServer) RefreshSession(ctx context.Context, _ *services.Refr
 }
 
 // ValidateSession checks if a session token is still valid.
-func (s *AuthServiceServer) ValidateSession(ctx context.Context, req *services.ValidateSessionRequest) (*services.ValidateSessionResponse, error) {
+func (s *Server) ValidateSession(ctx context.Context, req *services.ValidateSessionRequest) (*services.ValidateSessionResponse, error) {
 	if s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
@@ -275,7 +275,7 @@ func (s *AuthServiceServer) ValidateSession(ctx context.Context, req *services.V
 }
 
 // GetAuthConfig returns the authentication configuration.
-func (s *AuthServiceServer) GetAuthConfig(_ context.Context, _ *services.GetAuthConfigRequest) (*services.GetAuthConfigResponse, error) {
+func (s *Server) GetAuthConfig(_ context.Context, _ *services.GetAuthConfigRequest) (*services.GetAuthConfigResponse, error) {
 	sessionTimeout := int64(s.cfg.SessionTimeout.Seconds())
 	if sessionTimeout == 0 {
 		sessionTimeout = 86400 // 24 hours default
@@ -295,7 +295,7 @@ func (s *AuthServiceServer) GetAuthConfig(_ context.Context, _ *services.GetAuth
 }
 
 // GetPublicKeyInfo returns information about a public key.
-func (s *AuthServiceServer) GetPublicKeyInfo(ctx context.Context, req *services.GetPublicKeyInfoRequest) (*services.GetPublicKeyInfoResponse, error) {
+func (s *Server) GetPublicKeyInfo(ctx context.Context, req *services.GetPublicKeyInfoRequest) (*services.GetPublicKeyInfoResponse, error) {
 	if len(req.PublicKey) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "public_key is required")
 	}
@@ -326,13 +326,13 @@ func (s *AuthServiceServer) GetPublicKeyInfo(ctx context.Context, req *services.
 }
 
 // ListMySessions lists all active sessions for the current user.
-func (s *AuthServiceServer) ListMySessions(ctx context.Context, req *services.ListMySessionsRequest) (*services.ListMySessionsResponse, error) {
+func (s *Server) ListMySessions(ctx context.Context, req *services.ListMySessionsRequest) (*services.ListMySessionsResponse, error) {
 	if s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
 
 	// Get current session to identify user
-	sessionID, err := extractSessionToken(ctx)
+	sessionID, err := ExtractSessionToken(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +371,7 @@ func (s *AuthServiceServer) ListMySessions(ctx context.Context, req *services.Li
 }
 
 // RevokeSession revokes a specific session.
-func (s *AuthServiceServer) RevokeSession(ctx context.Context, req *services.RevokeSessionRequest) (*services.RevokeSessionResponse, error) {
+func (s *Server) RevokeSession(ctx context.Context, req *services.RevokeSessionRequest) (*services.RevokeSessionResponse, error) {
 	if s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
@@ -381,7 +381,7 @@ func (s *AuthServiceServer) RevokeSession(ctx context.Context, req *services.Rev
 	}
 
 	// Get current session to verify ownership
-	currentSessionID, err := extractSessionToken(ctx)
+	currentSessionID, err := ExtractSessionToken(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -410,13 +410,13 @@ func (s *AuthServiceServer) RevokeSession(ctx context.Context, req *services.Rev
 }
 
 // RevokeAllSessions revokes all sessions except the current one.
-func (s *AuthServiceServer) RevokeAllSessions(ctx context.Context, req *services.RevokeAllSessionsRequest) (*services.RevokeAllSessionsResponse, error) {
+func (s *Server) RevokeAllSessions(ctx context.Context, req *services.RevokeAllSessionsRequest) (*services.RevokeAllSessionsResponse, error) {
 	if s.authService == nil {
 		return nil, status.Error(codes.Unavailable, "auth service not initialized")
 	}
 
 	// Get current session
-	currentSessionID, err := extractSessionToken(ctx)
+	currentSessionID, err := ExtractSessionToken(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func (s *AuthServiceServer) RevokeAllSessions(ctx context.Context, req *services
 
 // SetDependencies sets the service dependencies after creation.
 // This is useful when dependencies aren't available at construction time.
-func (s *AuthServiceServer) SetDependencies(authSvc *auth.Service, cfg config.AuthConfig, nodeID, nodeMode, version string) {
+func (s *Server) SetDependencies(authSvc *auth.Service, cfg config.AuthConfig, nodeID, nodeMode, version string) {
 	s.authService = authSvc
 	s.cfg = cfg
 	s.nodeID = nodeID
@@ -460,14 +460,14 @@ func (s *AuthServiceServer) SetDependencies(authSvc *auth.Service, cfg config.Au
 }
 
 // Stop stops the auth service (cleanup resources).
-func (s *AuthServiceServer) Stop() {
+func (s *Server) Stop() {
 	if s.challengeStore != nil {
 		s.challengeStore.Stop()
 	}
 }
 
-// extractSessionToken extracts the session token from gRPC metadata.
-func extractSessionToken(ctx context.Context) (string, error) {
+// ExtractSessionToken extracts the session token from gRPC metadata.
+func ExtractSessionToken(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return "", status.Error(codes.Unauthenticated, "missing metadata")

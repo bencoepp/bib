@@ -16,6 +16,8 @@ import (
 	"bib/internal/cluster"
 	"bib/internal/config"
 	grpcpkg "bib/internal/grpc"
+	"bib/internal/grpc/interfaces"
+	"bib/internal/grpc/middleware"
 	"bib/internal/logger"
 	"bib/internal/p2p"
 	"bib/internal/storage"
@@ -859,7 +861,7 @@ func (d *Daemon) startGRPCServer(ctx context.Context) error {
 	if d.cfg.Database.Audit.Enabled && d.store != nil {
 		auditRepo := d.store.Audit()
 		if auditRepo != nil {
-			serverCfg.AuditMiddleware = grpcpkg.NewAuditMiddleware(auditRepo, grpcpkg.AuditConfig{
+			serverCfg.AuditMiddleware = middleware.NewAuditMiddleware(auditRepo, middleware.AuditConfig{
 				Enabled:             true,
 				LogFailedOperations: true,
 				NodeID:              d.NodeID(),
@@ -1161,8 +1163,8 @@ func (d *Daemon) ListenAddresses() []string {
 }
 
 // HealthConfig returns configuration relevant to health reporting.
-func (d *Daemon) HealthConfig() grpcpkg.HealthProviderConfig {
-	return grpcpkg.HealthProviderConfig{
+func (d *Daemon) HealthConfig() interfaces.HealthProviderConfig {
+	return interfaces.HealthProviderConfig{
 		P2PEnabled:        d.cfg.P2P.Enabled,
 		ClusterEnabled:    d.cfg.Cluster.Enabled,
 		BandwidthMetering: d.cfg.P2P.Metrics.BandwidthMetering,

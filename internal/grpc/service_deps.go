@@ -2,15 +2,27 @@
 package grpc
 
 import (
-	"bib/internal/auth"
+	"time"
+
+	internalauth "bib/internal/auth"
 	"bib/internal/cluster"
 	"bib/internal/config"
+	"bib/internal/grpc/interfaces"
+	"bib/internal/grpc/middleware"
+	"bib/internal/grpc/services/admin"
+	authsvc "bib/internal/grpc/services/auth"
+	"bib/internal/grpc/services/breakglass"
+	"bib/internal/grpc/services/dataset"
+	"bib/internal/grpc/services/job"
+	"bib/internal/grpc/services/node"
+	"bib/internal/grpc/services/query"
+	"bib/internal/grpc/services/topic"
+	"bib/internal/grpc/services/user"
 	"bib/internal/p2p"
 	"bib/internal/storage"
 	"bib/internal/storage/backup"
 	"bib/internal/storage/blob"
-	"bib/internal/storage/breakglass"
-	"time"
+	breakglassmgr "bib/internal/storage/breakglass"
 )
 
 // ServiceDependencies holds all dependencies needed by gRPC services.
@@ -21,7 +33,7 @@ type ServiceDependencies struct {
 	BlobStore blob.Store
 
 	// Authentication
-	AuthService *auth.Service
+	AuthService *internalauth.Service
 	AuthConfig  config.AuthConfig
 
 	// P2P networking
@@ -35,7 +47,7 @@ type ServiceDependencies struct {
 	BackupMgr *backup.Manager
 
 	// Break glass emergency access
-	BreakGlassMgr *breakglass.Manager
+	BreakGlassMgr *breakglassmgr.Manager
 
 	// Configuration
 	Config     interface{} // Current config for admin service
@@ -52,18 +64,15 @@ type ServiceDependencies struct {
 	ShutdownFunc func()
 
 	// Audit
-	AuditMiddleware *AuditMiddleware
+	AuditMiddleware *middleware.AuditMiddleware
 }
 
 // ConfigureServices configures all service servers with the provided dependencies.
 // This should be called after creating the Server but before starting it.
 func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
-	// Configure HealthService
-	// Health service uses HealthProvider interface, configured separately via SetProvider
-
 	// Configure AuthService
 	if deps.AuthService != nil {
-		ss.Auth = NewAuthServiceServerWithConfig(AuthServiceConfig{
+		ss.Auth = authsvc.NewServerWithConfig(authsvc.Config{
 			AuthService: deps.AuthService,
 			AuthConfig:  deps.AuthConfig,
 			NodeID:      deps.NodeID,
@@ -74,7 +83,7 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 
 	// Configure UserService
 	if deps.Store != nil {
-		ss.User = NewUserServiceServerWithConfig(UserServiceConfig{
+		ss.User = user.NewServerWithConfig(user.Config{
 			Store:       deps.Store,
 			AuditLogger: deps.AuditMiddleware,
 		})
@@ -82,7 +91,7 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 
 	// Configure NodeService
 	if deps.NodeManager != nil {
-		ss.Node = NewNodeServiceServerWithConfig(NodeServiceConfig{
+		ss.Node = node.NewServerWithConfig(node.Config{
 			NodeManager:     deps.NodeManager,
 			Store:           deps.Store,
 			AuditLogger:     deps.AuditMiddleware,
@@ -92,7 +101,7 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 
 	// Configure TopicService
 	if deps.Store != nil {
-		ss.Topic = NewTopicServiceServerWithConfig(TopicServiceConfig{
+		ss.Topic = topic.NewServerWithConfig(topic.Config{
 			Store:       deps.Store,
 			AuditLogger: deps.AuditMiddleware,
 			NodeMode:    deps.NodeMode,
@@ -101,7 +110,7 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 
 	// Configure DatasetService
 	if deps.Store != nil {
-		ss.Dataset = NewDatasetServiceServerWithConfig(DatasetServiceConfig{
+		ss.Dataset = dataset.NewServerWithConfig(dataset.Config{
 			Store:       deps.Store,
 			BlobStore:   deps.BlobStore,
 			AuditLogger: deps.AuditMiddleware,
@@ -110,7 +119,7 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 	}
 
 	// Configure AdminService
-	ss.Admin = NewAdminServiceServerWithConfig(AdminServiceConfig{
+	ss.Admin = admin.NewServerWithConfig(admin.Config{
 		Store:        deps.Store,
 		ClusterMgr:   deps.ClusterMgr,
 		BackupMgr:    deps.BackupMgr,
@@ -125,18 +134,18 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 
 	// Configure QueryService
 	if deps.Store != nil {
-		ss.Query = NewQueryServiceServerWithConfig(QueryServiceConfig{
+		ss.Query = query.NewServerWithConfig(query.Config{
 			Store:       deps.Store,
 			AuditLogger: deps.AuditMiddleware,
 		})
 	}
 
-	// Configure JobService (stub for now, awaiting Phase 3)
-	ss.Job = NewJobServiceServer()
+	// Configure JobService
+	ss.Job = job.NewServer()
 
 	// Configure BreakGlassService
 	if deps.BreakGlassMgr != nil {
-		ss.BreakGlass = NewBreakGlassServiceServerWithConfig(BreakGlassServiceConfig{
+		ss.BreakGlass = breakglass.NewServerWithConfig(breakglass.Config{
 			Manager:     deps.BreakGlassMgr,
 			AuditLogger: deps.AuditMiddleware,
 			NodeID:      deps.NodeID,
@@ -146,7 +155,7 @@ func (ss *ServiceServers) ConfigureServices(deps ServiceDependencies) {
 
 // SetHealthProvider sets the health provider for the health service.
 // This is separate because the Daemon itself implements HealthProvider.
-func (ss *ServiceServers) SetHealthProvider(provider HealthProvider) {
+func (ss *ServiceServers) SetHealthProvider(provider interfaces.HealthProvider) {
 	if ss.Health != nil {
 		ss.Health.SetProvider(provider)
 	}

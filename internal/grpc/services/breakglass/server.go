@@ -1,11 +1,14 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package breakglass implements the BreakGlassService gRPC service.
+package breakglass
 
 import (
 	"context"
 	"time"
 
 	services "bib/api/gen/go/bib/v1/services"
+	grpcerrors "bib/internal/grpc/errors"
+	"bib/internal/grpc/interfaces"
+	"bib/internal/grpc/middleware"
 	"bib/internal/storage/breakglass"
 
 	"google.golang.org/grpc/codes"
@@ -14,29 +17,29 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// BreakGlassServiceServer implements the BreakGlassService gRPC service.
-type BreakGlassServiceServer struct {
-	services.UnimplementedBreakGlassServiceServer
-	manager     *breakglass.Manager
-	auditLogger *AuditMiddleware
-	nodeID      string
-}
-
-// BreakGlassServiceConfig holds configuration for BreakGlassServiceServer.
-type BreakGlassServiceConfig struct {
+// Config holds configuration for the breakglass service server.
+type Config struct {
 	Manager     *breakglass.Manager
-	AuditLogger *AuditMiddleware
+	AuditLogger interfaces.AuditLogger
 	NodeID      string
 }
 
-// NewBreakGlassServiceServer creates a new BreakGlassServiceServer.
-func NewBreakGlassServiceServer() *BreakGlassServiceServer {
-	return &BreakGlassServiceServer{}
+// Server implements the BreakGlassService gRPC service.
+type Server struct {
+	services.UnimplementedBreakGlassServiceServer
+	manager     *breakglass.Manager
+	auditLogger interfaces.AuditLogger
+	nodeID      string
 }
 
-// NewBreakGlassServiceServerWithConfig creates a new BreakGlassServiceServer with dependencies.
-func NewBreakGlassServiceServerWithConfig(cfg BreakGlassServiceConfig) *BreakGlassServiceServer {
-	return &BreakGlassServiceServer{
+// NewServer creates a new breakglass service server.
+func NewServer() *Server {
+	return &Server{}
+}
+
+// NewServerWithConfig creates a new breakglass service server with dependencies.
+func NewServerWithConfig(cfg Config) *Server {
+	return &Server{
 		manager:     cfg.Manager,
 		auditLogger: cfg.AuditLogger,
 		nodeID:      cfg.NodeID,
@@ -44,7 +47,7 @@ func NewBreakGlassServiceServerWithConfig(cfg BreakGlassServiceConfig) *BreakGla
 }
 
 // GetStatus returns the current break glass configuration and session status.
-func (s *BreakGlassServiceServer) GetStatus(ctx context.Context, req *services.GetBreakGlassStatusRequest) (*services.GetBreakGlassStatusResponse, error) {
+func (s *Server) GetStatus(ctx context.Context, req *services.GetBreakGlassStatusRequest) (*services.GetBreakGlassStatusResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
@@ -70,13 +73,13 @@ func (s *BreakGlassServiceServer) GetStatus(ctx context.Context, req *services.G
 }
 
 // CreateChallenge creates an authentication challenge for a user.
-func (s *BreakGlassServiceServer) CreateChallenge(ctx context.Context, req *services.CreateBreakGlassChallengeRequest) (*services.CreateBreakGlassChallengeResponse, error) {
+func (s *Server) CreateChallenge(ctx context.Context, req *services.CreateBreakGlassChallengeRequest) (*services.CreateBreakGlassChallengeResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
 
 	if req.Username == "" {
-		return nil, NewValidationError("username is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("username is required", map[string]string{
 			"username": "must not be empty",
 		})
 	}
@@ -95,7 +98,7 @@ func (s *BreakGlassServiceServer) CreateChallenge(ctx context.Context, req *serv
 }
 
 // EnableSession enables a break glass session after successful authentication.
-func (s *BreakGlassServiceServer) EnableSession(ctx context.Context, req *services.EnableBreakGlassSessionRequest) (*services.EnableBreakGlassSessionResponse, error) {
+func (s *Server) EnableSession(ctx context.Context, req *services.EnableBreakGlassSessionRequest) (*services.EnableBreakGlassSessionResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
@@ -112,7 +115,7 @@ func (s *BreakGlassServiceServer) EnableSession(ctx context.Context, req *servic
 		violations["reason"] = "must not be empty"
 	}
 	if len(violations) > 0 {
-		return nil, NewValidationError("invalid enable session request", violations)
+		return nil, grpcerrors.NewValidationError("invalid enable session request", violations)
 	}
 
 	// Verify the challenge
@@ -129,7 +132,7 @@ func (s *BreakGlassServiceServer) EnableSession(ctx context.Context, req *servic
 
 	// Get requester info
 	requestedBy := "unknown"
-	if authUser, ok := UserFromContext(ctx); ok && authUser != nil {
+	if authUser, ok := middleware.UserFromContext(ctx); ok && authUser != nil {
 		requestedBy = authUser.Name
 	}
 
@@ -141,7 +144,9 @@ func (s *BreakGlassServiceServer) EnableSession(ctx context.Context, req *servic
 
 	// Audit log
 	if s.auditLogger != nil {
-		_ = s.auditLogger.LogMutation(ctx, "DDL", "breakglass", session.ID, "Break glass session enabled: "+req.Reason)
+		_ = s.auditLogger.LogServiceAction(ctx, "DDL", "breakglass", session.ID, map[string]interface{}{
+			"reason": req.Reason,
+		})
 	}
 
 	return &services.EnableBreakGlassSessionResponse{
@@ -151,14 +156,14 @@ func (s *BreakGlassServiceServer) EnableSession(ctx context.Context, req *servic
 }
 
 // DisableSession disables an active break glass session.
-func (s *BreakGlassServiceServer) DisableSession(ctx context.Context, req *services.DisableBreakGlassSessionRequest) (*services.DisableBreakGlassSessionResponse, error) {
+func (s *Server) DisableSession(ctx context.Context, req *services.DisableBreakGlassSessionRequest) (*services.DisableBreakGlassSessionResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
 
 	// Get the user who is disabling
 	disabledBy := "unknown"
-	if authUser, ok := UserFromContext(ctx); ok && authUser != nil {
+	if authUser, ok := middleware.UserFromContext(ctx); ok && authUser != nil {
 		disabledBy = authUser.Name
 	}
 
@@ -169,7 +174,7 @@ func (s *BreakGlassServiceServer) DisableSession(ctx context.Context, req *servi
 
 	// Audit log
 	if s.auditLogger != nil {
-		_ = s.auditLogger.LogMutation(ctx, "DDL", "breakglass", report.Session.ID, "Break glass session disabled")
+		_ = s.auditLogger.LogServiceAction(ctx, "DDL", "breakglass", report.Session.ID, nil)
 	}
 
 	return &services.DisableBreakGlassSessionResponse{
@@ -178,7 +183,7 @@ func (s *BreakGlassServiceServer) DisableSession(ctx context.Context, req *servi
 }
 
 // GetPendingAcknowledgments returns sessions that need to be acknowledged.
-func (s *BreakGlassServiceServer) GetPendingAcknowledgments(ctx context.Context, req *services.GetPendingAcknowledgmentsRequest) (*services.GetPendingAcknowledgmentsResponse, error) {
+func (s *Server) GetPendingAcknowledgments(ctx context.Context, req *services.GetPendingAcknowledgmentsRequest) (*services.GetPendingAcknowledgmentsResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
@@ -196,20 +201,20 @@ func (s *BreakGlassServiceServer) GetPendingAcknowledgments(ctx context.Context,
 }
 
 // AcknowledgeSession acknowledges a completed break glass session.
-func (s *BreakGlassServiceServer) AcknowledgeSession(ctx context.Context, req *services.AcknowledgeBreakGlassSessionRequest) (*services.AcknowledgeBreakGlassSessionResponse, error) {
+func (s *Server) AcknowledgeSession(ctx context.Context, req *services.AcknowledgeBreakGlassSessionRequest) (*services.AcknowledgeBreakGlassSessionResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
 
 	if req.SessionId == "" {
-		return nil, NewValidationError("session_id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("session_id is required", map[string]string{
 			"session_id": "must not be empty",
 		})
 	}
 
 	// Get acknowledger info
 	acknowledgedBy := "unknown"
-	if authUser, ok := UserFromContext(ctx); ok && authUser != nil {
+	if authUser, ok := middleware.UserFromContext(ctx); ok && authUser != nil {
 		acknowledgedBy = authUser.Name
 	}
 
@@ -219,7 +224,7 @@ func (s *BreakGlassServiceServer) AcknowledgeSession(ctx context.Context, req *s
 
 	// Audit log
 	if s.auditLogger != nil {
-		_ = s.auditLogger.LogMutation(ctx, "UPDATE", "breakglass", req.SessionId, "Break glass session acknowledged")
+		_ = s.auditLogger.LogServiceAction(ctx, "UPDATE", "breakglass", req.SessionId, nil)
 	}
 
 	return &services.AcknowledgeBreakGlassSessionResponse{
@@ -228,13 +233,13 @@ func (s *BreakGlassServiceServer) AcknowledgeSession(ctx context.Context, req *s
 }
 
 // GetSessionReport returns the detailed report for a break glass session.
-func (s *BreakGlassServiceServer) GetSessionReport(ctx context.Context, req *services.GetBreakGlassSessionReportRequest) (*services.GetBreakGlassSessionReportResponse, error) {
+func (s *Server) GetSessionReport(ctx context.Context, req *services.GetBreakGlassSessionReportRequest) (*services.GetBreakGlassSessionReportResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}
 
 	if req.SessionId == "" {
-		return nil, NewValidationError("session_id is required", map[string]string{
+		return nil, grpcerrors.NewValidationError("session_id is required", map[string]string{
 			"session_id": "must not be empty",
 		})
 	}
@@ -250,7 +255,7 @@ func (s *BreakGlassServiceServer) GetSessionReport(ctx context.Context, req *ser
 }
 
 // ListSessions lists all break glass sessions.
-func (s *BreakGlassServiceServer) ListSessions(ctx context.Context, req *services.ListBreakGlassSessionsRequest) (*services.ListBreakGlassSessionsResponse, error) {
+func (s *Server) ListSessions(ctx context.Context, req *services.ListBreakGlassSessionsRequest) (*services.ListBreakGlassSessionsResponse, error) {
 	if s.manager == nil {
 		return nil, status.Error(codes.Unavailable, "break glass service not initialized")
 	}

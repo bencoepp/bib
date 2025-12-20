@@ -1,5 +1,5 @@
-// Package grpc provides gRPC service implementations for the bib daemon.
-package grpc
+// Package health implements the HealthService gRPC service.
+package health
 
 import (
 	"context"
@@ -8,38 +8,39 @@ import (
 	"time"
 
 	services "bib/api/gen/go/bib/v1/services"
+	"bib/internal/grpc/interfaces"
 	"bib/internal/version"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// HealthServiceServer implements the HealthService gRPC service.
-type HealthServiceServer struct {
+// Server implements the HealthService gRPC service.
+type Server struct {
 	services.UnimplementedHealthServiceServer
 
 	mu       sync.RWMutex
-	provider HealthProvider
+	provider interfaces.HealthProvider
 	started  time.Time
 }
 
-// NewHealthServiceServer creates a new HealthServiceServer.
-func NewHealthServiceServer() *HealthServiceServer {
-	return &HealthServiceServer{
+// NewServer creates a new health service server.
+func NewServer() *Server {
+	return &Server{
 		started: time.Now(),
 	}
 }
 
 // SetProvider sets the health provider for the service.
 // This must be called before the service is used.
-func (s *HealthServiceServer) SetProvider(provider HealthProvider) {
+func (s *Server) SetProvider(provider interfaces.HealthProvider) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.provider = provider
 }
 
 // Check performs a health check.
-func (s *HealthServiceServer) Check(ctx context.Context, req *services.HealthCheckRequest) (*services.HealthCheckResponse, error) {
+func (s *Server) Check(ctx context.Context, req *services.HealthCheckRequest) (*services.HealthCheckResponse, error) {
 	s.mu.RLock()
 	provider := s.provider
 	s.mu.RUnlock()
@@ -114,7 +115,7 @@ func (s *HealthServiceServer) Check(ctx context.Context, req *services.HealthChe
 }
 
 // Watch streams health status changes.
-func (s *HealthServiceServer) Watch(req *services.HealthCheckRequest, stream services.HealthService_WatchServer) error {
+func (s *Server) Watch(req *services.HealthCheckRequest, stream services.HealthService_WatchServer) error {
 	// Send initial status
 	resp, err := s.Check(stream.Context(), req)
 	if err != nil {
@@ -152,7 +153,7 @@ func (s *HealthServiceServer) Watch(req *services.HealthCheckRequest, stream ser
 }
 
 // GetNodeInfo returns detailed node information.
-func (s *HealthServiceServer) GetNodeInfo(ctx context.Context, req *services.GetNodeInfoRequest) (*services.GetNodeInfoResponse, error) {
+func (s *Server) GetNodeInfo(ctx context.Context, req *services.GetNodeInfoRequest) (*services.GetNodeInfoResponse, error) {
 	s.mu.RLock()
 	provider := s.provider
 	started := s.started
@@ -219,7 +220,7 @@ func (s *HealthServiceServer) GetNodeInfo(ctx context.Context, req *services.Get
 }
 
 // Ping is a simple connectivity check.
-func (s *HealthServiceServer) Ping(ctx context.Context, req *services.PingRequest) (*services.PingResponse, error) {
+func (s *Server) Ping(ctx context.Context, req *services.PingRequest) (*services.PingResponse, error) {
 	return &services.PingResponse{
 		Timestamp: timestamppb.Now(),
 		Payload:   req.Payload, // Echo back the payload
@@ -227,12 +228,12 @@ func (s *HealthServiceServer) Ping(ctx context.Context, req *services.PingReques
 }
 
 // checkStorageHealth checks the storage component health.
-func (s *HealthServiceServer) checkStorageHealth(ctx context.Context, provider HealthProvider) ComponentHealthStatus {
-	status := ComponentHealthStatus{
+func (s *Server) checkStorageHealth(ctx context.Context, provider interfaces.HealthProvider) interfaces.ComponentHealthStatus {
+	status := interfaces.ComponentHealthStatus{
 		Name:          "storage",
 		Healthy:       false,
 		LastCheck:     time.Now(),
-		SubComponents: make(map[string]ComponentHealthStatus),
+		SubComponents: make(map[string]interfaces.ComponentHealthStatus),
 	}
 
 	store := provider.Store()
@@ -247,7 +248,7 @@ func (s *HealthServiceServer) checkStorageHealth(ctx context.Context, provider H
 
 	if err := store.Ping(pingCtx); err != nil {
 		status.Message = "database ping failed: " + err.Error()
-		status.SubComponents["database"] = ComponentHealthStatus{
+		status.SubComponents["database"] = interfaces.ComponentHealthStatus{
 			Name:      "database",
 			Healthy:   false,
 			Message:   err.Error(),
@@ -258,7 +259,7 @@ func (s *HealthServiceServer) checkStorageHealth(ctx context.Context, provider H
 
 	status.Healthy = true
 	status.Message = "storage operational"
-	status.SubComponents["database"] = ComponentHealthStatus{
+	status.SubComponents["database"] = interfaces.ComponentHealthStatus{
 		Name:      "database",
 		Healthy:   true,
 		Message:   "connected",
@@ -269,12 +270,12 @@ func (s *HealthServiceServer) checkStorageHealth(ctx context.Context, provider H
 }
 
 // checkP2PHealth checks the P2P component health.
-func (s *HealthServiceServer) checkP2PHealth(ctx context.Context, provider HealthProvider) ComponentHealthStatus {
-	status := ComponentHealthStatus{
+func (s *Server) checkP2PHealth(ctx context.Context, provider interfaces.HealthProvider) interfaces.ComponentHealthStatus {
+	status := interfaces.ComponentHealthStatus{
 		Name:          "p2p",
 		Healthy:       false,
 		LastCheck:     time.Now(),
-		SubComponents: make(map[string]ComponentHealthStatus),
+		SubComponents: make(map[string]interfaces.ComponentHealthStatus),
 	}
 
 	host := provider.P2PHost()
@@ -287,7 +288,7 @@ func (s *HealthServiceServer) checkP2PHealth(ctx context.Context, provider Healt
 	status.Message = "P2P operational"
 
 	// Check host status
-	status.SubComponents["host"] = ComponentHealthStatus{
+	status.SubComponents["host"] = interfaces.ComponentHealthStatus{
 		Name:      "host",
 		Healthy:   true,
 		Message:   "peer_id=" + host.PeerID().String(),
@@ -300,7 +301,7 @@ func (s *HealthServiceServer) checkP2PHealth(ctx context.Context, provider Healt
 		discHealth := discovery.GetHealth()
 
 		// Bootstrap health
-		status.SubComponents["bootstrap"] = ComponentHealthStatus{
+		status.SubComponents["bootstrap"] = interfaces.ComponentHealthStatus{
 			Name:      "bootstrap",
 			Healthy:   discHealth.BootstrapHealthy,
 			Message:   boolToStatus(discHealth.BootstrapConnected, "connected", "disconnected"),
@@ -309,7 +310,7 @@ func (s *HealthServiceServer) checkP2PHealth(ctx context.Context, provider Healt
 
 		// mDNS health
 		if discHealth.MDNSEnabled {
-			status.SubComponents["mdns"] = ComponentHealthStatus{
+			status.SubComponents["mdns"] = interfaces.ComponentHealthStatus{
 				Name:      "mdns",
 				Healthy:   discHealth.MDNSHealthy,
 				Message:   boolToStatus(discHealth.MDNSHealthy, "running", "not running"),
@@ -319,7 +320,7 @@ func (s *HealthServiceServer) checkP2PHealth(ctx context.Context, provider Healt
 
 		// DHT health
 		if discHealth.DHTEnabled {
-			status.SubComponents["dht"] = ComponentHealthStatus{
+			status.SubComponents["dht"] = interfaces.ComponentHealthStatus{
 				Name:      "dht",
 				Healthy:   discHealth.DHTHealthy,
 				Message:   "routing_table_size=" + itoa(discHealth.DHTRoutingSize),
@@ -332,12 +333,12 @@ func (s *HealthServiceServer) checkP2PHealth(ctx context.Context, provider Healt
 }
 
 // checkClusterHealth checks the cluster component health.
-func (s *HealthServiceServer) checkClusterHealth(ctx context.Context, provider HealthProvider) ComponentHealthStatus {
-	status := ComponentHealthStatus{
+func (s *Server) checkClusterHealth(ctx context.Context, provider interfaces.HealthProvider) interfaces.ComponentHealthStatus {
+	status := interfaces.ComponentHealthStatus{
 		Name:          "cluster",
 		Healthy:       false,
 		LastCheck:     time.Now(),
-		SubComponents: make(map[string]ComponentHealthStatus),
+		SubComponents: make(map[string]interfaces.ComponentHealthStatus),
 	}
 
 	cluster := provider.Cluster()
@@ -356,7 +357,7 @@ func (s *HealthServiceServer) checkClusterHealth(ctx context.Context, provider H
 	}
 
 	// Raft status
-	status.SubComponents["raft"] = ComponentHealthStatus{
+	status.SubComponents["raft"] = interfaces.ComponentHealthStatus{
 		Name:      "raft",
 		Healthy:   clusterStatus.HasQuorum,
 		Message:   "state=" + string(clusterStatus.State) + " term=" + uitoa(clusterStatus.Term),
@@ -364,7 +365,7 @@ func (s *HealthServiceServer) checkClusterHealth(ctx context.Context, provider H
 	}
 
 	// Leadership status
-	status.SubComponents["leadership"] = ComponentHealthStatus{
+	status.SubComponents["leadership"] = interfaces.ComponentHealthStatus{
 		Name:      "leadership",
 		Healthy:   clusterStatus.Leader != "",
 		Message:   "leader=" + clusterStatus.Leader,
@@ -378,7 +379,7 @@ func (s *HealthServiceServer) checkClusterHealth(ctx context.Context, provider H
 			healthyMembers++
 		}
 	}
-	status.SubComponents["membership"] = ComponentHealthStatus{
+	status.SubComponents["membership"] = interfaces.ComponentHealthStatus{
 		Name:      "membership",
 		Healthy:   healthyMembers >= (len(clusterStatus.Members)/2 + 1),
 		Message:   itoa(healthyMembers) + "/" + itoa(len(clusterStatus.Members)) + " healthy",
@@ -389,7 +390,7 @@ func (s *HealthServiceServer) checkClusterHealth(ctx context.Context, provider H
 }
 
 // getNetworkInfo builds network information.
-func (s *HealthServiceServer) getNetworkInfo(provider HealthProvider) *services.NetworkInfo {
+func (s *Server) getNetworkInfo(provider interfaces.HealthProvider) *services.NetworkInfo {
 	info := &services.NetworkInfo{}
 
 	host := provider.P2PHost()
@@ -420,7 +421,7 @@ func (s *HealthServiceServer) getNetworkInfo(provider HealthProvider) *services.
 }
 
 // getStorageInfo builds storage information.
-func (s *HealthServiceServer) getStorageInfo(ctx context.Context, provider HealthProvider) *services.StorageInfo {
+func (s *Server) getStorageInfo(ctx context.Context, provider interfaces.HealthProvider) *services.StorageInfo {
 	info := &services.StorageInfo{}
 
 	store := provider.Store()
@@ -451,7 +452,7 @@ func (s *HealthServiceServer) getStorageInfo(ctx context.Context, provider Healt
 }
 
 // getClusterInfo builds cluster information.
-func (s *HealthServiceServer) getClusterInfo(provider HealthProvider) *services.ClusterInfo {
+func (s *Server) getClusterInfo(provider interfaces.HealthProvider) *services.ClusterInfo {
 	info := &services.ClusterInfo{
 		Enabled: true,
 	}
@@ -487,7 +488,7 @@ func (s *HealthServiceServer) getClusterInfo(provider HealthProvider) *services.
 }
 
 // componentStatusToProto converts ComponentHealthStatus to proto.
-func componentStatusToProto(status ComponentHealthStatus) *services.ComponentHealth {
+func componentStatusToProto(status interfaces.ComponentHealthStatus) *services.ComponentHealth {
 	protoStatus := services.ServingStatus_SERVING_STATUS_SERVING
 	if !status.Healthy {
 		protoStatus = services.ServingStatus_SERVING_STATUS_NOT_SERVING
