@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"bib/internal/domain"
+	"bib/internal/storage"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -17,6 +18,11 @@ var domainErrorMapping = map[error]struct {
 	code codes.Code
 	desc string
 }{
+	// Storage errors (generic)
+	storage.ErrNotFound:      {codes.NotFound, "Resource not found"},
+	storage.ErrAlreadyExists: {codes.AlreadyExists, "Resource already exists"},
+	storage.ErrInvalidInput:  {codes.InvalidArgument, "Invalid input"},
+
 	// Topic errors
 	domain.ErrInvalidTopicID:        {codes.InvalidArgument, "Invalid topic ID"},
 	domain.ErrInvalidTopicName:      {codes.InvalidArgument, "Invalid topic name"},

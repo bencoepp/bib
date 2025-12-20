@@ -238,11 +238,11 @@ func TestErrors_PermissionDenied(t *testing.T) {
 	userClient := services.NewUserServiceClient(conn)
 	adminClient := services.NewAdminServiceClient(conn)
 
-	// Create regular user
-	userCtx, _, _ := ts.AuthenticateUser(ctx, "RegularUser")
-
-	// Create admin and a topic
+	// Create admin FIRST (so they become the first user, which gets admin role)
 	adminCtx, _, _ := ts.CreateAdminUser(ctx, "AdminUser")
+
+	// Create regular user AFTER admin (so they get regular user role)
+	userCtx, _, _ := ts.AuthenticateUser(ctx, "RegularUser")
 	topicResp, _ := topicClient.CreateTopic(adminCtx, &services.CreateTopicRequest{
 		Name: "admin-topic",
 	})
