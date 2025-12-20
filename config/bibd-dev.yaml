@@ -1,0 +1,34 @@
+# bibd development configuration
+# Used by docker-compose for local development
+
+server:
+  address: "0.0.0.0:8080"
+  data_dir: "/data"
+
+log:
+  level: "debug"
+  format: "text"
+
+storage:
+  type: "postgres"
+  postgres:
+    dsn: "postgres://bibd:bibd_dev_password@postgres:5432/bibd?sslmode=disable"
+    max_open_conns: 25
+    max_idle_conns: 5
+    conn_max_lifetime: "1h"
+
+p2p:
+  enabled: true
+  mode: "selective"
+  listen_addresses:
+    - "/ip4/0.0.0.0/tcp/4001"
+    - "/ip6/::/tcp/4001"
+  bootstrap_peers:
+    - "/dns4/bib.dev/tcp/4001/p2p/QmBootstrapPeerID"
+  enable_mdns: true
+  enable_dht: true
+
+metrics:
+  enabled: true
+  address: "0.0.0.0:9090"
+

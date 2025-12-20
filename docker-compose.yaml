@@ -1,0 +1,81 @@
+# Docker Compose for Bib Development
+# Usage: docker-compose up -d
+
+services:
+  # PostgreSQL database for bibd
+  postgres:
+    image: postgres:16-alpine
+    container_name: bib-postgres
+    environment:
+      POSTGRES_USER: bibd
+      POSTGRES_PASSWORD: bibd_dev_password
+      POSTGRES_DB: bibd
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bibd -d bibd"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # bibd daemon (build from source)
+  bibd:
+    build:
+      context: .
+      dockerfile: Dockerfile.bibd.dev
+    container_name: bibd
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - BIBD_SERVER_ADDRESS=0.0.0.0:8080
+      - BIBD_STORAGE_TYPE=postgres
+      - BIBD_STORAGE_DSN=postgres://bibd:bibd_dev_password@postgres:5432/bibd?sslmode=disable
+      - BIBD_P2P_ENABLED=true
+      - BIBD_P2P_MODE=selective
+      - BIBD_LOG_LEVEL=debug
+    ports:
+      - "8080:8080"   # gRPC API
+      - "9090:9090"   # Metrics
+      - "4001:4001"   # P2P swarm
+    volumes:
+      - bibd-data:/data
+      - ./config/bibd-dev.yaml:/etc/bibd/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/bibd", "-version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # bib CLI container (for testing)
+  bib:
+    build:
+      context: .
+      dockerfile: docker/bib.dev.Dockerfile
+    container_name: bib
+    depends_on:
+      - bibd
+    environment:
+      - BIB_SERVER_ADDRESS=bibd:8080
+    volumes:
+      - ./config/bib-dev.yaml:/root/.config/bib/config.yaml:ro
+    # Keep container running for interactive use
+    command: ["sleep", "infinity"]
+    profiles:
+      - tools
+
+volumes:
+  postgres-data:
+    driver: local
+  bibd-data:
+    driver: local
+
+networks:
+  default:
+    name: bib-network
+

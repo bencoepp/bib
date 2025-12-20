@@ -1,0 +1,19 @@
+# bib CLI development configuration
+# Used by docker-compose for local development
+
+server:
+  address: "bibd:8080"
+  timeout: "30s"
+
+log:
+  level: "debug"
+  format: "text"
+
+output:
+  format: "table"
+  color: true
+
+user:
+  name: "Developer"
+  email: "dev@localhost"
+

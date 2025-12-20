@@ -9,6 +9,7 @@ This section provides documentation for developers contributing to Bib.
 | [Developer Guide](developer-guide.md) | Codebase overview for contributors |
 | [TUI Components](tui-components.md) | Terminal UI component system documentation |
 | [CLI i18n](cli-i18n.md) | Internationalization guide for CLI commands |
+| [Release Setup](release-setup.md) | How to set up GPG keys and release pipeline |
 
 ## Project Structure
 
@@ -44,15 +45,19 @@ bib/
 | [Bubble Tea](https://github.com/charmbracelet/bubbletea) | Terminal UI |
 | [libp2p](https://libp2p.io/) | P2P networking |
 | [Hashicorp Raft](https://github.com/hashicorp/raft) | Consensus |
+| [GoReleaser](https://goreleaser.com/) | Release automation |
 
 ## Getting Started
 
 ```bash
 # Clone repository
-git clone https://github.com/yourorg/bib.git
+git clone https://github.com/bencoepp/bib.git
 cd bib
 
-# Build
+# Build using Make
+make build
+
+# Or build directly with Go
 go build -o bib ./cmd/bib
 go build -o bibd ./cmd/bibd
 

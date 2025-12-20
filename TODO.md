@@ -1418,23 +1418,61 @@
 ## Phase 8: DevOps & Deployment
 
 ### 8.1 Build System
-- [ ] **DEV-001**: Makefile improvements
-  - Build targets for all binaries
-  - Cross-compilation
-  - Version injection via ldflags
-- [ ] **DEV-002**: GoReleaser configuration
-  - Multi-platform releases
-  - Homebrew tap
-  - Docker images
+- [x] **DEV-001**: Makefile improvements
+  - Build targets for all binaries (`build-bib`, `build-bibd`)
+  - Cross-compilation (`build-platform`, `build-all-platforms`)
+  - Version injection via ldflags (Version, Commit, BuildTime, DevMode)
+  - Release targets (`release`, `release-snapshot`, `release-dry-run`)
+  - Platforms: linux/{amd64,arm64,arm}, darwin/{amd64,arm64}, windows/{amd64,arm64}, freebsd/{amd64,arm64}
+- [x] **DEV-002**: GoReleaser configuration
+  - Multi-platform releases for all supported OS/arch combinations
+  - Homebrew tap (`bencoepp/homebrew-bib`) with separate formulae for `bib` and `bibd`
+  - Docker images (`ghcr.io/bencoepp/bib`, `ghcr.io/bencoepp/bibd`) with multi-arch manifests
+  - Linux packages (.deb, .rpm) via nfpm with systemd service
+  - Winget submission for Windows Package Manager
+  - GPG signing and SHA256 checksums
+  - GitHub release automation with changelog generation
+
+### 8.1.1 Release Pipeline Setup (Manual Steps Required)
+> **Note**: These tasks require manual action with your GitHub account and GPG keys.
+> See `docs/development/release-setup.md` for detailed instructions.
+
+- [ ] **DEV-002a**: Create Homebrew tap repository
+  - Create `bencoepp/homebrew-bib` repository on GitHub
+  - Initialize with README.md and Formula/ directory
+- [ ] **DEV-002b**: Generate GPG signing key
+  - Generate RSA 4096-bit key: `gpg --full-generate-key`
+  - Export private key: `gpg --armor --export-secret-keys KEY_ID > private-key.asc`
+  - Note fingerprint for GitHub secrets
+- [ ] **DEV-002c**: Create GitHub Personal Access Tokens
+  - Create token for Homebrew tap (`repo` scope) → `HOMEBREW_TAP_GITHUB_TOKEN`
+  - Create token for Winget submissions (`public_repo` scope) → `WINGET_TOKEN`
+- [ ] **DEV-002d**: Configure GitHub Secrets
+  - Add `GPG_PRIVATE_KEY` (contents of private-key.asc)
+  - Add `GPG_PASSPHRASE` (GPG key passphrase)
+  - Add `GPG_FINGERPRINT` (40-character hex fingerprint)
+  - Add `HOMEBREW_TAP_GITHUB_TOKEN` (PAT for homebrew-bib repo)
+  - Add `WINGET_TOKEN` (PAT for winget-pkgs submissions)
+- [ ] **DEV-002e**: First release
+  - Commit and push all changes to main branch
+  - Create annotated tag: `git tag -a v0.1.0 -m "Release v0.1.0"`
+  - Push tag: `git push origin v0.1.0`
+  - Verify release workflow completes successfully
 
 ### 8.2 Containerization
-- [ ] **DEV-003**: Dockerfile for bibd
-  - Multi-stage build
-  - Minimal runtime image
-  - Health check
-- [ ] **DEV-004**: Docker Compose for dev
-  - bibd + PostgreSQL
-  - Volume mounts
+- [x] **DEV-003**: Dockerfile for bibd
+  - Uses distroless base image for minimal attack surface
+  - Runs as non-root user (UID 65532)
+  - Exposes ports 8080 (gRPC), 9090 (metrics), 4001 (P2P)
+  - OCI labels for metadata
+- [x] **DEV-003b**: Dockerfile for bib CLI
+  - Distroless base for CI/automation use cases
+  - Non-root execution
+- [x] **DEV-004**: Docker Compose for dev
+  - bibd + PostgreSQL with health checks
+  - Development Dockerfiles (Dockerfile.bib.dev, Dockerfile.bibd.dev)
+  - Volume mounts for data persistence
+  - Development configuration files
   - Network configuration
 
 ### 8.3 Kubernetes

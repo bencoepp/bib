@@ -1,0 +1,498 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# GoReleaser configuration for bib project
+# Documentation: https://goreleaser.com
+
+version: 2
+
+project_name: bib
+
+# Before hooks - run before the build starts
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+# Build configuration for both binaries
+builds:
+  # bib CLI
+  - id: bib
+    binary: bib
+    main: ./cmd/bib
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      # arm32 only for linux
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+      - goos: freebsd
+        goarch: arm
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X 'bib/internal/version.Version={{.Version}}'
+      - -X 'bib/internal/version.Commit={{.Commit}}'
+      - -X 'bib/internal/version.BuildTime={{.Date}}'
+      - -X 'bib/internal/version.DevMode=false'
+      - -X 'bib/cmd/bib/cmd/version.Version={{.Version}}'
+      - -X 'bib/cmd/bib/cmd/version.Commit={{.Commit}}'
+      - -X 'bib/cmd/bib/cmd/version.BuildDate={{.Date}}'
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  # bibd daemon
+  - id: bibd
+    binary: bibd
+    main: ./cmd/bibd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      # arm32 only for linux
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+      - goos: freebsd
+        goarch: arm
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X 'bib/internal/version.Version={{.Version}}'
+      - -X 'bib/internal/version.Commit={{.Commit}}'
+      - -X 'bib/internal/version.BuildTime={{.Date}}'
+      - -X 'bib/internal/version.DevMode=false'
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# Archive configuration
+archives:
+  # bib CLI archives
+  - id: bib
+    ids:
+      - bib
+    name_template: "bib_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE*
+      - README*
+      - docs/getting-started/quickstart.md
+
+  # bibd daemon archives
+  - id: bibd
+    ids:
+      - bibd
+    name_template: "bibd_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE*
+      - README*
+      - docs/deployment/*
+
+# Checksum configuration
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Snapshot configuration (for non-release builds)
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "^style:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: "🚀 Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "📚 Documentation"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "🔧 Maintenance"
+      order: 999
+
+# GPG Signing
+signs:
+  - cmd: gpg
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+# Linux packages (deb, rpm)
+nfpms:
+  # bib CLI package
+  - id: bib
+    package_name: bib
+    ids:
+      - bib
+    vendor: bencoepp
+    homepage: https://github.com/bencoepp/bib
+    maintainer: Ben Coepp <bencoepp@users.noreply.github.com>
+    description: |
+      Bib CLI - Command-line interface for the Bib distributed data management platform.
+      Bib is a decentralized data management tool for researchers and teams who need to
+      organize, share, version, and process datasets across distributed networks.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    contents:
+      - src: ./docs/getting-started/quickstart.md
+        dst: /usr/share/doc/bib/quickstart.md
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+    rpm:
+      group: Applications/System
+
+  # bibd daemon package
+  - id: bibd
+    package_name: bibd
+    ids:
+      - bibd
+    vendor: bencoepp
+    homepage: https://github.com/bencoepp/bib
+    maintainer: Ben Coepp <bencoepp@users.noreply.github.com>
+    description: |
+      Bibd Daemon - Background service for the Bib distributed data management platform.
+      Handles P2P networking, storage, job execution, and cluster coordination for the
+      Bib decentralized data management system.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    scripts:
+      postinstall: scripts/postinstall.sh
+      preremove: scripts/preremove.sh
+    contents:
+      - src: ./scripts/bibd.service
+        dst: /lib/systemd/system/bibd.service
+        type: config
+      - src: ./docs/deployment/README.md
+        dst: /usr/share/doc/bibd/README.md
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+    rpm:
+      group: System Environment/Daemons
+
+# Docker images
+dockers:
+  # bib CLI image (for CI/automation)
+  - id: bib-amd64
+    ids:
+      - bib
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/bencoepp/bib:{{ .Version }}-amd64"
+      - "ghcr.io/bencoepp/bib:latest-amd64"
+    dockerfile: Dockerfile.bib
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=bib"
+      - "--label=org.opencontainers.image.description=Bib CLI for distributed data management"
+      - "--label=org.opencontainers.image.url=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.source=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+  - id: bib-arm64
+    ids:
+      - bib
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/bencoepp/bib:{{ .Version }}-arm64"
+      - "ghcr.io/bencoepp/bib:latest-arm64"
+    dockerfile: Dockerfile.bib
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=bib"
+      - "--label=org.opencontainers.image.description=Bib CLI for distributed data management"
+      - "--label=org.opencontainers.image.url=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.source=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+  # bibd daemon image (main production image)
+  - id: bibd-amd64
+    ids:
+      - bibd
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/bencoepp/bibd:{{ .Version }}-amd64"
+      - "ghcr.io/bencoepp/bibd:latest-amd64"
+    dockerfile: Dockerfile.bibd
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=bibd"
+      - "--label=org.opencontainers.image.description=Bib daemon for distributed data management"
+      - "--label=org.opencontainers.image.url=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.source=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+  - id: bibd-arm64
+    ids:
+      - bibd
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/bencoepp/bibd:{{ .Version }}-arm64"
+      - "ghcr.io/bencoepp/bibd:latest-arm64"
+    dockerfile: docker/bibd.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=bibd"
+      - "--label=org.opencontainers.image.description=Bib daemon for distributed data management"
+      - "--label=org.opencontainers.image.url=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.source=https://github.com/bencoepp/bib"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+# Docker manifests for multi-arch images
+docker_manifests:
+  - name_template: "ghcr.io/bencoepp/bib:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/bencoepp/bib:{{ .Version }}-amd64"
+      - "ghcr.io/bencoepp/bib:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/bencoepp/bib:latest"
+    image_templates:
+      - "ghcr.io/bencoepp/bib:latest-amd64"
+      - "ghcr.io/bencoepp/bib:latest-arm64"
+
+  - name_template: "ghcr.io/bencoepp/bibd:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/bencoepp/bibd:{{ .Version }}-amd64"
+      - "ghcr.io/bencoepp/bibd:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/bencoepp/bibd:latest"
+    image_templates:
+      - "ghcr.io/bencoepp/bibd:latest-amd64"
+      - "ghcr.io/bencoepp/bibd:latest-arm64"
+
+# Homebrew tap
+brews:
+  # bib CLI formula
+  - name: bib
+    ids:
+      - bib
+    repository:
+      owner: bencoepp
+      name: homebrew-bib
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/bencoepp/bib
+    description: "CLI for Bib distributed data management platform"
+    license: MIT
+    install: |
+      bin.install "bib"
+    test: |
+      system "#{bin}/bib", "version"
+
+  # bibd daemon formula
+  - name: bibd
+    ids:
+      - bibd
+    repository:
+      owner: bencoepp
+      name: homebrew-bib
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/bencoepp/bib
+    description: "Daemon for Bib distributed data management platform"
+    license: MIT
+    install: |
+      bin.install "bibd"
+    test: |
+      system "#{bin}/bibd", "-version"
+    service: |
+      run [opt_bin/"bibd"]
+      keep_alive true
+      log_path var/"log/bibd.log"
+      error_log_path var/"log/bibd.log"
+
+# Winget (Windows Package Manager)
+winget:
+  - name: bib
+    ids:
+      - bib
+    publisher: bencoepp
+    publisher_url: https://github.com/bencoepp
+    publisher_support_url: https://github.com/bencoepp/bib/issues
+    short_description: "CLI for Bib distributed data management platform"
+    description: |
+      Bib CLI - Command-line interface for the Bib distributed data management platform.
+      A decentralized data management tool for researchers and teams.
+    license: MIT
+    copyright: "Copyright (c) 2024-2025 Ben Coepp"
+    license_url: https://github.com/bencoepp/bib/blob/main/LICENSE
+    tags:
+      - cli
+      - data-management
+      - distributed
+      - p2p
+      - research
+    repository:
+      owner: microsoft
+      name: winget-pkgs
+      branch: "bib-{{.Version}}"
+      pull_request:
+        enabled: true
+        draft: false
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+
+  - name: bibd
+    ids:
+      - bibd
+    publisher: bencoepp
+    publisher_url: https://github.com/bencoepp
+    publisher_support_url: https://github.com/bencoepp/bib/issues
+    short_description: "Daemon for Bib distributed data management platform"
+    description: |
+      Bibd Daemon - Background service for the Bib distributed data management platform.
+      Handles P2P networking, storage, job execution, and cluster coordination.
+    license: MIT
+    copyright: "Copyright (c) 2024-2025 Ben Coepp"
+    license_url: https://github.com/bencoepp/bib/blob/main/LICENSE
+    tags:
+      - daemon
+      - data-management
+      - distributed
+      - p2p
+      - server
+    repository:
+      owner: microsoft
+      name: winget-pkgs
+      branch: "bibd-{{.Version}}"
+      pull_request:
+        enabled: true
+        draft: false
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+
+# GitHub release
+release:
+  github:
+    owner: bencoepp
+    name: bib
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "v{{.Version}}"
+  header: |
+    ## Bib v{{.Version}}
+    
+    ### Installation
+    
+    #### Homebrew (macOS/Linux)
+    ```bash
+    brew install bencoepp/bib/bib
+    brew install bencoepp/bib/bibd
+    ```
+    
+    #### Windows (winget)
+    ```powershell
+    winget install bencoepp.bib
+    winget install bencoepp.bibd
+    ```
+    
+    #### Docker
+    ```bash
+    docker pull ghcr.io/bencoepp/bibd:{{.Version}}
+    ```
+    
+    #### Linux Packages
+    Download `.deb` or `.rpm` packages from the assets below.
+
+  footer: |
+    ---
+    
+    **Full Changelog**: https://github.com/bencoepp/bib/compare/{{ .PreviousTag }}...{{ .Tag }}
+    
+    **Documentation**: https://github.com/bencoepp/bib/tree/main/docs
+
+# Announce releases (optional - configure as needed)
+# announce:
+#   discord:
+#     enabled: true
+#     message_template: 'Bib {{ .Tag }} is out! Check it out at {{ .ReleaseURL }}'
+

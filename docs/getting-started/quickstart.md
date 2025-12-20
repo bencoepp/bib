@@ -38,19 +38,87 @@ Before you begin, ensure you have:
 
 ## Installation
 
-### Option 1: Build from Source (Recommended)
+### Option 1: Homebrew (macOS/Linux)
+
+```bash
+# Add the tap
+brew tap bencoepp/bib
+
+# Install CLI
+brew install bib
+
+# Install daemon
+brew install bibd
+
+# Verify installation
+bib version
+bibd -version
+```
+
+### Option 2: Windows (winget)
+
+```powershell
+# Install CLI
+winget install bencoepp.bib
+
+# Install daemon
+winget install bencoepp.bibd
+
+# Verify installation
+bib version
+bibd -version
+```
+
+### Option 3: Linux Packages
+
+**Debian/Ubuntu (.deb):**
+```bash
+# Download from GitHub releases
+curl -LO https://github.com/bencoepp/bib/releases/latest/download/bibd_VERSION_linux_amd64.deb
+
+# Install
+sudo dpkg -i bibd_VERSION_linux_amd64.deb
+```
+
+**RHEL/Fedora/CentOS (.rpm):**
+```bash
+# Download from GitHub releases
+curl -LO https://github.com/bencoepp/bib/releases/latest/download/bibd-VERSION.x86_64.rpm
+
+# Install
+sudo rpm -i bibd-VERSION.x86_64.rpm
+```
+
+### Option 4: Docker
+
+```bash
+# Pull the daemon image
+docker pull ghcr.io/bencoepp/bibd:latest
+
+# Run the daemon
+docker run -d --name bibd \
+  -v bibd-data:/data \
+  -p 8080:8080 \
+  -p 4001:4001 \
+  ghcr.io/bencoepp/bibd:latest
+```
+
+### Option 5: Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourorg/bib.git
+git clone https://github.com/bencoepp/bib.git
 cd bib
 
-# Build both binaries
+# Build using Make
+make build
+
+# Or build directly with Go
 go build -o bib ./cmd/bib
 go build -o bibd ./cmd/bibd
 
 # Move to your PATH
-sudo mv bib bibd /usr/local/bin/
+sudo mv bin/bib bin/bibd /usr/local/bin/
 
 # Verify installation
 bib version
@@ -59,14 +127,11 @@ bibd -version
 
 **Expected output:**
 ```
-bib version 0.1.0
+bib version 1.0.0
   commit:  abc1234
   built:   2024-01-15T10:30:00Z
 ```
 
-### Option 2: Download Pre-built Binaries
-
-Pre-built binaries will be available in future releases.
 
 ---
 

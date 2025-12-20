@@ -1,0 +1,92 @@
+# GitHub Actions workflow for releasing bib
+# Triggered on new tags matching v*
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ secrets.GPG_FINGERPRINT }}
+
+  # Separate job for Winget submission (runs after release)
+  winget:
+    name: Submit to Winget
+    runs-on: windows-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Submit bib to Winget
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: bencoepp.bib
+          version: ${{ steps.version.outputs.VERSION }}
+          installers-regex: 'bib_.*_windows_.*\.zip$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
+      - name: Submit bibd to Winget
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: bencoepp.bibd
+          version: ${{ steps.version.outputs.VERSION }}
+          installers-regex: 'bibd_.*_windows_.*\.zip$'
+          token: ${{ secrets.WINGET_TOKEN }}
+

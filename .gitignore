@@ -10,6 +10,9 @@
 /dist/
 /build/
 
+# GoReleaser
+/dist/
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -48,6 +51,7 @@ debug
 config.yaml
 config.toml
 config.json
+# Note: config/ directory contains development configs and IS committed
 
 # Environment files
 .env

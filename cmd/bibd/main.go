@@ -12,6 +12,7 @@ import (
 
 	"bib/internal/config"
 	"bib/internal/logger"
+	"bib/internal/version"
 )
 
 var (
@@ -28,7 +29,9 @@ func main() {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Println("bibd version 0.1.0")
+		info := version.Get()
+		fmt.Printf("bibd %s\n", info.String())
+		fmt.Println(info.Full())
 		os.Exit(0)
 	}
 
