@@ -122,6 +122,12 @@ func (r *DatasetRepository) List(ctx context.Context, filter storage.DatasetFilt
 		argNum += 2
 	}
 
+	if len(filter.Tags) > 0 {
+		query += fmt.Sprintf(" AND tags @> $%d", argNum)
+		args = append(args, filter.Tags)
+		argNum++
+	}
+
 	orderBy := "name"
 	if filter.OrderBy != "" {
 		orderBy = filter.OrderBy

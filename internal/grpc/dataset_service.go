@@ -104,6 +104,14 @@ func (s *DatasetServiceServer) CreateDataset(ctx context.Context, req *services.
 	}
 
 	// Create dataset
+	metadata := req.GetMetadata()
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	if req.GetContentType() != "" {
+		metadata["content_type"] = req.GetContentType()
+	}
+
 	dataset := &domain.Dataset{
 		ID:          domain.DatasetID(uuid.New().String()),
 		TopicID:     topic.ID,
@@ -115,7 +123,7 @@ func (s *DatasetServiceServer) CreateDataset(ctx context.Context, req *services.
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 		Tags:        req.GetTags(),
-		Metadata:    req.GetMetadata(),
+		Metadata:    metadata,
 	}
 
 	if err := s.store.Datasets().Create(ctx, dataset); err != nil {
@@ -147,6 +155,11 @@ func (s *DatasetServiceServer) GetDataset(ctx context.Context, req *services.Get
 	dataset, err := s.store.Datasets().Get(ctx, domain.DatasetID(req.GetId()))
 	if err != nil {
 		return nil, MapDomainError(err)
+	}
+
+	// Deleted datasets should appear as not found
+	if dataset.Status == domain.DatasetStatusDeleted {
+		return nil, status.Error(codes.NotFound, "dataset not found")
 	}
 
 	// Check user has access to the topic
@@ -243,8 +256,17 @@ func (s *DatasetServiceServer) UpdateDataset(ctx context.Context, req *services.
 	if req.GetName() != "" {
 		dataset.Name = req.GetName()
 	}
-	if req.GetDescription() != "" {
+	if req.Description != nil {
 		dataset.Description = req.GetDescription()
+	}
+	if len(req.GetTags()) > 0 {
+		dataset.Tags = req.GetTags()
+	}
+	if req.ContentType != nil {
+		if dataset.Metadata == nil {
+			dataset.Metadata = make(map[string]string)
+		}
+		dataset.Metadata["content_type"] = req.GetContentType()
 	}
 
 	dataset.UpdatedAt = time.Now().UTC()
@@ -784,13 +806,30 @@ func (s *DatasetServiceServer) canAccessDataset(ctx context.Context, dataset *do
 		return true
 	}
 
-	// Check topic membership
+	// Check if the topic is public
 	if s.store != nil {
+		topic, err := s.store.Topics().Get(ctx, dataset.TopicID)
+		if err == nil && s.isPublicTopic(topic) {
+			return true
+		}
+
+		// Check topic membership for private topics
 		hasAccess, _ := s.store.TopicMembers().HasAccess(ctx, dataset.TopicID, user.ID)
 		return hasAccess
 	}
 
 	return false
+}
+
+// isPublicTopic checks if a topic is public based on its metadata.
+func (s *DatasetServiceServer) isPublicTopic(topic *domain.Topic) bool {
+	if topic.Metadata != nil {
+		if val, ok := topic.Metadata["is_public"]; ok {
+			return val == "true"
+		}
+	}
+	// Default to public
+	return true
 }
 
 // =============================================================================
@@ -807,11 +846,18 @@ func domainDatasetToProto(d *domain.Dataset) *services.Dataset {
 		ownerID = string(d.Owners[0])
 	}
 
+	// Extract content_type from metadata if present
+	contentType := ""
+	if d.Metadata != nil {
+		contentType = d.Metadata["content_type"]
+	}
+
 	return &services.Dataset{
 		Id:          string(d.ID),
 		TopicId:     string(d.TopicID),
 		Name:        d.Name,
 		Description: d.Description,
+		ContentType: contentType,
 		Status:      string(d.Status),
 		OwnerId:     ownerID,
 		Version:     int32(d.VersionCount),
