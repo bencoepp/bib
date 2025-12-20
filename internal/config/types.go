@@ -467,14 +467,40 @@ type FavoriteNode struct {
 
 	// Address is an optional direct address (multiaddr or host:port)
 	Address string `mapstructure:"address,omitempty"`
+
+	// UnixSocket is the path to a Unix socket (or named pipe on Windows)
+	UnixSocket string `mapstructure:"unix_socket,omitempty"`
+}
+
+// ConnectionTLSConfig holds TLS settings for client connections
+type ConnectionTLSConfig struct {
+	// SkipVerify disables server certificate verification (DANGEROUS)
+	SkipVerify bool `mapstructure:"skip_verify"`
+
+	// CAFile is the path to a custom CA certificate file
+	CAFile string `mapstructure:"ca_file"`
+
+	// CertFile is the path to the client certificate (for mTLS)
+	CertFile string `mapstructure:"cert_file"`
+
+	// KeyFile is the path to the client private key (for mTLS)
+	KeyFile string `mapstructure:"key_file"`
 }
 
 // ConnectionConfig holds settings for connecting to bibd nodes
 type ConnectionConfig struct {
+	// DefaultNode is the default node to connect to
+	DefaultNode string `mapstructure:"default_node"`
+
 	// FavoriteNodes is a list of preferred nodes for connection
 	FavoriteNodes []FavoriteNode `mapstructure:"favorite_nodes"`
 
-	// AutoDetect enables automatic node discovery
+	// Mode is the connection mode: "sequential" or "parallel"
+	// sequential: try socket -> TCP -> P2P in order
+	// parallel: try all in parallel, use first success
+	Mode string `mapstructure:"mode"`
+
+	// AutoDetect enables automatic node discovery via mDNS
 	AutoDetect bool `mapstructure:"auto_detect"`
 
 	// Timeout is the connection timeout
@@ -482,6 +508,12 @@ type ConnectionConfig struct {
 
 	// RetryAttempts is the number of connection retry attempts
 	RetryAttempts int `mapstructure:"retry_attempts"`
+
+	// PoolSize is the connection pool size (0 = single connection)
+	PoolSize int `mapstructure:"pool_size"`
+
+	// TLS holds TLS configuration for connections
+	TLS ConnectionTLSConfig `mapstructure:"tls"`
 }
 
 // BibConfig is the complete configuration for the bib CLI

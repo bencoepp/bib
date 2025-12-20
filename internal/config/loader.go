@@ -100,6 +100,65 @@ func LoadBib(cfgFile string) (*BibConfig, error) {
 	return &cfg, nil
 }
 
+// SaveBib saves the bib CLI configuration to a file.
+func SaveBib(cfg *BibConfig, path string) error {
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Create viper instance and set values
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Set all config values
+	v.Set("log.level", cfg.Log.Level)
+	v.Set("log.format", cfg.Log.Format)
+	v.Set("log.output", cfg.Log.Output)
+	v.Set("identity.name", cfg.Identity.Name)
+	v.Set("identity.email", cfg.Identity.Email)
+	v.Set("identity.key", cfg.Identity.Key)
+	v.Set("output.format", cfg.Output.Format)
+	v.Set("output.color", cfg.Output.Color)
+	v.Set("locale", cfg.Locale)
+	v.Set("server", cfg.Server)
+
+	// Connection settings
+	v.Set("connection.default_node", cfg.Connection.DefaultNode)
+	v.Set("connection.mode", cfg.Connection.Mode)
+	v.Set("connection.auto_detect", cfg.Connection.AutoDetect)
+	v.Set("connection.timeout", cfg.Connection.Timeout)
+	v.Set("connection.retry_attempts", cfg.Connection.RetryAttempts)
+	v.Set("connection.pool_size", cfg.Connection.PoolSize)
+	v.Set("connection.tls.skip_verify", cfg.Connection.TLS.SkipVerify)
+	v.Set("connection.tls.ca_file", cfg.Connection.TLS.CAFile)
+	v.Set("connection.tls.cert_file", cfg.Connection.TLS.CertFile)
+	v.Set("connection.tls.key_file", cfg.Connection.TLS.KeyFile)
+
+	// Favorite nodes
+	if len(cfg.Connection.FavoriteNodes) > 0 {
+		nodes := make([]map[string]interface{}, len(cfg.Connection.FavoriteNodes))
+		for i, node := range cfg.Connection.FavoriteNodes {
+			nodes[i] = map[string]interface{}{
+				"id":          node.ID,
+				"alias":       node.Alias,
+				"priority":    node.Priority,
+				"address":     node.Address,
+				"unix_socket": node.UnixSocket,
+			}
+		}
+		v.Set("connection.favorite_nodes", nodes)
+	}
+
+	// Write config file
+	if err := v.WriteConfigAs(path); err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return nil
+}
+
 // LoadBibd loads the configuration for the bibd daemon
 func LoadBibd(cfgFile string) (*BibdConfig, error) {
 	v := newViper(AppBibd)

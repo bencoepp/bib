@@ -9,6 +9,7 @@ import (
 	"bib/cmd/bib/cmd/admin"
 	certcmd "bib/cmd/bib/cmd/cert"
 	configcmd "bib/cmd/bib/cmd/config"
+	connectcmd "bib/cmd/bib/cmd/connect"
 	"bib/cmd/bib/cmd/demo"
 	"bib/cmd/bib/cmd/setup"
 	trustcmd "bib/cmd/bib/cmd/trust"
@@ -153,6 +154,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "output format (json, yaml, table, quiet)")
 	rootCmd.PersistentFlags().BoolVarP(&verboseMode, "verbose", "v", false, "verbose output (includes full log output)")
 	rootCmd.PersistentFlags().StringVarP(&localeFlag, "locale", "L", "", "UI locale (en, de, fr, ru, zh-tw). Overrides config and system locale")
+	rootCmd.PersistentFlags().StringVar(GetNodeFlag(), "node", "", "daemon address to connect to (overrides config)")
 
 	// Bind flags to viper
 	viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("output"))
@@ -162,6 +164,7 @@ func init() {
 	rootCmd.AddCommand(admin.NewCommand())
 	rootCmd.AddCommand(certcmd.NewCommand())
 	rootCmd.AddCommand(configcmd.NewCommand())
+	rootCmd.AddCommand(connectcmd.NewCommand())
 	rootCmd.AddCommand(demo.NewCommand())
 	rootCmd.AddCommand(setup.NewCommand())
 	rootCmd.AddCommand(trustcmd.NewCommand())

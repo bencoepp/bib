@@ -1095,42 +1095,61 @@
 ### 4.7 Client Library & CLI Integration
 
 #### 4.7.1 Go Client Library
-- [ ] **GRPC-037**: Client library structure
+- [x] **GRPC-037**: Client library structure
   ```
   internal/grpc/client/
   ├── client.go        # Main client with connection management
-  ├── auth.go          # Auth-related helpers
+  ├── auth.go          # Auth-related helpers (SSH agent, token encryption)
   ├── options.go       # Connection options (TLS, retry, timeout)
-  ├── interceptors.go  # Client-side interceptors
-  └── errors.go        # Error handling helpers
+  ├── interceptors.go  # Client-side interceptors (request ID, auth, logging)
+  ├── errors.go        # Error handling helpers
+  ├── pipe_unix.go     # Unix socket support
+  └── pipe_windows.go  # Windows named pipe support
   ```
+  - **Implemented in**: `internal/grpc/client/`
 
-- [ ] **GRPC-038**: Client connection management
+- [x] **GRPC-038**: Client connection management
   - Support multiple connection targets (direct, P2P, Unix socket)
-  - Connection pooling with health checks
-  - Automatic reconnection with backoff
-  - Context propagation (request ID, user info)
+  - Sequential mode: socket → TCP → P2P in order
+  - Parallel mode: try all in parallel, use first success
+  - Connection pooling with configurable size
+  - Automatic reconnection with exponential backoff
+  - Context propagation (request ID, session token)
+  - **Implemented in**: `internal/grpc/client/client.go`
 
-- [ ] **GRPC-039**: Client authentication
+- [x] **GRPC-039**: Client authentication
   - Load user's SSH key from config or SSH agent
   - Perform Challenge/VerifyChallenge flow
-  - Cache session token with refresh
+  - Cache session token with encryption (XChaCha20-Poly1305)
+  - Token encryption key derived from SSH public key
   - Token storage in `<config_dir>/session.token`
+  - **Implemented in**: `internal/grpc/client/auth.go`
 
 #### 4.7.2 CLI Integration
-- [ ] **GRPC-040**: CLI client initialization
-  - Create gRPC client in `cmd/bib/cmd/root.go`
-  - Skip for local-only commands (setup, config, cert, version)
-  - Lazy connection on first RPC call
+- [x] **GRPC-040**: CLI client initialization
+  - Created `cmd/bib/cmd/client.go` with lazy connection
+  - Skip for local-only commands (setup, config, cert, version, help, completion)
+  - Lazy connection on first RPC call via `GetClient()`
   - Handle connection errors gracefully
+  - **Implemented in**: `cmd/bib/cmd/client.go`
 
-- [ ] **GRPC-041**: CLI daemon connection configuration
+- [x] **GRPC-041**: CLI daemon connection configuration
+  - Extended `ConnectionConfig` with:
+    - `default_node`: Default node to connect to
+    - `mode`: "sequential" or "parallel"
+    - `pool_size`: Connection pool size
+    - `tls`: TLS settings (skip_verify, ca_file, cert_file, key_file)
+  - Extended `FavoriteNode` with `unix_socket` field
+  - Added `SaveBib()` function for config persistence
+  - **Implemented in**: `internal/config/types.go`, `internal/config/loader.go`
   ```yaml
   # bib config.yaml
   connection:
     default_node: ""                   # Default node to connect to
+    mode: "sequential"                 # sequential or parallel
     timeout: 30s
     retry_attempts: 3
+    pool_size: 5
     tls:
       skip_verify: false               # Dangerous: disable TLS verification
       ca_file: ""                      # Custom CA file
@@ -1138,11 +1157,14 @@
       key_file: ""                     # Client key
   ```
 
-- [ ] **GRPC-042**: CLI node selection
+- [x] **GRPC-042**: CLI node selection
   - `bib --node <addr>` flag for explicit node selection
-  - Auto-discover local node via mDNS
+  - Auto-discover local node via mDNS (uses P2P mDNS integration)
   - Use favorite nodes from config
-  - `bib connect <addr>` to set default node
+  - `bib connect <addr>` to test connection and authenticate
+  - `bib connect --save` to save as default node
+  - `bib connect --alias <name>` to save with alias
+  - **Implemented in**: `cmd/bib/cmd/root.go`, `cmd/bib/cmd/connect/connect.go`
 
 ### 4.8 Testing & Documentation
 
