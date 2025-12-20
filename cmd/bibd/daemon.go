@@ -4,6 +4,7 @@ package main
 import (
 	"bib/internal/certs"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,7 +40,8 @@ type Daemon struct {
 	p2pDisc     *p2p.Discovery
 	p2pMode     *p2p.ModeManager
 	cluster     *cluster.Cluster
-	certMgr     *certs.Manager // TLS certificate manager
+	certMgr     *certs.Manager  // TLS certificate manager
+	grpcServer  *grpcpkg.Server // gRPC server
 
 	mu        sync.Mutex
 	running   bool
@@ -125,6 +127,17 @@ func (d *Daemon) Start(ctx context.Context) error {
 		return fmt.Errorf("storage failed to become ready: %w", err)
 	}
 
+	// 8. Initialize gRPC server (after storage and P2P are ready)
+	if d.cfg.Server.GRPC.Enabled {
+		if err := d.startGRPCServer(ctx); err != nil {
+			d.stopCluster()
+			d.stopP2P()
+			d.stopStorage()
+			d.stopCertificates()
+			return fmt.Errorf("failed to start gRPC server: %w", err)
+		}
+	}
+
 	d.running = true
 	d.startedAt = time.Now()
 	d.log.Info("daemon started successfully")
@@ -133,7 +146,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 }
 
 // Stop gracefully shuts down all daemon components in reverse order.
-// Order: Cluster -> P2P -> Storage -> Certificates
+// Order: gRPC -> Cluster -> P2P -> Storage -> Certificates
 func (d *Daemon) Stop(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -146,27 +159,32 @@ func (d *Daemon) Stop(ctx context.Context) error {
 
 	var errs []error
 
-	// 1. Stop cluster first
+	// 1. Stop gRPC server first (drain connections)
+	if err := d.stopGRPCServer(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("grpc: %w", err))
+	}
+
+	// 2. Stop cluster
 	if err := d.stopCluster(); err != nil {
 		errs = append(errs, fmt.Errorf("cluster: %w", err))
 	}
 
-	// 2. Stop P2P
+	// 3. Stop P2P
 	if err := d.stopP2P(); err != nil {
 		errs = append(errs, fmt.Errorf("p2p: %w", err))
 	}
 
-	// 3. Stop storage
+	// 4. Stop storage
 	if err := d.stopStorage(); err != nil {
 		errs = append(errs, fmt.Errorf("storage: %w", err))
 	}
 
-	// 4. Stop certificate manager
+	// 5. Stop certificate manager
 	if err := d.stopCertificates(); err != nil {
 		errs = append(errs, fmt.Errorf("certs: %w", err))
 	}
 
-	// 5. Remove PID file
+	// 6. Remove PID file
 	if err := d.removePIDFile(); err != nil {
 		d.log.Warn("failed to remove PID file", "error", err)
 	}
@@ -812,6 +830,81 @@ func (d *Daemon) stopCluster() error {
 
 	d.cluster = nil
 	d.log.Debug("cluster shut down")
+	return nil
+}
+
+// startGRPCServer initializes and starts the gRPC server.
+func (d *Daemon) startGRPCServer(ctx context.Context) error {
+	d.log.Debug("initializing gRPC server",
+		"host", d.cfg.Server.GRPC.Host,
+		"port", d.cfg.Server.GRPC.Port,
+		"unix_socket", d.cfg.Server.GRPC.UnixSocket,
+	)
+
+	// Get TLS config from certificate manager
+	var tlsConfig *tls.Config
+	if d.certMgr != nil {
+		tlsConfig = d.certMgr.TLSConfig()
+	}
+
+	// Create gRPC server configuration
+	serverCfg := grpcpkg.ServerConfig{
+		GRPCConfig:     d.cfg.Server.GRPC,
+		ServerHost:     d.cfg.Server.Host,
+		TLSConfig:      tlsConfig,
+		HealthProvider: d, // Daemon implements HealthProvider
+	}
+
+	// Create audit middleware if audit logging is enabled
+	if d.cfg.Database.Audit.Enabled && d.store != nil {
+		auditRepo := d.store.Audit()
+		if auditRepo != nil {
+			serverCfg.AuditMiddleware = grpcpkg.NewAuditMiddleware(auditRepo, grpcpkg.AuditConfig{
+				Enabled:             true,
+				LogFailedOperations: true,
+				NodeID:              d.NodeID(),
+			})
+		}
+	}
+
+	// Create the server
+	server, err := grpcpkg.NewServer(serverCfg)
+	if err != nil {
+		d.log.Error("failed to create gRPC server", "error", err)
+		return fmt.Errorf("failed to create gRPC server: %w", err)
+	}
+
+	// Start the server
+	if err := server.Start(ctx); err != nil {
+		d.log.Error("failed to start gRPC server", "error", err)
+		return fmt.Errorf("failed to start gRPC server: %w", err)
+	}
+
+	d.grpcServer = server
+
+	d.log.Info("gRPC server started",
+		"address", server.Address(),
+		"metrics_enabled", d.cfg.Server.GRPC.Metrics.Enabled,
+	)
+
+	return nil
+}
+
+// stopGRPCServer shuts down the gRPC server gracefully.
+func (d *Daemon) stopGRPCServer(ctx context.Context) error {
+	if d.grpcServer == nil {
+		return nil
+	}
+
+	d.log.Debug("stopping gRPC server")
+
+	if err := d.grpcServer.Stop(ctx); err != nil {
+		d.log.Error("error stopping gRPC server", "error", err)
+		return err
+	}
+
+	d.grpcServer = nil
+	d.log.Debug("gRPC server shut down")
 	return nil
 }
 

@@ -36,11 +36,103 @@ type OutputConfig struct {
 
 // ServerConfig holds daemon server configuration (bibd only)
 type ServerConfig struct {
-	Host    string    `mapstructure:"host"`
-	Port    int       `mapstructure:"port"`
-	TLS     TLSConfig `mapstructure:"tls"`
-	PIDFile string    `mapstructure:"pid_file"`
-	DataDir string    `mapstructure:"data_dir"`
+	Host    string     `mapstructure:"host"`
+	Port    int        `mapstructure:"port"`
+	TLS     TLSConfig  `mapstructure:"tls"`
+	GRPC    GRPCConfig `mapstructure:"grpc"`
+	PIDFile string     `mapstructure:"pid_file"`
+	DataDir string     `mapstructure:"data_dir"`
+}
+
+// GRPCConfig holds gRPC server configuration
+type GRPCConfig struct {
+	// Enabled controls whether the gRPC server is active (default: true)
+	Enabled bool `mapstructure:"enabled"`
+
+	// Host is the address to bind to (default: from parent ServerConfig)
+	// If empty, uses ServerConfig.Host
+	Host string `mapstructure:"host"`
+
+	// Port is the gRPC server port (default: 4000)
+	Port int `mapstructure:"port"`
+
+	// UnixSocket is the path to the Unix socket for local CLI connections.
+	// If empty, Unix socket is disabled.
+	// On Windows, this creates a named pipe instead.
+	UnixSocket string `mapstructure:"unix_socket"`
+
+	// MaxRecvMsgSize is the maximum receive message size in bytes (default: 16MB)
+	MaxRecvMsgSize int `mapstructure:"max_recv_msg_size"`
+
+	// MaxSendMsgSize is the maximum send message size in bytes (default: 16MB)
+	MaxSendMsgSize int `mapstructure:"max_send_msg_size"`
+
+	// MaxConcurrentStreams is the maximum concurrent streams per connection (default: 100)
+	MaxConcurrentStreams uint32 `mapstructure:"max_concurrent_streams"`
+
+	// Keepalive holds keepalive settings
+	Keepalive GRPCKeepaliveConfig `mapstructure:"keepalive"`
+
+	// Reflection enables gRPC reflection for debugging.
+	// Only works in development builds; release builds ignore this setting.
+	Reflection bool `mapstructure:"reflection"`
+
+	// RateLimit configures per-user rate limiting
+	RateLimit GRPCRateLimitConfig `mapstructure:"rate_limit"`
+
+	// Metrics configures Prometheus metrics
+	Metrics GRPCMetricsConfig `mapstructure:"metrics"`
+
+	// ShutdownGracePeriod is how long to wait for connections to drain (default: 30s)
+	ShutdownGracePeriod time.Duration `mapstructure:"shutdown_grace_period"`
+}
+
+// GRPCKeepaliveConfig holds gRPC keepalive settings
+type GRPCKeepaliveConfig struct {
+	// Time is the interval between keepalive pings (default: 2h)
+	Time time.Duration `mapstructure:"time"`
+
+	// Timeout is how long to wait for a keepalive ping ack (default: 20s)
+	Timeout time.Duration `mapstructure:"timeout"`
+
+	// MinTime is the minimum time a client should wait before sending a ping (default: 5m)
+	// This is enforced by the server.
+	MinTime time.Duration `mapstructure:"min_time"`
+
+	// PermitWithoutStream allows pings even without active streams (default: false)
+	PermitWithoutStream bool `mapstructure:"permit_without_stream"`
+}
+
+// GRPCRateLimitConfig holds gRPC rate limiting settings
+type GRPCRateLimitConfig struct {
+	// Enabled controls whether rate limiting is active (default: true)
+	Enabled bool `mapstructure:"enabled"`
+
+	// RequestsPerSecond is the maximum requests per second per user (default: 100)
+	RequestsPerSecond float64 `mapstructure:"requests_per_second"`
+
+	// Burst is the maximum burst size (default: 200)
+	Burst int `mapstructure:"burst"`
+}
+
+// GRPCMetricsConfig holds gRPC metrics settings
+type GRPCMetricsConfig struct {
+	// Enabled controls whether Prometheus metrics are collected (default: true)
+	Enabled bool `mapstructure:"enabled"`
+
+	// HTTPPort is the port for the Prometheus /metrics endpoint (default: 9090)
+	// Set to 0 to disable the HTTP endpoint (metrics still collected for internal use)
+	HTTPPort int `mapstructure:"http_port"`
+
+	// HTTPHost is the address for the metrics HTTP server (default: "127.0.0.1")
+	HTTPHost string `mapstructure:"http_host"`
+
+	// Path is the HTTP path for metrics (default: "/metrics")
+	Path string `mapstructure:"path"`
+
+	// EnableLatencyHistograms enables detailed latency histograms (default: true)
+	// Disable for reduced memory usage in high-throughput scenarios.
+	EnableLatencyHistograms bool `mapstructure:"enable_latency_histograms"`
 }
 
 // TLSConfig holds TLS/SSL configuration
@@ -717,6 +809,35 @@ func DefaultBibdConfig() BibdConfig {
 			DataDir: getDefaultDataDir(),
 			TLS: TLSConfig{
 				Enabled: false,
+			},
+			GRPC: GRPCConfig{
+				Enabled:              true,
+				Host:                 "", // Uses Server.Host if empty
+				Port:                 4000,
+				UnixSocket:           "",               // Disabled by default; set to path like /var/run/bibd/grpc.sock
+				MaxRecvMsgSize:       16 * 1024 * 1024, // 16MB
+				MaxSendMsgSize:       16 * 1024 * 1024, // 16MB
+				MaxConcurrentStreams: 100,
+				Keepalive: GRPCKeepaliveConfig{
+					Time:                2 * time.Hour,
+					Timeout:             20 * time.Second,
+					MinTime:             5 * time.Minute,
+					PermitWithoutStream: false,
+				},
+				Reflection: false, // Only works in dev builds anyway
+				RateLimit: GRPCRateLimitConfig{
+					Enabled:           true,
+					RequestsPerSecond: 100,
+					Burst:             200,
+				},
+				Metrics: GRPCMetricsConfig{
+					Enabled:                 true,
+					HTTPPort:                9090,
+					HTTPHost:                "127.0.0.1",
+					Path:                    "/metrics",
+					EnableLatencyHistograms: true,
+				},
+				ShutdownGracePeriod: 30 * time.Second,
 			},
 		},
 		P2P: P2PConfig{

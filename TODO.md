@@ -930,33 +930,38 @@
 ### 4.5 Server Implementation
 
 #### 4.5.1 gRPC Server Setup
-- [ ] **GRPC-021**: gRPC server infrastructure
-  - Create `internal/grpc/server.go` with server lifecycle
+- [x] **GRPC-021**: gRPC server infrastructure
+  - Create `internal/grpc/server_lifecycle.go` with server lifecycle
   - Configure TLS from generated certificates
   - Listen on configurable port (default: 4000)
   - Optional Unix socket for local CLI (faster, no TLS overhead)
+  - Windows named pipes support for local CLI
   - Graceful shutdown with connection draining
+  - **Implemented in**: `internal/grpc/server_lifecycle.go`, `internal/grpc/pipe_unix.go`, `internal/grpc/pipe_windows.go`
 
-- [ ] **GRPC-022**: gRPC interceptors
+- [x] **GRPC-022**: gRPC interceptors
   - **Logging interceptor**: Log all RPC calls with timing
-  - **Auth interceptor**: Validate session token, extract user context
+  - **Auth interceptor**: Validate session token, extract user context (via RBAC)
   - **Recovery interceptor**: Catch panics, return proper errors
   - **Audit interceptor**: Write to audit log for sensitive operations
-  - **Rate limit interceptor**: Per-user rate limiting
+  - **Rate limit interceptor**: Per-user rate limiting (in-memory)
   - **Request ID interceptor**: Add/propagate request IDs
-  - **Metrics interceptor**: Prometheus metrics for all RPCs
+  - **Metrics interceptor**: Full Prometheus metrics integration with /metrics HTTP endpoint
+  - **Implemented in**: `internal/grpc/interceptors.go`, `internal/grpc/audit.go`, `internal/grpc/rbac.go`
 
-- [ ] **GRPC-023**: Error handling
+- [x] **GRPC-023**: Error handling
   - Map domain errors to gRPC status codes
   - Include error details in `google.rpc.Status`
   - Localized error messages (using i18n)
   - Don't leak internal error details to clients
   - Log full error context server-side
+  - **Implemented in**: `internal/grpc/errors.go`
 
-- [ ] **GRPC-024**: gRPC reflection & debugging
-  - Enable reflection in development mode
-  - Disable in production by default (configurable)
+- [x] **GRPC-024**: gRPC reflection & debugging
+  - Enable reflection in development mode only (release builds CAN NOT enable)
+  - Disable in production by default
   - Health check endpoint for load balancers
+  - **Implemented in**: `internal/grpc/server_lifecycle.go`, `internal/version/version.go` (DevMode flag)
 
 #### 4.5.2 Service Implementations
 
@@ -1023,30 +1028,51 @@
 
 ### 4.6 Daemon Integration
 
-- [ ] **GRPC-035**: Add gRPC server to daemon lifecycle
+- [x] **GRPC-035**: Add gRPC server to daemon lifecycle
   - Update `cmd/bibd/daemon.go` to start gRPC server
   - Start after storage and P2P initialization
-  - Stop before storage shutdown
+  - Stop before storage shutdown (first in shutdown order)
   - Log gRPC server address on startup
+  - **Implemented in**: `cmd/bibd/daemon.go` (startGRPCServer, stopGRPCServer methods)
 
-- [ ] **GRPC-036**: Configuration for gRPC
+- [x] **GRPC-036**: Configuration for gRPC
+  - Nested under `server.grpc` in BibdConfig
+  - Full configuration support including:
+    - TCP listener with TLS
+    - Unix socket (Unix) / Named pipe (Windows) for local CLI
+    - Keepalive settings (server and enforcement)
+    - Rate limiting configuration
+    - Prometheus metrics with HTTP endpoint
+    - Reflection (dev builds only)
+  - **Implemented in**: `internal/config/types.go` (GRPCConfig, GRPCKeepaliveConfig, etc.)
   ```yaml
-  # config.yaml additions
-  grpc:
-    enabled: true
-    host: "0.0.0.0"
-    port: 4000
-    unix_socket: ""                    # Optional: /var/run/bibd/grpc.sock
-    max_recv_msg_size: 16777216        # 16MB
-    max_send_msg_size: 16777216        # 16MB
-    keepalive:
-      time: 30s
-      timeout: 10s
-    reflection: false                  # Enable for debugging
-    rate_limit:
+  # config.yaml additions (nested under server)
+  server:
+    grpc:
       enabled: true
-      requests_per_second: 100
-      burst: 200
+      host: ""                           # Uses server.host if empty
+      port: 4000
+      unix_socket: ""                    # Unix socket path (or named pipe on Windows)
+      max_recv_msg_size: 16777216        # 16MB
+      max_send_msg_size: 16777216        # 16MB
+      max_concurrent_streams: 100
+      keepalive:
+        time: 2h
+        timeout: 20s
+        min_time: 5m
+        permit_without_stream: false
+      reflection: false                  # Only works in dev builds
+      rate_limit:
+        enabled: true
+        requests_per_second: 100
+        burst: 200
+      metrics:
+        enabled: true
+        http_port: 9090
+        http_host: "127.0.0.1"
+        path: "/metrics"
+        enable_latency_histograms: true
+      shutdown_grace_period: 30s
   ```
 
 ### 4.7 Client Library & CLI Integration

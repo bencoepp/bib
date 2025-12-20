@@ -21,6 +21,12 @@ var (
 
 	// BuildTime is the RFC3339 timestamp of when the binary was built.
 	BuildTime = ""
+
+	// DevMode indicates if this is a development build.
+	// Set to "false" via ldflags for release builds:
+	//   -X bib/internal/version.DevMode=false
+	// Development builds (default) have this set to "true".
+	DevMode = "true"
 )
 
 // Info contains version information.
@@ -31,6 +37,14 @@ type Info struct {
 	GoVersion string    `json:"go_version"`
 	OS        string    `json:"os"`
 	Arch      string    `json:"arch"`
+	DevMode   bool      `json:"dev_mode"`
+}
+
+// IsDev returns true if this is a development build.
+// Development builds allow features like gRPC reflection that are
+// disabled in release builds for security reasons.
+func IsDev() bool {
+	return DevMode == "true"
 }
 
 // Get returns the version information.
@@ -49,6 +63,7 @@ func Get() Info {
 		GoVersion: runtime.Version(),
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,
+		DevMode:   IsDev(),
 	}
 }
 
