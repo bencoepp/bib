@@ -856,11 +856,6 @@ func TestLoadBib_JSONFormat(t *testing.T) {
 }
 
 func TestLoadBib_TOMLFormat(t *testing.T) {
-	// Skip: The loader's newViper sets SetConfigType("yaml") which overrides
-	// the auto-detection from file extension. This is a known limitation.
-	// TOML files will only work if explicitly searched for or if the loader
-	// is modified to not set a default config type.
-	t.Skip("Skipping: loader sets default config type to yaml, preventing TOML auto-detection")
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.toml")

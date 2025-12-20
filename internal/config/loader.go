@@ -72,11 +72,15 @@ func LoadBib(cfgFile string) (*BibConfig, error) {
 
 	// Set defaults
 	defaults := DefaultBibConfig()
-	setViperDefaults(v, defaults)
+	setViperDefaults(v, &defaults)
 
 	// Load config file
 	if cfgFile != "" {
 		v.SetConfigFile(cfgFile)
+		// Detect config type from file extension
+		if ext := filepath.Ext(cfgFile); ext != "" {
+			v.SetConfigType(ext[1:]) // Remove leading dot
+		}
 	}
 
 	if err := v.ReadInConfig(); err != nil {
@@ -170,6 +174,10 @@ func LoadBibd(cfgFile string) (*BibdConfig, error) {
 	// Load config file
 	if cfgFile != "" {
 		v.SetConfigFile(cfgFile)
+		// Detect config type from file extension
+		if ext := filepath.Ext(cfgFile); ext != "" {
+			v.SetConfigType(ext[1:]) // Remove leading dot
+		}
 	}
 
 	if err := v.ReadInConfig(); err != nil {
