@@ -8,7 +8,7 @@
 # Go test flags
 TEST_FLAGS ?= -v
 TEST_TIMEOUT ?= 10m
-TEST_PARALLEL ?= 4
+TEST_PARALLEL ?= 2
 COVERAGE_FILE ?= coverage.out
 
 # Docker settings

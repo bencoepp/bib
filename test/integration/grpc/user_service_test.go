@@ -68,7 +68,10 @@ func TestUserService_GetUserByPublicKey(t *testing.T) {
 	conn := ts.Dial()
 	userClient := services.NewUserServiceClient(conn)
 
-	// First authenticate with a known key
+	// Create admin first (required for GetUserByPublicKey)
+	adminCtx, _, _ := ts.CreateAdminUser(ctx, "PubKeyAdmin")
+
+	// Now authenticate with a known key to create a user we can look up
 	pubKey, privKey := generateTestKeyPair(t)
 	authClient := services.NewAuthServiceClient(conn)
 
@@ -84,11 +87,8 @@ func TestUserService_GetUserByPublicKey(t *testing.T) {
 	})
 	assertNoError(t, err)
 
-	// Get authenticated context
-	authCtx, _, _ := ts.AuthenticateUser(ctx, "AdminUser")
-
 	t.Run("GetByValidKey", func(t *testing.T) {
-		resp, err := userClient.GetUserByPublicKey(authCtx, &services.GetUserByPublicKeyRequest{
+		resp, err := userClient.GetUserByPublicKey(adminCtx, &services.GetUserByPublicKeyRequest{
 			PublicKey: pubKey,
 		})
 		assertNoError(t, err)
@@ -100,14 +100,14 @@ func TestUserService_GetUserByPublicKey(t *testing.T) {
 
 	t.Run("GetByInvalidKey", func(t *testing.T) {
 		unknownKey, _ := generateTestKeyPair(t)
-		_, err := userClient.GetUserByPublicKey(authCtx, &services.GetUserByPublicKeyRequest{
+		_, err := userClient.GetUserByPublicKey(adminCtx, &services.GetUserByPublicKeyRequest{
 			PublicKey: unknownKey,
 		})
 		assertGRPCCode(t, err, codes.NotFound)
 	})
 
 	t.Run("MissingPublicKey", func(t *testing.T) {
-		_, err := userClient.GetUserByPublicKey(authCtx, &services.GetUserByPublicKeyRequest{
+		_, err := userClient.GetUserByPublicKey(adminCtx, &services.GetUserByPublicKeyRequest{
 			PublicKey: nil,
 		})
 		assertGRPCCode(t, err, codes.InvalidArgument)
@@ -124,15 +124,16 @@ func TestUserService_ListUsers(t *testing.T) {
 	conn := ts.Dial()
 	userClient := services.NewUserServiceClient(conn)
 
-	// Create several users
+	// Create admin first (required for ListUsers)
+	adminCtx, _, _ := ts.CreateAdminUser(ctx, "ListUsersAdmin")
+
+	// Create several regular users
 	for i := 0; i < 10; i++ {
 		ts.AuthenticateUser(ctx, "ListUser"+string(rune('A'+i)))
 	}
 
-	authCtx, _, _ := ts.AuthenticateUser(ctx, "ListUsersAdmin")
-
 	t.Run("ListAll", func(t *testing.T) {
-		resp, err := userClient.ListUsers(authCtx, &services.ListUsersRequest{})
+		resp, err := userClient.ListUsers(adminCtx, &services.ListUsersRequest{})
 		assertNoError(t, err)
 
 		if len(resp.Users) == 0 {
@@ -145,7 +146,7 @@ func TestUserService_ListUsers(t *testing.T) {
 
 	t.Run("ListWithPagination", func(t *testing.T) {
 		// First page
-		resp1, err := userClient.ListUsers(authCtx, &services.ListUsersRequest{
+		resp1, err := userClient.ListUsers(adminCtx, &services.ListUsersRequest{
 			Page: &bibv1.PageRequest{
 				Limit:  5,
 				Offset: 0,
@@ -158,7 +159,7 @@ func TestUserService_ListUsers(t *testing.T) {
 		}
 
 		// Second page
-		resp2, err := userClient.ListUsers(authCtx, &services.ListUsersRequest{
+		resp2, err := userClient.ListUsers(adminCtx, &services.ListUsersRequest{
 			Page: &bibv1.PageRequest{
 				Limit:  5,
 				Offset: 5,
@@ -179,7 +180,7 @@ func TestUserService_ListUsers(t *testing.T) {
 	})
 
 	t.Run("ListByStatus", func(t *testing.T) {
-		resp, err := userClient.ListUsers(authCtx, &services.ListUsersRequest{
+		resp, err := userClient.ListUsers(adminCtx, &services.ListUsersRequest{
 			Status: services.UserStatus_USER_STATUS_ACTIVE,
 		})
 		assertNoError(t, err)
@@ -202,15 +203,16 @@ func TestUserService_SearchUsers(t *testing.T) {
 	conn := ts.Dial()
 	userClient := services.NewUserServiceClient(conn)
 
+	// Create admin first (required for SearchUsers)
+	adminCtx, _, _ := ts.CreateAdminUser(ctx, "SearchAdmin")
+
 	// Create users with distinct names
 	ts.AuthenticateUser(ctx, "SearchableAlice")
 	ts.AuthenticateUser(ctx, "SearchableBob")
 	ts.AuthenticateUser(ctx, "DifferentCharlie")
 
-	authCtx, _, _ := ts.AuthenticateUser(ctx, "SearchAdmin")
-
 	t.Run("SearchByName", func(t *testing.T) {
-		resp, err := userClient.SearchUsers(authCtx, &services.SearchUsersRequest{
+		resp, err := userClient.SearchUsers(adminCtx, &services.SearchUsersRequest{
 			Query: "Searchable",
 		})
 		assertNoError(t, err)
@@ -238,14 +240,14 @@ func TestUserService_SearchUsers(t *testing.T) {
 	})
 
 	t.Run("EmptyQuery", func(t *testing.T) {
-		_, err := userClient.SearchUsers(authCtx, &services.SearchUsersRequest{
+		_, err := userClient.SearchUsers(adminCtx, &services.SearchUsersRequest{
 			Query: "",
 		})
 		assertGRPCCode(t, err, codes.InvalidArgument)
 	})
 
 	t.Run("TooShortQuery", func(t *testing.T) {
-		_, err := userClient.SearchUsers(authCtx, &services.SearchUsersRequest{
+		_, err := userClient.SearchUsers(adminCtx, &services.SearchUsersRequest{
 			Query: "ab", // Typically min 3 chars
 		})
 		// May return error or empty results depending on implementation

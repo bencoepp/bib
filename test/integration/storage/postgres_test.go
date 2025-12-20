@@ -51,7 +51,7 @@ func TestPostgresStore_Integration(t *testing.T) {
 	defer store.Close()
 
 	// Run migrations
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
@@ -179,7 +179,7 @@ func createPostgresStore(t *testing.T, ctx context.Context, container *container
 		t.Fatalf("failed to create store: %v", err)
 	}
 
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		store.Close()
 		t.Fatalf("failed to migrate: %v", err)
 	}

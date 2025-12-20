@@ -32,7 +32,7 @@ func TestSQLiteStore_Integration(t *testing.T) {
 	defer store.Close()
 
 	// Run migrations
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
@@ -221,7 +221,7 @@ func createSQLiteStore(t *testing.T, ctx context.Context, dataDir string) storag
 		t.Fatalf("failed to create store: %v", err)
 	}
 
-	if err := store.Migrate(ctx); err != nil {
+	if err := storage.RunMigrations(ctx, store, storage.DefaultMigrationsConfig()); err != nil {
 		store.Close()
 		t.Fatalf("failed to migrate: %v", err)
 	}

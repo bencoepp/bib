@@ -129,6 +129,13 @@ func (r *TopicRepository) List(ctx context.Context, filter storage.TopicFilter) 
 		argNum += 2
 	}
 
+	// Filter by tags (AND logic - topic must have ALL specified tags)
+	for _, tag := range filter.Tags {
+		query += fmt.Sprintf(" AND $%d = ANY(tags)", argNum)
+		args = append(args, tag)
+		argNum++
+	}
+
 	// Order by
 	orderBy := "name"
 	if filter.OrderBy != "" {

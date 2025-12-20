@@ -140,6 +140,12 @@ func (r *TopicRepository) List(ctx context.Context, filter storage.TopicFilter) 
 		args = append(args, search, search)
 	}
 
+	// Filter by tags (AND logic - topic must have ALL specified tags)
+	for _, tag := range filter.Tags {
+		query += " AND tags LIKE ?"
+		args = append(args, "%\""+tag+"\"%")
+	}
+
 	// Order by
 	orderBy := "name"
 	if filter.OrderBy != "" {
