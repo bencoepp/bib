@@ -17,6 +17,7 @@ import (
 
 // TestSQLiteStore_Integration tests the SQLite store implementation.
 func TestSQLiteStore_Integration(t *testing.T) {
+	t.Parallel()
 	ctx := testutil.TestContext(t)
 	dataDir := testutil.TempDir(t, "sqlite")
 
@@ -53,6 +54,7 @@ func TestSQLiteStore_Integration(t *testing.T) {
 
 // TestSQLiteTopicRepository_Integration tests topic CRUD operations with SQLite.
 func TestSQLiteTopicRepository_Integration(t *testing.T) {
+	t.Parallel()
 	ctx := testutil.TestContext(t)
 	dataDir := testutil.TempDir(t, "sqlite")
 
@@ -122,6 +124,7 @@ func TestSQLiteTopicRepository_Integration(t *testing.T) {
 
 // TestSQLiteDatasetRepository_Integration tests dataset CRUD operations.
 func TestSQLiteDatasetRepository_Integration(t *testing.T) {
+	t.Parallel()
 	ctx := testutil.TestContext(t)
 	dataDir := testutil.TempDir(t, "sqlite")
 
@@ -171,6 +174,7 @@ func TestSQLiteDatasetRepository_Integration(t *testing.T) {
 
 // TestSQLiteJobRepository_Integration tests job CRUD operations.
 func TestSQLiteJobRepository_Integration(t *testing.T) {
+	t.Parallel()
 	ctx := testutil.TestContext(t)
 	dataDir := testutil.TempDir(t, "sqlite")
 

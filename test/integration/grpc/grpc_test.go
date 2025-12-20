@@ -101,6 +101,7 @@ func (ts *testServer) dial(t *testing.T) *grpc.ClientConn {
 
 // TestGRPCIntegration_HealthService tests the health service end-to-end.
 func TestGRPCIntegration_HealthService(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -136,6 +137,7 @@ func TestGRPCIntegration_HealthService(t *testing.T) {
 
 // TestGRPCIntegration_AuthChallenge tests the auth challenge endpoint.
 func TestGRPCIntegration_AuthChallenge(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -173,6 +175,7 @@ func TestGRPCIntegration_AuthChallenge(t *testing.T) {
 
 // TestGRPCIntegration_AuthConfig tests getting auth configuration.
 func TestGRPCIntegration_AuthConfig(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -194,6 +197,7 @@ func TestGRPCIntegration_AuthConfig(t *testing.T) {
 
 // TestGRPCIntegration_ConcurrentRequests tests concurrent gRPC requests.
 func TestGRPCIntegration_ConcurrentRequests(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -232,6 +236,7 @@ func TestGRPCIntegration_ConcurrentRequests(t *testing.T) {
 
 // TestGRPCIntegration_ErrorHandling tests error responses.
 func TestGRPCIntegration_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -279,6 +284,7 @@ func TestGRPCIntegration_ErrorHandling(t *testing.T) {
 
 // TestGRPCIntegration_Streaming tests streaming endpoints.
 func TestGRPCIntegration_Streaming(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

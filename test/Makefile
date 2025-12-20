@@ -8,6 +8,7 @@
 # Go test flags
 TEST_FLAGS ?= -v
 TEST_TIMEOUT ?= 10m
+TEST_PARALLEL ?= 4
 COVERAGE_FILE ?= coverage.out
 
 # Docker settings
@@ -42,7 +43,7 @@ test-unit:
 test-integration: test-docker-up
 	@echo "Running integration tests..."
 	TEST_POSTGRES_PORT=$(TEST_POSTGRES_PORT) \
-	go test $(TEST_FLAGS) -tags=integration -timeout $(TEST_TIMEOUT) ./test/integration/...
+	go test $(TEST_FLAGS) -tags=integration -timeout $(TEST_TIMEOUT) -parallel $(TEST_PARALLEL) ./test/integration/...
 
 test-integration-storage:
 	@echo "Running storage integration tests..."

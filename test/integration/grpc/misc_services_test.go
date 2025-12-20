@@ -19,6 +19,7 @@ import (
 
 // TestHealthService_Ping tests the ping endpoint.
 func TestHealthService_Ping(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -65,6 +66,7 @@ func TestHealthService_Ping(t *testing.T) {
 
 // TestHealthService_Check tests health check endpoint.
 func TestHealthService_Check(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -96,6 +98,7 @@ func TestHealthService_Check(t *testing.T) {
 
 // TestHealthService_GetNodeInfo tests node info retrieval.
 func TestHealthService_GetNodeInfo(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -119,6 +122,7 @@ func TestHealthService_GetNodeInfo(t *testing.T) {
 
 // TestHealthService_Watch tests streaming health check.
 func TestHealthService_Watch(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -148,6 +152,7 @@ func TestHealthService_Watch(t *testing.T) {
 
 // TestAdminService_GetConfig tests configuration retrieval.
 func TestAdminService_GetConfig(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -192,6 +197,7 @@ func TestAdminService_GetConfig(t *testing.T) {
 
 // TestAdminService_GetSystemInfo tests system status retrieval.
 func TestAdminService_GetSystemInfo(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -217,6 +223,7 @@ func TestAdminService_GetSystemInfo(t *testing.T) {
 
 // TestAdminService_StreamLogs tests log streaming.
 func TestAdminService_StreamLogs(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -244,6 +251,7 @@ func TestAdminService_StreamLogs(t *testing.T) {
 
 // TestAdminService_GetRecentLogs tests recent log retrieval.
 func TestAdminService_GetRecentLogs(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -262,6 +270,7 @@ func TestAdminService_GetRecentLogs(t *testing.T) {
 
 // TestAdminService_RequiresAdmin tests admin-only access.
 func TestAdminService_RequiresAdmin(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -289,6 +298,7 @@ func TestAdminService_RequiresAdmin(t *testing.T) {
 
 // TestQueryService_Validate tests CEL query validation.
 func TestQueryService_Validate(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -344,6 +354,7 @@ func TestQueryService_Validate(t *testing.T) {
 
 // TestQueryService_Explain tests query explanation.
 func TestQueryService_Explain(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -365,6 +376,7 @@ func TestQueryService_Explain(t *testing.T) {
 
 // TestQueryService_ListFunctions tests function listing.
 func TestQueryService_ListFunctions(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -399,6 +411,7 @@ func TestQueryService_ListFunctions(t *testing.T) {
 
 // TestQueryService_Execute tests query execution.
 func TestQueryService_Execute(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -421,6 +434,7 @@ func TestQueryService_Execute(t *testing.T) {
 
 // TestQueryService_SavedQueries tests saved query CRUD.
 func TestQueryService_SavedQueries(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -457,6 +471,7 @@ func TestQueryService_SavedQueries(t *testing.T) {
 
 // TestNodeService_NotInitialized tests node service when P2P is not configured.
 func TestNodeService_NotInitialized(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

@@ -18,6 +18,7 @@ import (
 
 // TestP2PTransport_Placeholder is a placeholder for P2P transport tests.
 func TestP2PTransport_Placeholder(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 
 	// P2P transport tests require:

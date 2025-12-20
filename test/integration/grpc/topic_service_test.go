@@ -18,6 +18,7 @@ import (
 
 // TestTopicService_CreateTopic tests topic creation.
 func TestTopicService_CreateTopic(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -91,6 +92,7 @@ func TestTopicService_CreateTopic(t *testing.T) {
 
 // TestTopicService_GetTopic tests topic retrieval.
 func TestTopicService_GetTopic(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -147,6 +149,7 @@ func TestTopicService_GetTopic(t *testing.T) {
 
 // TestTopicService_ListTopics tests topic listing with filters.
 func TestTopicService_ListTopics(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -250,6 +253,7 @@ func TestTopicService_ListTopics(t *testing.T) {
 
 // TestTopicService_UpdateTopic tests topic updates.
 func TestTopicService_UpdateTopic(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -327,6 +331,7 @@ func TestTopicService_UpdateTopic(t *testing.T) {
 
 // TestTopicService_DeleteTopic tests topic deletion.
 func TestTopicService_DeleteTopic(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -373,6 +378,7 @@ func TestTopicService_DeleteTopic(t *testing.T) {
 
 // TestTopicService_Subscription tests topic subscription.
 func TestTopicService_Subscription(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -446,6 +452,7 @@ func TestTopicService_Subscription(t *testing.T) {
 
 // TestTopicService_Search tests topic search.
 func TestTopicService_Search(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

@@ -22,6 +22,7 @@ import (
 
 // TestErrors_InvalidInput tests various invalid input scenarios.
 func TestErrors_InvalidInput(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -99,6 +100,7 @@ func TestErrors_InvalidInput(t *testing.T) {
 
 // TestErrors_NotFound tests not found error scenarios.
 func TestErrors_NotFound(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -172,6 +174,7 @@ func TestErrors_NotFound(t *testing.T) {
 
 // TestErrors_Unauthenticated tests authentication errors.
 func TestErrors_Unauthenticated(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -229,6 +232,7 @@ func TestErrors_Unauthenticated(t *testing.T) {
 
 // TestErrors_PermissionDenied tests authorization errors.
 func TestErrors_PermissionDenied(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -309,6 +313,7 @@ func TestErrors_PermissionDenied(t *testing.T) {
 
 // TestErrors_AlreadyExists tests duplicate resource errors.
 func TestErrors_AlreadyExists(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -357,6 +362,7 @@ func TestErrors_AlreadyExists(t *testing.T) {
 
 // TestErrors_ContextCancellation tests behavior when context is cancelled.
 func TestErrors_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -389,6 +395,7 @@ func TestErrors_ContextCancellation(t *testing.T) {
 
 // TestErrors_InvalidMetadata tests behavior with invalid metadata.
 func TestErrors_InvalidMetadata(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -429,6 +436,7 @@ func TestErrors_InvalidMetadata(t *testing.T) {
 
 // TestEdgeCases_EmptyLists tests behavior with empty lists.
 func TestEdgeCases_EmptyLists(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -470,6 +478,7 @@ func TestEdgeCases_EmptyLists(t *testing.T) {
 
 // TestEdgeCases_SpecialCharacters tests handling of special characters.
 func TestEdgeCases_SpecialCharacters(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -518,6 +527,7 @@ func TestEdgeCases_SpecialCharacters(t *testing.T) {
 
 // TestEdgeCases_LargePayloads tests handling of large payloads.
 func TestEdgeCases_LargePayloads(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -580,6 +590,7 @@ func TestEdgeCases_LargePayloads(t *testing.T) {
 
 // TestEdgeCases_Pagination tests pagination edge cases.
 func TestEdgeCases_Pagination(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

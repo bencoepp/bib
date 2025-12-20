@@ -20,6 +20,7 @@ import (
 
 // TestConcurrency_ManyConnections tests handling many concurrent connections.
 func TestConcurrency_ManyConnections(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -67,6 +68,7 @@ func TestConcurrency_ManyConnections(t *testing.T) {
 
 // TestConcurrency_ParallelAuthentication tests many concurrent authentications.
 func TestConcurrency_ParallelAuthentication(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -127,6 +129,7 @@ func TestConcurrency_ParallelAuthentication(t *testing.T) {
 
 // TestConcurrency_ParallelTopicOperations tests concurrent topic CRUD.
 func TestConcurrency_ParallelTopicOperations(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -258,6 +261,7 @@ func TestConcurrency_ParallelTopicOperations(t *testing.T) {
 
 // TestConcurrency_MixedOperations tests mixed concurrent operations.
 func TestConcurrency_MixedOperations(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -342,6 +346,7 @@ func TestConcurrency_MixedOperations(t *testing.T) {
 
 // TestConcurrency_StreamingStress tests concurrent streaming operations.
 func TestConcurrency_StreamingStress(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -386,6 +391,7 @@ func TestConcurrency_StreamingStress(t *testing.T) {
 
 // TestConcurrency_SessionManagement tests concurrent session operations.
 func TestConcurrency_SessionManagement(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -467,6 +473,7 @@ func TestConcurrency_SessionManagement(t *testing.T) {
 
 // TestConcurrency_RapidCreateDelete tests rapid create/delete cycles.
 func TestConcurrency_RapidCreateDelete(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -515,6 +522,7 @@ func TestConcurrency_RapidCreateDelete(t *testing.T) {
 
 // TestConcurrency_DatabaseContention tests database lock contention.
 func TestConcurrency_DatabaseContention(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

@@ -17,6 +17,7 @@ import (
 
 // TestPostgresStore_Integration tests the PostgreSQL store implementation.
 func TestPostgresStore_Integration(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -72,6 +73,7 @@ func TestPostgresStore_Integration(t *testing.T) {
 
 // TestPostgresTopicRepository_Integration tests topic CRUD operations.
 func TestPostgresTopicRepository_Integration(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

@@ -18,6 +18,7 @@ import (
 
 // TestDatasetService_CreateDataset tests dataset creation.
 func TestDatasetService_CreateDataset(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -94,6 +95,7 @@ func TestDatasetService_CreateDataset(t *testing.T) {
 
 // TestDatasetService_GetDataset tests dataset retrieval.
 func TestDatasetService_GetDataset(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -145,6 +147,7 @@ func TestDatasetService_GetDataset(t *testing.T) {
 
 // TestDatasetService_ListDatasets tests dataset listing.
 func TestDatasetService_ListDatasets(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -255,6 +258,7 @@ func TestDatasetService_ListDatasets(t *testing.T) {
 
 // TestDatasetService_UpdateDataset tests dataset updates.
 func TestDatasetService_UpdateDataset(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -324,6 +328,7 @@ func TestDatasetService_UpdateDataset(t *testing.T) {
 
 // TestDatasetService_DeleteDataset tests dataset deletion.
 func TestDatasetService_DeleteDataset(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -367,6 +372,7 @@ func TestDatasetService_DeleteDataset(t *testing.T) {
 
 // TestDatasetService_Versions tests dataset versioning.
 func TestDatasetService_Versions(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -406,6 +412,7 @@ func TestDatasetService_Versions(t *testing.T) {
 
 // TestDatasetService_Search tests dataset search.
 func TestDatasetService_Search(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -488,6 +495,7 @@ func TestDatasetService_Search(t *testing.T) {
 
 // TestDatasetService_Stats tests dataset statistics.
 func TestDatasetService_Stats(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

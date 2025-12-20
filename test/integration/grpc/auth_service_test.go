@@ -19,6 +19,7 @@ import (
 
 // TestAuthService_CompleteAuthFlow tests the complete authentication flow.
 func TestAuthService_CompleteAuthFlow(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -174,6 +175,7 @@ func TestAuthService_CompleteAuthFlow(t *testing.T) {
 
 // TestAuthService_Challenge tests the Challenge endpoint variations.
 func TestAuthService_Challenge(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -240,6 +242,7 @@ func TestAuthService_Challenge(t *testing.T) {
 
 // TestAuthService_VerifyChallenge tests challenge verification variations.
 func TestAuthService_VerifyChallenge(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -311,6 +314,7 @@ func TestAuthService_VerifyChallenge(t *testing.T) {
 
 // TestAuthService_SessionManagement tests session lifecycle.
 func TestAuthService_SessionManagement(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -376,6 +380,7 @@ func TestAuthService_SessionManagement(t *testing.T) {
 
 // TestAuthService_GetAuthConfig tests auth configuration retrieval.
 func TestAuthService_GetAuthConfig(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -400,6 +405,7 @@ func TestAuthService_GetAuthConfig(t *testing.T) {
 
 // TestAuthService_GetPublicKeyInfo tests public key info retrieval.
 func TestAuthService_GetPublicKeyInfo(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -424,6 +430,7 @@ func TestAuthService_GetPublicKeyInfo(t *testing.T) {
 
 // TestAuthService_ChallengeExpiration tests that challenges expire.
 func TestAuthService_ChallengeExpiration(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 

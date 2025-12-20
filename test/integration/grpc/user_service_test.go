@@ -18,6 +18,7 @@ import (
 
 // TestUserService_GetUser tests retrieving a user by ID.
 func TestUserService_GetUser(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -59,6 +60,7 @@ func TestUserService_GetUser(t *testing.T) {
 
 // TestUserService_GetUserByPublicKey tests retrieving a user by public key.
 func TestUserService_GetUserByPublicKey(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -114,6 +116,7 @@ func TestUserService_GetUserByPublicKey(t *testing.T) {
 
 // TestUserService_ListUsers tests listing users with pagination.
 func TestUserService_ListUsers(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -191,6 +194,7 @@ func TestUserService_ListUsers(t *testing.T) {
 
 // TestUserService_SearchUsers tests user search functionality.
 func TestUserService_SearchUsers(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -253,6 +257,7 @@ func TestUserService_SearchUsers(t *testing.T) {
 
 // TestUserService_UpdateUser tests user profile updates.
 func TestUserService_UpdateUser(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -305,6 +310,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 
 // TestUserService_GetOwnUser tests getting current user info via GetUser.
 func TestUserService_GetOwnUser(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -329,6 +335,7 @@ func TestUserService_GetOwnUser(t *testing.T) {
 
 // TestUserService_UpdateOwnUser tests updating current user profile via UpdateUser.
 func TestUserService_UpdateOwnUser(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -367,6 +374,7 @@ func TestUserService_UpdateOwnUser(t *testing.T) {
 
 // TestUserService_UserPreferences tests user preferences CRUD.
 func TestUserService_UserPreferences(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
@@ -408,6 +416,7 @@ func TestUserService_UserPreferences(t *testing.T) {
 
 // TestUserService_AdminOperations tests admin-only user operations.
 func TestUserService_AdminOperations(t *testing.T) {
+	t.Parallel()
 	testutil.SkipIfShort(t)
 	ctx := testutil.TestContext(t)
 
