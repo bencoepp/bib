@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	services "bib/api/gen/go/bib/v1/services"
@@ -33,6 +34,101 @@ type AdminServiceServer struct {
 	startedAt    time.Time
 	shutdownFunc func()
 	config       interface{} // Current config
+	logBuffer    *LogRingBuffer
+}
+
+// LogRingBuffer is a thread-safe ring buffer for log entries.
+type LogRingBuffer struct {
+	entries   []LogEntry
+	size      int
+	head      int
+	count     int
+	mu        sync.RWMutex
+	listeners map[int64]chan LogEntry
+	nextID    int64
+}
+
+// LogEntry represents a single log entry.
+type LogEntry struct {
+	Timestamp time.Time
+	Level     string
+	Message   string
+	Fields    map[string]string
+}
+
+// NewLogRingBuffer creates a new log ring buffer with the specified capacity.
+func NewLogRingBuffer(capacity int) *LogRingBuffer {
+	if capacity <= 0 {
+		capacity = 1000
+	}
+	return &LogRingBuffer{
+		entries:   make([]LogEntry, capacity),
+		size:      capacity,
+		listeners: make(map[int64]chan LogEntry),
+	}
+}
+
+// Add adds a log entry to the buffer and notifies all listeners.
+func (b *LogRingBuffer) Add(entry LogEntry) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.entries[b.head] = entry
+	b.head = (b.head + 1) % b.size
+	if b.count < b.size {
+		b.count++
+	}
+
+	// Notify listeners (non-blocking)
+	for _, ch := range b.listeners {
+		select {
+		case ch <- entry:
+		default:
+			// Drop if listener is slow
+		}
+	}
+}
+
+// Recent returns the most recent n entries.
+func (b *LogRingBuffer) Recent(n int) []LogEntry {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if n <= 0 || b.count == 0 {
+		return nil
+	}
+	if n > b.count {
+		n = b.count
+	}
+
+	result := make([]LogEntry, n)
+	start := (b.head - n + b.size) % b.size
+	for i := 0; i < n; i++ {
+		result[i] = b.entries[(start+i)%b.size]
+	}
+	return result
+}
+
+// Subscribe creates a new subscription for log entries.
+// Returns a channel and an unsubscribe function.
+func (b *LogRingBuffer) Subscribe() (<-chan LogEntry, func()) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	id := b.nextID
+	b.nextID++
+
+	ch := make(chan LogEntry, 100)
+	b.listeners[id] = ch
+
+	unsubscribe := func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		delete(b.listeners, id)
+		close(ch)
+	}
+
+	return ch, unsubscribe
 }
 
 // AdminServiceConfig holds configuration for the AdminServiceServer.
@@ -47,17 +143,23 @@ type AdminServiceConfig struct {
 	StartedAt    time.Time
 	ShutdownFunc func()
 	Config       interface{}
+	LogBuffer    *LogRingBuffer
 }
 
 // NewAdminServiceServer creates a new AdminServiceServer.
 func NewAdminServiceServer() *AdminServiceServer {
 	return &AdminServiceServer{
 		startedAt: time.Now(),
+		logBuffer: NewLogRingBuffer(1000),
 	}
 }
 
 // NewAdminServiceServerWithConfig creates a new AdminServiceServer with dependencies.
 func NewAdminServiceServerWithConfig(cfg AdminServiceConfig) *AdminServiceServer {
+	logBuffer := cfg.LogBuffer
+	if logBuffer == nil {
+		logBuffer = NewLogRingBuffer(1000)
+	}
 	return &AdminServiceServer{
 		store:        cfg.Store,
 		clusterMgr:   cfg.ClusterMgr,
@@ -69,6 +171,7 @@ func NewAdminServiceServerWithConfig(cfg AdminServiceConfig) *AdminServiceServer
 		startedAt:    cfg.StartedAt,
 		shutdownFunc: cfg.ShutdownFunc,
 		config:       cfg.Config,
+		logBuffer:    logBuffer,
 	}
 }
 
@@ -151,8 +254,103 @@ func (s *AdminServiceServer) GetMetrics(_ context.Context, _ *services.GetMetric
 }
 
 // StreamLogs streams daemon logs in real-time.
-func (s *AdminServiceServer) StreamLogs(_ *services.StreamLogsRequest, _ services.AdminService_StreamLogsServer) error {
-	return status.Errorf(codes.Unimplemented, "method StreamLogs not implemented")
+func (s *AdminServiceServer) StreamLogs(req *services.StreamLogsRequest, stream services.AdminService_StreamLogsServer) error {
+	if s.logBuffer == nil {
+		return status.Error(codes.Unavailable, "log buffer not initialized")
+	}
+
+	// Parse level filter
+	levelFilter := strings.ToLower(req.GetLevel())
+
+	// First, send historical entries if requested
+	if req.GetIncludeHistory() {
+		historyCount := int(req.GetHistoryCount())
+		if historyCount <= 0 {
+			historyCount = 100 // Default
+		}
+
+		recent := s.logBuffer.Recent(historyCount)
+		for _, entry := range recent {
+			if levelFilter != "" && !matchesLevel(entry.Level, levelFilter) {
+				continue
+			}
+
+			logEntry := logEntryToProto(entry)
+			if err := stream.Send(logEntry); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Subscribe for real-time updates (always stream after history)
+	logCh, unsubscribe := s.logBuffer.Subscribe()
+	defer unsubscribe()
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case entry, ok := <-logCh:
+			if !ok {
+				return nil // Channel closed
+			}
+
+			if levelFilter != "" && !matchesLevel(entry.Level, levelFilter) {
+				continue
+			}
+
+			logEntry := logEntryToProto(entry)
+			if err := stream.Send(logEntry); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// LogMessage adds a log message to the buffer (for use by the daemon).
+func (s *AdminServiceServer) LogMessage(level, message string, fields map[string]string) {
+	if s.logBuffer == nil {
+		return
+	}
+	s.logBuffer.Add(LogEntry{
+		Timestamp: time.Now(),
+		Level:     level,
+		Message:   message,
+		Fields:    fields,
+	})
+}
+
+// GetLogBuffer returns the log buffer for external access.
+func (s *AdminServiceServer) GetLogBuffer() *LogRingBuffer {
+	return s.logBuffer
+}
+
+func logEntryToProto(entry LogEntry) *services.LogEntry {
+	return &services.LogEntry{
+		Timestamp: timestamppb.New(entry.Timestamp),
+		Level:     entry.Level,
+		Message:   entry.Message,
+		Fields:    entry.Fields,
+	}
+}
+
+func matchesLevel(entryLevel, filterLevel string) bool {
+	levels := map[string]int{
+		"debug": 0,
+		"info":  1,
+		"warn":  2,
+		"error": 3,
+		"fatal": 4,
+	}
+
+	entryPriority, ok1 := levels[strings.ToLower(entryLevel)]
+	filterPriority, ok2 := levels[strings.ToLower(filterLevel)]
+
+	if !ok1 || !ok2 {
+		return true // Unknown level, include it
+	}
+
+	return entryPriority >= filterPriority
 }
 
 // GetAuditLogs queries the audit trail.
