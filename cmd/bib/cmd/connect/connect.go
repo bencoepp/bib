@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	services "bib/api/gen/go/bib/v1/services"
+	"bib/internal/certs"
 	"bib/internal/config"
 	client "bib/internal/grpc/client"
 
@@ -16,10 +18,12 @@ import (
 
 var (
 	// Flags
-	saveFlag    bool
-	aliasFlag   string
-	testOnly    bool
-	timeoutFlag time.Duration
+	saveFlag       bool
+	aliasFlag      string
+	testOnly       bool
+	timeoutFlag    time.Duration
+	trustFirstUse  bool
+	skipTrustCheck bool
 )
 
 // NewCommand creates the connect command.
@@ -32,6 +36,13 @@ func NewCommand() *cobra.Command {
 This command tests the connection to a bibd daemon, authenticates using
 your SSH key, and optionally saves the connection as your default node.
 
+TRUST ON FIRST USE (TOFU):
+When connecting to a new node for the first time, you will be prompted
+to verify and trust the server's certificate. This protects against
+man-in-the-middle attacks.
+
+Use --trust-first-use to automatically trust new certificates (less secure).
+
 Examples:
   # Connect to local daemon
   bib connect localhost:4000
@@ -43,7 +54,10 @@ Examples:
   bib connect --save --alias mynode node1.example.com:4000
 
   # Test connection only (no auth)
-  bib connect --test node1.example.com:4000`,
+  bib connect --test node1.example.com:4000
+
+  # Auto-trust new certificate (use with caution!)
+  bib connect --trust-first-use node1.example.com:4000`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runConnect,
 	}
@@ -52,6 +66,11 @@ Examples:
 	cmd.Flags().StringVar(&aliasFlag, "alias", "", "Alias for the node (used with --save)")
 	cmd.Flags().BoolVar(&testOnly, "test", false, "Test connection only, don't authenticate")
 	cmd.Flags().DurationVar(&timeoutFlag, "timeout", 10*time.Second, "Connection timeout")
+	cmd.Flags().BoolVar(&trustFirstUse, "trust-first-use", false, "Automatically trust new certificates (less secure)")
+	cmd.Flags().BoolVar(&skipTrustCheck, "insecure-skip-verify", false, "Skip TLS certificate verification entirely (dangerous!)")
+
+	// Mark dangerous flags
+	cmd.Flags().MarkHidden("insecure-skip-verify")
 
 	return cmd
 }
@@ -78,10 +97,54 @@ func runConnect(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Connecting to %s...\n", address)
 
+	// Set up trust store for TOFU
+	configDir, err := config.UserConfigDir(config.AppBib)
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	trustDir := filepath.Join(configDir, "trusted_nodes")
+	trustStore, err := certs.NewTrustStore(trustDir)
+	if err != nil {
+		return fmt.Errorf("failed to open trust store: %w", err)
+	}
+
+	// Create TOFU verifier
+	tofuVerifier := certs.NewTOFUVerifier(trustStore).WithAutoTrust(trustFirstUse)
+
 	// Build client options
 	opts := client.DefaultOptions().
 		WithTCPAddress(address).
 		WithTimeout(timeoutFlag)
+
+	// Configure TLS options
+	if skipTrustCheck {
+		fmt.Println("⚠️  WARNING: Skipping TLS verification (insecure)")
+		opts = opts.WithInsecureSkipVerify(true)
+	}
+
+	// Set TOFU callback for certificate verification
+	opts = opts.WithTOFUCallback(func(nodeID string, certPEM []byte) (bool, error) {
+		result, err := tofuVerifier.Verify(nodeID, address, certPEM)
+		if err != nil {
+			if result != nil && result.FingerprintMismatch {
+				existingNode, _ := trustStore.Get(nodeID)
+				if existingNode != nil {
+					info, _ := certs.ParseCertInfo(certPEM)
+					if info != nil {
+						tofuVerifier.DisplayMismatchWarning(nodeID, address, existingNode.Fingerprint, info.Fingerprint)
+					}
+				}
+			}
+			return false, err
+		}
+
+		if result.NewTrust {
+			tofuVerifier.DisplayNewTrust(result.Node)
+		}
+
+		return result.Trusted, nil
+	})
 
 	// Create client
 	c, err := client.New(opts)

@@ -265,3 +265,176 @@ Example:
 
 	return cmd
 }
+
+func newShowCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show <node-id>",
+		Short: "Show detailed info about a trusted node",
+		Long: `Show detailed information about a trusted node.
+
+Displays all stored information including certificate details,
+trust method, and verification status.
+
+Example:
+  bib trust show 12D3KooW...`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID := args[0]
+
+			// Get trust store
+			configDir, err := config.UserConfigDir(config.AppBib)
+			if err != nil {
+				return fmt.Errorf("failed to get config directory: %w", err)
+			}
+
+			trustDir := filepath.Join(configDir, "trusted_nodes")
+			ts, err := certs.NewTrustStore(trustDir)
+			if err != nil {
+				return fmt.Errorf("failed to open trust store: %w", err)
+			}
+
+			node, ok := ts.Get(nodeID)
+			if !ok {
+				return fmt.Errorf("node not found in trusted list")
+			}
+
+			fmt.Println("═══════════════════════════════════════════════════════════════")
+			fmt.Println("  Trusted Node Details")
+			fmt.Println("═══════════════════════════════════════════════════════════════")
+			fmt.Println()
+			fmt.Printf("  Node ID:      %s\n", node.NodeID)
+			if node.Alias != "" {
+				fmt.Printf("  Alias:        %s\n", node.Alias)
+			}
+			if node.Address != "" {
+				fmt.Printf("  Address:      %s\n", node.Address)
+			}
+			fmt.Println()
+			fmt.Printf("  Fingerprint:\n")
+			fmt.Printf("    %s\n", certs.FormatFingerprint(node.Fingerprint))
+			fmt.Println()
+			fmt.Printf("  Trust Method: %s\n", node.TrustMethod)
+			fmt.Printf("  Verified:     %v\n", node.Verified)
+			if node.PinnedAt != nil {
+				fmt.Printf("  Pinned At:    %s\n", node.PinnedAt.Format(time.RFC3339))
+			}
+			fmt.Println()
+			fmt.Printf("  First Seen:   %s\n", node.FirstSeen.Format(time.RFC3339))
+			fmt.Printf("  Last Seen:    %s\n", node.LastSeen.Format(time.RFC3339))
+			if node.Notes != "" {
+				fmt.Printf("  Notes:        %s\n", node.Notes)
+			}
+			fmt.Println()
+
+			// Show certificate info if available
+			if node.Certificate != "" {
+				certInfo, err := certs.ParseCertInfo([]byte(node.Certificate))
+				if err == nil {
+					fmt.Println("───────────────────────────────────────────────────────────────")
+					fmt.Println("  Certificate Details")
+					fmt.Println("───────────────────────────────────────────────────────────────")
+					fmt.Println()
+					fmt.Printf("  Subject:      %s\n", certInfo.Subject)
+					fmt.Printf("  Issuer:       %s\n", certInfo.Issuer)
+					fmt.Printf("  Valid From:   %s\n", certInfo.NotBefore.Format(time.RFC3339))
+					fmt.Printf("  Valid Until:  %s\n", certInfo.NotAfter.Format(time.RFC3339))
+					fmt.Printf("  Is CA:        %v\n", certInfo.IsCA)
+					fmt.Println()
+				}
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func newVerifyCommand() *cobra.Command {
+	var fingerprint string
+
+	cmd := &cobra.Command{
+		Use:   "verify <node-id>",
+		Short: "Verify a node's fingerprint",
+		Long: `Verify that a trusted node's fingerprint matches an expected value.
+
+Use this to confirm out-of-band that you're connected to the correct node.
+
+Example:
+  bib trust verify 12D3KooW... --fingerprint AB:CD:EF:...`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID := args[0]
+
+			// Get trust store
+			configDir, err := config.UserConfigDir(config.AppBib)
+			if err != nil {
+				return fmt.Errorf("failed to get config directory: %w", err)
+			}
+
+			trustDir := filepath.Join(configDir, "trusted_nodes")
+			ts, err := certs.NewTrustStore(trustDir)
+			if err != nil {
+				return fmt.Errorf("failed to open trust store: %w", err)
+			}
+
+			node, ok := ts.Get(nodeID)
+			if !ok {
+				return fmt.Errorf("node not found in trusted list")
+			}
+
+			if fingerprint == "" {
+				// Just show the fingerprint
+				fmt.Printf("Node: %s\n", nodeID)
+				fmt.Printf("Fingerprint: %s\n", certs.FormatFingerprint(node.Fingerprint))
+				return nil
+			}
+
+			// Normalize fingerprint for comparison (remove colons, lowercase)
+			normalizedExpected := normalizeFingerprint(fingerprint)
+			normalizedActual := normalizeFingerprint(node.Fingerprint)
+
+			if normalizedExpected == normalizedActual {
+				fmt.Println("✓ Fingerprint verified successfully!")
+				fmt.Println()
+				fmt.Printf("  Node: %s\n", nodeID)
+				fmt.Printf("  Fingerprint: %s\n", certs.FormatFingerprint(node.Fingerprint))
+
+				// Mark as verified
+				if !node.Verified {
+					ts.Verify(nodeID)
+					fmt.Println()
+					fmt.Println("  Node marked as verified.")
+				}
+				return nil
+			}
+
+			fmt.Println("✗ Fingerprint mismatch!")
+			fmt.Println()
+			fmt.Printf("  Expected: %s\n", certs.FormatFingerprint(normalizedExpected))
+			fmt.Printf("  Actual:   %s\n", certs.FormatFingerprint(normalizedActual))
+			fmt.Println()
+			fmt.Println("  This could indicate a security issue.")
+			return fmt.Errorf("fingerprint verification failed")
+		},
+	}
+
+	cmd.Flags().StringVar(&fingerprint, "fingerprint", "", "Expected fingerprint to verify against")
+
+	return cmd
+}
+
+// normalizeFingerprint removes colons and converts to lowercase
+func normalizeFingerprint(fp string) string {
+	result := ""
+	for _, c := range fp {
+		if c != ':' && c != ' ' {
+			if c >= 'A' && c <= 'Z' {
+				result += string(c + 32) // lowercase
+			} else {
+				result += string(c)
+			}
+		}
+	}
+	return result
+}

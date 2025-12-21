@@ -16,7 +16,9 @@ The trust command provides subcommands for:
 - Adding trusted nodes manually
 - Listing trusted nodes
 - Removing trusted nodes
-- Pinning certificates for security-sensitive deployments`,
+- Pinning certificates for security-sensitive deployments
+- Showing detailed node information
+- Verifying node fingerprints`,
 	}
 
 	cmd.AddCommand(
@@ -24,6 +26,8 @@ The trust command provides subcommands for:
 		newListCommand(),
 		newRemoveCommand(),
 		newPinCommand(),
+		newShowCommand(),
+		newVerifyCommand(),
 	)
 
 	return cmd

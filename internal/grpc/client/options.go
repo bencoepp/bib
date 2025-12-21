@@ -42,10 +42,20 @@ type Options struct {
 	// Authentication
 	Auth AuthOptions
 
+	// TOFU (Trust On First Use) callback
+	// Called when connecting to a node for the first time
+	// Returns (trusted, error) - if false, connection is rejected
+	TOFUCallback TOFUCallbackFunc
+
 	// Interceptors
 	RequestIDEnabled bool // Add request ID to all calls
 	LoggingEnabled   bool // Log all RPC calls
 }
+
+// TOFUCallbackFunc is called to verify a new server certificate
+// nodeID is the server's node ID, certPEM is the server's certificate
+// Returns (trusted, error) - return true to trust, false to reject
+type TOFUCallbackFunc func(nodeID string, certPEM []byte) (bool, error)
 
 // TLSOptions configures TLS for the connection.
 type TLSOptions struct {
@@ -167,6 +177,18 @@ func (o Options) WithAuth(auth AuthOptions) Options {
 // WithInsecure disables TLS (DANGEROUS - only for local development).
 func (o Options) WithInsecure() Options {
 	o.TLS.Enabled = false
+	return o
+}
+
+// WithInsecureSkipVerify skips TLS certificate verification (DANGEROUS).
+func (o Options) WithInsecureSkipVerify(skip bool) Options {
+	o.TLS.InsecureSkipVerify = skip
+	return o
+}
+
+// WithTOFUCallback sets the TOFU callback for certificate verification.
+func (o Options) WithTOFUCallback(callback TOFUCallbackFunc) Options {
+	o.TOFUCallback = callback
 	return o
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,6 +64,87 @@ type DiscoveryResult struct {
 
 	// Duration is how long the discovery took
 	Duration time.Duration
+
+	// MethodCounts tracks how many nodes were found by each method
+	MethodCounts map[DiscoveryMethod]int
+}
+
+// HasNodes returns true if any nodes were discovered
+func (r *DiscoveryResult) HasNodes() bool {
+	return len(r.Nodes) > 0
+}
+
+// HasErrors returns true if any errors occurred
+func (r *DiscoveryResult) HasErrors() bool {
+	return len(r.Errors) > 0
+}
+
+// GetLocalNodes returns only locally discovered nodes
+func (r *DiscoveryResult) GetLocalNodes() []DiscoveredNode {
+	return r.filterByMethod(MethodLocal)
+}
+
+// GetMDNSNodes returns only mDNS discovered nodes
+func (r *DiscoveryResult) GetMDNSNodes() []DiscoveredNode {
+	return r.filterByMethod(MethodMDNS)
+}
+
+// GetP2PNodes returns only P2P discovered nodes
+func (r *DiscoveryResult) GetP2PNodes() []DiscoveredNode {
+	return r.filterByMethod(MethodP2P)
+}
+
+// GetPublicNodes returns only public network nodes
+func (r *DiscoveryResult) GetPublicNodes() []DiscoveredNode {
+	return r.filterByMethod(MethodPublic)
+}
+
+// filterByMethod returns nodes discovered by a specific method
+func (r *DiscoveryResult) filterByMethod(method DiscoveryMethod) []DiscoveredNode {
+	var filtered []DiscoveredNode
+	for _, node := range r.Nodes {
+		if node.Method == method {
+			filtered = append(filtered, node)
+		}
+	}
+	return filtered
+}
+
+// GetFastestNode returns the node with the lowest latency
+func (r *DiscoveryResult) GetFastestNode() *DiscoveredNode {
+	var fastest *DiscoveredNode
+	for i := range r.Nodes {
+		if r.Nodes[i].Latency > 0 {
+			if fastest == nil || r.Nodes[i].Latency < fastest.Latency {
+				fastest = &r.Nodes[i]
+			}
+		}
+	}
+	return fastest
+}
+
+// Summary returns a summary string of the discovery results
+func (r *DiscoveryResult) Summary() string {
+	if len(r.Nodes) == 0 {
+		return "No nodes discovered"
+	}
+
+	summary := fmt.Sprintf("Found %d node(s) in %v", len(r.Nodes), r.Duration.Round(time.Millisecond))
+
+	if len(r.MethodCounts) > 0 {
+		summary += " ("
+		first := true
+		for method, count := range r.MethodCounts {
+			if !first {
+				summary += ", "
+			}
+			summary += fmt.Sprintf("%s: %d", method, count)
+			first = false
+		}
+		summary += ")"
+	}
+
+	return summary
 }
 
 // DiscoveryOptions configures the discovery process
@@ -210,9 +292,11 @@ func (d *Discoverer) Discover(ctx context.Context) *DiscoveryResult {
 		}
 	}
 
-	// Convert map to slice
+	// Convert map to slice and count methods
+	result.MethodCounts = make(map[DiscoveryMethod]int)
 	for _, node := range nodeMap {
 		result.Nodes = append(result.Nodes, node)
+		result.MethodCounts[node.Method]++
 	}
 
 	// Sort by latency (nodes with measured latency first, then by latency value)
@@ -271,4 +355,132 @@ func measureLatency(ctx context.Context, address string, timeout time.Duration) 
 	conn.Close()
 
 	return latency, nil
+}
+
+// MergeResults merges multiple discovery results into one
+func MergeResults(results ...*DiscoveryResult) *DiscoveryResult {
+	merged := &DiscoveryResult{
+		Nodes:        make([]DiscoveredNode, 0),
+		Errors:       make([]error, 0),
+		MethodCounts: make(map[DiscoveryMethod]int),
+	}
+
+	nodeMap := make(map[string]DiscoveredNode)
+
+	for _, r := range results {
+		if r == nil {
+			continue
+		}
+
+		// Merge nodes with deduplication
+		for _, node := range r.Nodes {
+			if existing, ok := nodeMap[node.Address]; ok {
+				// Keep the one with lower latency
+				if node.Latency > 0 && (existing.Latency == 0 || node.Latency < existing.Latency) {
+					nodeMap[node.Address] = node
+				}
+			} else {
+				nodeMap[node.Address] = node
+			}
+		}
+
+		// Merge errors
+		merged.Errors = append(merged.Errors, r.Errors...)
+
+		// Merge duration (take the longest)
+		if r.Duration > merged.Duration {
+			merged.Duration = r.Duration
+		}
+	}
+
+	// Convert map to slice and count methods
+	for _, node := range nodeMap {
+		merged.Nodes = append(merged.Nodes, node)
+		merged.MethodCounts[node.Method]++
+	}
+
+	// Sort by latency
+	sortNodesByLatency(merged.Nodes)
+
+	return merged
+}
+
+// DeduplicateNodes removes duplicate nodes by address, keeping the one with lowest latency
+func DeduplicateNodes(nodes []DiscoveredNode) []DiscoveredNode {
+	nodeMap := make(map[string]DiscoveredNode)
+
+	for _, node := range nodes {
+		if existing, ok := nodeMap[node.Address]; ok {
+			if node.Latency > 0 && (existing.Latency == 0 || node.Latency < existing.Latency) {
+				nodeMap[node.Address] = node
+			}
+		} else {
+			nodeMap[node.Address] = node
+		}
+	}
+
+	result := make([]DiscoveredNode, 0, len(nodeMap))
+	for _, node := range nodeMap {
+		result = append(result, node)
+	}
+
+	sortNodesByLatency(result)
+	return result
+}
+
+// FilterNodesByMethod returns only nodes discovered by the specified method
+func FilterNodesByMethod(nodes []DiscoveredNode, method DiscoveryMethod) []DiscoveredNode {
+	var filtered []DiscoveredNode
+	for _, node := range nodes {
+		if node.Method == method {
+			filtered = append(filtered, node)
+		}
+	}
+	return filtered
+}
+
+// FilterNodesByLatency returns nodes with latency below the specified threshold
+func FilterNodesByLatency(nodes []DiscoveredNode, maxLatency time.Duration) []DiscoveredNode {
+	var filtered []DiscoveredNode
+	for _, node := range nodes {
+		if node.Latency > 0 && node.Latency <= maxLatency {
+			filtered = append(filtered, node)
+		}
+	}
+	return filtered
+}
+
+// GroupNodesByMethod groups nodes by their discovery method
+func GroupNodesByMethod(nodes []DiscoveredNode) map[DiscoveryMethod][]DiscoveredNode {
+	groups := make(map[DiscoveryMethod][]DiscoveredNode)
+	for _, node := range nodes {
+		groups[node.Method] = append(groups[node.Method], node)
+	}
+	return groups
+}
+
+// FormatNodeList formats a list of nodes for display
+func FormatNodeList(nodes []DiscoveredNode) string {
+	if len(nodes) == 0 {
+		return "No nodes found"
+	}
+
+	var sb strings.Builder
+	for i, node := range nodes {
+		sb.WriteString(fmt.Sprintf("%d. %s", i+1, node.Address))
+
+		if node.Latency > 0 {
+			sb.WriteString(fmt.Sprintf(" (%v)", node.Latency.Round(time.Millisecond)))
+		}
+
+		sb.WriteString(fmt.Sprintf(" [%s]", node.Method))
+
+		if node.NodeInfo != nil && node.NodeInfo.Name != "" {
+			sb.WriteString(fmt.Sprintf(" - %s", node.NodeInfo.Name))
+		}
+
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
 }
