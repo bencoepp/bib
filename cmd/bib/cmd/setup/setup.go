@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -11,7 +12,9 @@ import (
 
 	"bib/internal/auth"
 	"bib/internal/config"
+	"bib/internal/discovery"
 	"bib/internal/tui"
+	"bib/internal/tui/component"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
@@ -476,6 +479,11 @@ type SetupWizardModel struct {
 	// Identity key for authentication
 	identityKey    *auth.IdentityKey
 	identityKeyNew bool // true if key was newly generated
+
+	// Node discovery and selection (CLI only)
+	discoveryResult *discovery.DiscoveryResult
+	nodeSelector    *component.NodeSelector
+	discoveryDone   bool
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -519,10 +527,24 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			ShouldSkip:  func() bool { return isDaemon },
 		},
 		{
+			ID:          "node-discovery",
+			Title:       "Node Discovery",
+			Description: "Discovering bibd nodes",
+			HelpText:    "Scanning for local and network bibd nodes. This includes localhost ports, mDNS discovery, and nearby P2P peers.",
+			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
+			ID:          "node-selection",
+			Title:       "Node Selection",
+			Description: "Select nodes to connect to",
+			HelpText:    "Select one or more bibd nodes to connect to. You can also add the public bib.dev network or enter custom addresses.",
+			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
 			ID:          "connection",
 			Title:       "Connection",
 			Description: "Configure connection to bibd",
-			HelpText:    "Specify the address of the bibd daemon you want to connect to.",
+			HelpText:    "Review and confirm your node selections. The first selected node will be used as the default.",
 			ShouldSkip:  func() bool { return isDaemon },
 		},
 		{
@@ -777,13 +799,125 @@ Public Key:  %s...
 			),
 		).WithTheme(theme)
 
-	case "connection":
+	case "node-discovery":
+		// Run discovery if not already done
+		if !m.discoveryDone {
+			m.runNodeDiscovery()
+		}
+
+		// Build discovery result display
+		var resultDisplay string
+		if m.discoveryResult != nil {
+			resultDisplay = fmt.Sprintf("Discovery completed in %s\n\n%s",
+				m.discoveryResult.Duration.Round(time.Millisecond),
+				discovery.FormatDiscoveryResult(m.discoveryResult))
+		} else {
+			resultDisplay = "Running discovery..."
+		}
+
 		m.currentForm = huh.NewForm(
 			huh.NewGroup(
+				huh.NewNote().
+					Title("🔍 Node Discovery").
+					Description(resultDisplay),
+				huh.NewConfirm().
+					Title("Continue to node selection?").
+					Affirmative("Continue").
+					Negative("Retry").
+					Value(new(bool)),
+			),
+		).WithTheme(theme)
+
+	case "node-selection":
+		// Initialize node selector if not already done
+		if m.nodeSelector == nil {
+			m.nodeSelector = component.NewNodeSelector().
+				WithBibDev(true).
+				WithAddCustom(true).
+				WithMultiSelect(true).
+				WithLatency(true)
+
+			if m.discoveryResult != nil {
+				m.nodeSelector.WithNodes(m.discoveryResult.Nodes)
+			}
+
+			// Auto-select first local node if available
+			m.nodeSelector.SelectFirst()
+		}
+
+		// Build selection summary
+		selectedNodes := m.nodeSelector.SelectedItems()
+		var selectionSummary string
+		if len(selectedNodes) == 0 {
+			selectionSummary = "No nodes selected. Please select at least one node."
+		} else {
+			selectionSummary = fmt.Sprintf("%d node(s) selected", len(selectedNodes))
+			if m.nodeSelector.IsBibDevSelected() {
+				selectionSummary += " (including bib.dev public network)"
+			}
+		}
+
+		// Show the node selector view
+		selectorView := m.nodeSelector.ViewWidth(55)
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("📡 Select Nodes").
+					Description(selectorView+"\n\n"+selectionSummary),
+				huh.NewConfirm().
+					Title("Confirm selection?").
+					Affirmative("Confirm").
+					Negative("Back").
+					Value(new(bool)),
+			),
+		).WithTheme(theme)
+
+	case "connection":
+		// Summarize selected nodes from the node selector
+		var connectionSummary string
+		if m.nodeSelector != nil && m.nodeSelector.HasSelection() {
+			selectedItems := m.nodeSelector.SelectedItems()
+			connectionSummary = fmt.Sprintf("Selected %d node(s):\n", len(selectedItems))
+			for i, item := range selectedItems {
+				defaultMarker := ""
+				if item.IsDefault {
+					defaultMarker = " (default)"
+				}
+				connectionSummary += fmt.Sprintf("  %d. %s%s\n", i+1, item.Alias, defaultMarker)
+			}
+
+			// Update the data with the first/default node
+			if defaultNode := m.nodeSelector.GetDefaultNode(); defaultNode != nil {
+				m.data.ServerAddr = defaultNode.Node.Address
+			}
+
+			// Update SelectedNodes in data
+			m.data.SelectedNodes = make([]tui.NodeSelection, len(selectedItems))
+			for i, item := range selectedItems {
+				m.data.SelectedNodes[i] = tui.NodeSelection{
+					Address:         item.Node.Address,
+					Alias:           item.Alias,
+					IsDefault:       item.IsDefault,
+					DiscoveryMethod: string(item.Node.Method),
+				}
+			}
+
+			// Track bib.dev confirmation
+			m.data.BibDevConfirmed = m.nodeSelector.IsBibDevSelected()
+		} else {
+			connectionSummary = "No nodes selected. Using manual configuration."
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔗 Connection Summary").
+					Description(connectionSummary),
 				huh.NewInput().
-					Title("Server Address").
-					Description("Address of the bibd daemon").
-					Placeholder("localhost:8080").
+					Title("Default Server Address").
+					Description("Primary bibd daemon address").
+					Placeholder("localhost:4000").
 					Value(&m.data.ServerAddr),
 			),
 		).WithTheme(theme)
@@ -1028,6 +1162,34 @@ func (m *SetupWizardModel) getWelcomeText() string {
 		return "Welcome! This wizard will help you configure the bibd daemon.\n\nWe'll configure identity, server settings, storage, P2P networking, and more.\n\nPress Enter to continue..."
 	}
 	return "Welcome! This wizard will help you configure the bib CLI.\n\nWe'll configure your identity, output preferences, and connection settings.\n\nPress Enter to continue..."
+}
+
+// runNodeDiscovery runs node discovery for CLI setup
+func (m *SetupWizardModel) runNodeDiscovery() {
+	if m.discoveryDone {
+		return
+	}
+
+	// Create discoverer with default options
+	discoverer := discovery.NewWithDefaults()
+
+	// Run discovery with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	m.discoveryResult = discoverer.Discover(ctx)
+	m.discoveryDone = true
+
+	// Initialize node selector with results
+	m.nodeSelector = component.NewNodeSelector().
+		WithNodes(m.discoveryResult.Nodes).
+		WithBibDev(true).
+		WithAddCustom(true).
+		WithMultiSelect(true).
+		WithLatency(true)
+
+	// Auto-select first local node if available
+	m.nodeSelector.SelectFirst()
 }
 
 func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

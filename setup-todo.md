@@ -190,22 +190,46 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 2.3 Node Selection UI
 
-- [ ] Create multi-select node list TUI component
-- [ ] Display discovered nodes with:
-  - [ ] Address
-  - [ ] Discovery method (local, mDNS, P2P)
-  - [ ] Latency
-  - [ ] Node info (if available)
-- [ ] Add bib.dev as separate "Public Network" option
-- [ ] Implement "Add Custom..." option for manual address entry
-- [ ] Implement "Select All Local" convenience button
-- [ ] Store selected nodes in config
+- [x] Create multi-select node list TUI component
+- [x] Display discovered nodes with:
+  - [x] Address
+  - [x] Discovery method (local, mDNS, P2P)
+  - [x] Latency
+  - [x] Node info (if available)
+- [x] Add bib.dev as separate "Public Network" option
+- [x] Implement "Add Custom..." option for manual address entry
+- [x] Implement "Select All Local" convenience button
+- [x] Store selected nodes in config
 
-**Files to create:**
+**Files created:**
 - `internal/tui/component/node_selector.go`
+- `internal/tui/component/node_selector_test.go`
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `NodeSelector` TUI component with:
+  - Multi-select list with checkboxes
+  - Cursor navigation (j/k or arrows)
+  - Space to toggle selection
+  - 'a' to select all local nodes
+  - 'n' to deselect all
+  - 'd' to set current as default
+  - Custom address entry mode
+- `NodeSelectorItem` struct with Node, Selected, IsDefault, Alias, Status, Error
+- Discovery method icons (🏠 local, 📡 mDNS, 🌐 P2P, ☁️ public, ✎ manual)
+- bib.dev shown as separate option with public network warning
+- "Add custom address..." option for manual entry
+- Auto-adds port 4000 if not specified
+- Callbacks for selection changes
+- Helper methods: SelectedItems(), SelectedNodes(), HasSelection(), SelectFirst()
+- Added "node-discovery" and "node-selection" wizard steps
+- `runNodeDiscovery()` method runs discovery in background
+- Discovery results displayed with latency and method
+- Selected nodes stored in SetupData.SelectedNodes
+- Connection step shows summary and allows editing default address
+- Comprehensive unit tests (20 tests)
 
 ### 2.4 bib.dev Confirmation
 
