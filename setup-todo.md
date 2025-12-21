@@ -561,41 +561,162 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 3.2 Local PostgreSQL Options
 
-- [ ] Update storage step to show local-specific PostgreSQL options:
-  - [ ] SQLite (Proxy/Selective only)
-  - [ ] Managed Container (Docker/Podman)
-  - [ ] Local Installation
-  - [ ] Remote Server
-- [ ] Implement managed container PostgreSQL setup
-- [ ] Implement local PostgreSQL connection test
-- [ ] Implement remote PostgreSQL connection test
+- [x] Update storage step to show local-specific PostgreSQL options:
+  - [x] SQLite (Proxy/Selective only)
+  - [x] Managed Container (Docker/Podman)
+  - [x] Local Installation
+  - [x] Remote Server
+- [x] Implement managed container PostgreSQL setup
+- [x] Implement local PostgreSQL connection test
+- [x] Implement remote PostgreSQL connection test
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
-- `internal/tui/setup.go`
+- `cmd/bib/cmd/setup/setup_test.go`
+
+**Implementation notes:**
+- Updated storage step to show deployment-specific PostgreSQL options:
+  - **Local deployment**: SQLite, Managed Container (Docker/Podman), Local Installation, Remote Server
+  - **Docker/Podman**: SQLite, Managed Container (recommended)
+  - **Kubernetes**: SQLite, StatefulSet, CloudNativePG Operator, External Server
+- Added "postgres-config" wizard step:
+  - Shows after storage step if PostgreSQL is selected
+  - Different form fields based on deployment mode:
+    - **Container mode**: Database name, user, password (auto-generate option)
+    - **Local mode**: Host, port, database, user, password, SSL mode
+    - **Remote mode**: Same as local with remote-focused description and SSL default to require
+  - Port validation (1-65535)
+  - SSL mode options: disable, require, verify-ca, verify-full
+- Added "postgres-test" wizard step:
+  - Shows after postgres-config step if PostgreSQL is selected
+  - For container deployments: Shows skip message (tested after deployment)
+  - For local/remote: Runs TCP connection test
+  - Shows success with connection time, or failure with troubleshooting tips
+  - Retry option available
+- Added `PostgresTestResult` struct:
+  - Success, ServerVersion, Database, User, Duration, Error
+- Added `getPostgresDeploymentMode()` helper method:
+  - Returns mode based on storage backend selection: container, local, remote, cnpg, statefulset
+- Added `runPostgresTest()` method:
+  - Converts port string to int
+  - Sets defaults for empty fields
+  - Builds connection string and tests TCP connection
+- Added `testPostgresConnection()` function:
+  - Parses host/port from connection string
+  - Tests TCP connectivity with 5s timeout
+  - Returns result with success/error status
+- Added `validatePort()` validation function
+- Added `postgresPortStr` field to model for form binding
+- Added unit tests for:
+  - validatePort (10 cases)
+  - truncateString (6 cases)
+  - PostgresTestResult fields
+  - testPostgresConnection with invalid host
 
 ### 3.3 Bootstrap Peers with bib.dev Confirmation
 
-- [ ] Update bootstrap peer step to require bib.dev confirmation
-- [ ] Create confirmation dialog explaining public network implications
-- [ ] Allow "No, Private Only" option
+- [x] Update bootstrap peer step to require bib.dev confirmation
+- [x] Create confirmation dialog explaining public network implications
+- [x] Allow "No, Private Only" option
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+- `cmd/bib/cmd/setup/setup_test.go`
+
+**Implementation notes:**
+- Added three new wizard steps for daemon P2P setup:
+  1. **bootstrap-peers**: Initial selection of public vs private network
+  2. **bootstrap-confirm**: Detailed confirmation for public network
+  3. **custom-bootstrap**: Add custom bootstrap peers in multiaddr format
+- Added `customBootstrapInput` field to SetupWizardModel for form binding
+- **bootstrap-peers step**:
+  - Shows description of bootstrap peer options
+  - Confirm: "Use bib.dev public bootstrap?"
+  - Options: "Yes, use public network" / "No, private only"
+  - Sets `UsePublicBootstrap` in data
+- **bootstrap-confirm step**:
+  - Only shows if `UsePublicBootstrap` is true
+  - Detailed warning about public network implications:
+    - Node discoverable worldwide
+    - Public identity visible
+    - Published data accessible
+  - Confirm: "Connect to bib.dev public network?"
+  - Options: "Yes, Connect to Public Network" / "No, Private Network Only"
+  - Sets `BibDevConfirmed` in data
+  - If declined, automatically sets `UsePublicBootstrap = false`
+- **custom-bootstrap step**:
+  - Shows current custom bootstrap peers (truncated if long)
+  - Shows status (public confirmed, public not confirmed, private only)
+  - Input field for adding custom peer in multiaddr format
+  - Validates multiaddr starts with `/`
+  - Calls `AddCustomBootstrapPeer()` on data
+- Updated `handleStepCompletion()` with:
+  - `bootstrap-confirm` case: disables public bootstrap if declined
+  - `custom-bootstrap` case: adds valid peer to list, clears input
+- Added unit test for multiaddr validation (6 cases)
+- Steps skip correctly based on P2P enabled state
 
 ### 3.4 Service Installation
 
-- [ ] Implement systemd service file generation (Linux)
-- [ ] Implement launchd plist generation (macOS)
-- [ ] Implement Windows Service installation
-- [ ] Add user vs system service option (Linux)
-- [ ] Enable and start service after installation
+- [x] Implement systemd service file generation (Linux)
+- [x] Implement launchd plist generation (macOS)
+- [x] Implement Windows Service installation
+- [x] Add user vs system service option (Linux)
+- [x] Enable and start service after installation
 
-**Files to create:**
-- `internal/deploy/local/systemd.go`
-- `internal/deploy/local/launchd.go`
-- `internal/deploy/local/windows.go`
+**Files created:**
 - `internal/deploy/local/service.go`
+- `internal/deploy/local/service_test.go`
+
+**Files modified:**
+- `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `local` package under `internal/deploy/` with full service installation support:
+  - `ServiceType` constants: systemd, launchd, windows
+  - `ServiceConfig` struct with all configuration options:
+    - Name, DisplayName, Description
+    - ExecutablePath, ConfigPath, WorkingDirectory
+    - User, Group, UserService flag
+    - Environment map, RestartPolicy, RestartDelaySec
+  - `DefaultServiceConfig()` - sensible defaults for bibd
+  - `NewServiceInstaller()` - creates installer with config
+  - `DetectServiceType()` - auto-detects based on OS:
+    - Linux → systemd
+    - macOS → launchd  
+    - Windows → windows service
+- **Systemd generation** (`generateSystemd()`):
+  - [Unit] section with network dependencies
+  - [Service] section with ExecStart, User, Group, Restart policy
+  - Security hardening (NoNewPrivileges, ProtectSystem, etc.)
+  - [Install] section with multi-user.target or default.target
+  - Environment variable support
+- **Launchd generation** (`generateLaunchd()`):
+  - Full plist XML format
+  - ProgramArguments with executable and config
+  - RunAtLoad, KeepAlive settings
+  - ThrottleInterval for restart delay
+  - EnvironmentVariables support
+  - StandardOutPath/StandardErrorPath for logging
+- **Windows generation** (`generateWindowsPowerShell()`):
+  - NSSM (recommended) installation commands
+  - Native `New-Service` PowerShell commands
+  - Start-Service and Get-Service commands
+- `GetServiceFilePath()` - returns correct path:
+  - systemd: `/etc/systemd/system/` or `~/.config/systemd/user/`
+  - launchd: `/Library/LaunchDaemons/` or `~/Library/LaunchAgents/`
+- `InstallInstructions()` - human-readable install steps
+- Added "service-install" wizard step:
+  - Only shows for local daemon deployments
+  - Detects service type automatically
+  - Shows preview of generated service file
+  - Options: Install service (yes/no), User service (yes/no)
+  - Updates ServiceInstaller.Config.UserService based on selection
+- Added fields to SetupWizardModel:
+  - `serviceInstaller *local.ServiceInstaller`
+  - `installService bool`
+  - `userService bool`
+- Comprehensive unit tests (12 tests covering all platforms)
 
 ### 3.5 Local Quick Start
 

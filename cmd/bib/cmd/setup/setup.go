@@ -6,14 +6,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"bib/internal/auth"
 	"bib/internal/config"
 	"bib/internal/deploy"
+	"bib/internal/deploy/local"
 	"bib/internal/discovery"
 	"bib/internal/tui"
 	"bib/internal/tui/component"
@@ -709,6 +712,29 @@ type SetupWizardModel struct {
 	// Deployment target selection (daemon only)
 	targetSelector *component.TargetSelector
 	targetDetected bool // True if target detection has been run
+
+	// PostgreSQL connection test (daemon only)
+	postgresTestResult *PostgresTestResult
+	postgresTestDone   bool
+	postgresPortStr    string // Temporary string for port input in forms
+
+	// Bootstrap configuration (daemon only)
+	customBootstrapInput string // Temporary input for adding custom bootstrap peers
+
+	// Service installation (local daemon only)
+	serviceInstaller *local.ServiceInstaller
+	installService   bool
+	userService      bool
+}
+
+// PostgresTestResult contains the result of a PostgreSQL connection test
+type PostgresTestResult struct {
+	Success       bool
+	ServerVersion string
+	Database      string
+	User          string
+	Duration      time.Duration
+	Error         string
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -855,6 +881,20 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			ShouldSkip:  func() bool { return !isDaemon },
 		},
 		{
+			ID:          "postgres-config",
+			Title:       "PostgreSQL Configuration",
+			Description: "Configure PostgreSQL connection",
+			HelpText:    "Configure how PostgreSQL should be deployed and connected.",
+			ShouldSkip:  func() bool { return !isDaemon || data.StorageBackend != "postgres" },
+		},
+		{
+			ID:          "postgres-test",
+			Title:       "PostgreSQL Test",
+			Description: "Testing PostgreSQL connection",
+			HelpText:    "Testing the connection to PostgreSQL to ensure it's properly configured.",
+			ShouldSkip:  func() bool { return !isDaemon || data.StorageBackend != "postgres" },
+		},
+		{
 			ID:          "p2p",
 			Title:       "P2P",
 			Description: "Enable P2P networking",
@@ -866,6 +906,29 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			Title:       "P2P Mode",
 			Description: "Select P2P mode",
 			HelpText:    "Proxy: Forwards requests, minimal resources.\nSelective: Subscribe to specific topics.\nFull: Replicate all data (requires PostgreSQL).",
+			ShouldSkip:  func() bool { return !isDaemon || !data.P2PEnabled },
+		},
+		{
+			ID:          "bootstrap-peers",
+			Title:       "Bootstrap Peers",
+			Description: "Configure bootstrap peers",
+			HelpText:    "Bootstrap peers help your node discover other peers on the network. bib.dev is the public network bootstrap.",
+			ShouldSkip:  func() bool { return !isDaemon || !data.P2PEnabled },
+		},
+		{
+			ID:          "bootstrap-confirm",
+			Title:       "Public Network",
+			Description: "Confirm public network connection",
+			HelpText:    "Connecting to the public network makes your node discoverable by other users worldwide.",
+			ShouldSkip: func() bool {
+				return !isDaemon || !data.P2PEnabled || !data.UsePublicBootstrap
+			},
+		},
+		{
+			ID:          "custom-bootstrap",
+			Title:       "Custom Bootstrap",
+			Description: "Add custom bootstrap peers",
+			HelpText:    "Add additional bootstrap peers using multiaddr format, e.g., /ip4/1.2.3.4/tcp/4001/p2p/Qm...",
 			ShouldSkip:  func() bool { return !isDaemon || !data.P2PEnabled },
 		},
 		{
@@ -901,6 +964,16 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			Description: "Configure emergency user",
 			HelpText:    "Create an emergency access user with an Ed25519 SSH key. This user can enable break glass sessions when needed.",
 			ShouldSkip:  func() bool { return !isDaemon || !data.BreakGlassEnabled },
+		},
+		{
+			ID:          "service-install",
+			Title:       "Service Installation",
+			Description: "Install as system service",
+			HelpText:    "Install bibd as a system service to run automatically at startup. You can choose user or system-level installation.",
+			ShouldSkip: func() bool {
+				// Only show for local daemon deployments
+				return !isDaemon || data.DeploymentTarget != tui.DeployTargetLocal
+			},
 		},
 		{
 			ID:          "confirm",
@@ -940,6 +1013,21 @@ func truncateString(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// validatePort validates a port number string
+func validatePort(s string) error {
+	if s == "" {
+		return nil // Will use default
+	}
+	port, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("port must be a number")
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	return nil
 }
 
 func getWizardTitle(isDaemon bool) string {
@@ -1546,16 +1634,255 @@ If you only need local/private access, go back and deselect bib.dev.`
 		).WithTheme(theme)
 
 	case "storage":
+		// Build storage options based on deployment target
+		var storageOptions []huh.Option[string]
+
+		// SQLite is always available for proxy/selective modes
+		storageOptions = append(storageOptions,
+			huh.NewOption("SQLite (lightweight, local cache)", "sqlite"),
+		)
+
+		// PostgreSQL options depend on deployment target
+		switch m.data.DeploymentTarget {
+		case tui.DeployTargetDocker, tui.DeployTargetPodman:
+			storageOptions = append(storageOptions,
+				huh.NewOption("PostgreSQL - Managed Container (recommended)", "postgres"),
+			)
+		case tui.DeployTargetKubernetes:
+			storageOptions = append(storageOptions,
+				huh.NewOption("PostgreSQL - StatefulSet", "postgres"),
+				huh.NewOption("PostgreSQL - CloudNativePG Operator", "postgres-cnpg"),
+				huh.NewOption("PostgreSQL - External Server", "postgres-external"),
+			)
+		default: // local
+			storageOptions = append(storageOptions,
+				huh.NewOption("PostgreSQL - Managed Container (Docker/Podman)", "postgres-container"),
+				huh.NewOption("PostgreSQL - Local Installation", "postgres-local"),
+				huh.NewOption("PostgreSQL - Remote Server", "postgres-remote"),
+			)
+		}
+
+		// Build description based on deployment target
+		var storageDesc string
+		switch m.data.DeploymentTarget {
+		case tui.DeployTargetDocker, tui.DeployTargetPodman:
+			storageDesc = "SQLite is lightweight. PostgreSQL will be deployed as a container alongside bibd."
+		case tui.DeployTargetKubernetes:
+			storageDesc = "SQLite is lightweight. PostgreSQL can be deployed as StatefulSet, CloudNativePG, or use external server."
+		default:
+			storageDesc = "SQLite is lightweight. PostgreSQL can be a local installation, container, or remote server."
+		}
+
 		m.currentForm = huh.NewForm(
 			huh.NewGroup(
+				huh.NewNote().
+					Title("💾 Storage Backend").
+					Description(storageDesc),
 				huh.NewSelect[string]().
 					Title("Storage Backend").
 					Description("Database to use for storage").
-					Options(
-						huh.NewOption("SQLite (lightweight, local cache)", "sqlite"),
-						huh.NewOption("PostgreSQL (full replication)", "postgres"),
-					).
+					Options(storageOptions...).
 					Value(&m.data.StorageBackend),
+			),
+		).WithTheme(theme)
+
+	case "postgres-config":
+		// Determine what fields to show based on storage backend choice
+		var fields []huh.Field
+
+		// Determine PostgreSQL deployment mode from storage backend
+		postgresMode := m.getPostgresDeploymentMode()
+
+		// Initialize port string from data if needed
+		if m.postgresPortStr == "" && m.data.PostgresPort > 0 {
+			m.postgresPortStr = fmt.Sprintf("%d", m.data.PostgresPort)
+		}
+		if m.postgresPortStr == "" {
+			m.postgresPortStr = "5432"
+		}
+
+		switch postgresMode {
+		case "container": // Managed container (Docker/Podman for local deployment)
+			fields = []huh.Field{
+				huh.NewNote().
+					Title("🐘 PostgreSQL - Managed Container").
+					Description("PostgreSQL will be deployed as a container alongside bibd.\n\nWe'll generate a docker-compose.yaml or podman pod with PostgreSQL."),
+				huh.NewInput().
+					Title("Database Name").
+					Description("PostgreSQL database name").
+					Placeholder("bibd").
+					Value(&m.data.PostgresDatabase),
+				huh.NewInput().
+					Title("Database User").
+					Description("PostgreSQL user").
+					Placeholder("bibd").
+					Value(&m.data.PostgresUser),
+				huh.NewInput().
+					Title("Database Password").
+					Description("PostgreSQL password (leave blank to auto-generate)").
+					Placeholder("").
+					Value(&m.data.PostgresPassword).
+					EchoMode(huh.EchoModePassword),
+			}
+
+		case "local": // Local PostgreSQL installation
+			fields = []huh.Field{
+				huh.NewNote().
+					Title("🐘 PostgreSQL - Local Installation").
+					Description("Connect to a locally installed PostgreSQL server.\n\nMake sure PostgreSQL is running on this machine."),
+				huh.NewInput().
+					Title("Host").
+					Description("PostgreSQL host address").
+					Placeholder("localhost").
+					Value(&m.data.PostgresHost),
+				huh.NewInput().
+					Title("Port").
+					Description("PostgreSQL port").
+					Placeholder("5432").
+					Value(&m.postgresPortStr).
+					Validate(validatePort),
+				huh.NewInput().
+					Title("Database Name").
+					Description("PostgreSQL database name").
+					Placeholder("bibd").
+					Value(&m.data.PostgresDatabase),
+				huh.NewInput().
+					Title("User").
+					Description("PostgreSQL user").
+					Placeholder("bibd").
+					Value(&m.data.PostgresUser),
+				huh.NewInput().
+					Title("Password").
+					Description("PostgreSQL password").
+					Value(&m.data.PostgresPassword).
+					EchoMode(huh.EchoModePassword),
+				huh.NewSelect[string]().
+					Title("SSL Mode").
+					Description("PostgreSQL SSL mode").
+					Options(
+						huh.NewOption("Disable", "disable"),
+						huh.NewOption("Require", "require"),
+						huh.NewOption("Verify CA", "verify-ca"),
+						huh.NewOption("Verify Full", "verify-full"),
+					).
+					Value(&m.data.PostgresSSLMode),
+			}
+
+		case "remote": // Remote PostgreSQL server
+			fields = []huh.Field{
+				huh.NewNote().
+					Title("🐘 PostgreSQL - Remote Server").
+					Description("Connect to a remote PostgreSQL server.\n\nEnsure the server is accessible from this machine."),
+				huh.NewInput().
+					Title("Host").
+					Description("PostgreSQL host address").
+					Placeholder("db.example.com").
+					Value(&m.data.PostgresHost),
+				huh.NewInput().
+					Title("Port").
+					Description("PostgreSQL port").
+					Placeholder("5432").
+					Value(&m.postgresPortStr).
+					Validate(validatePort),
+				huh.NewInput().
+					Title("Database Name").
+					Description("PostgreSQL database name").
+					Placeholder("bibd").
+					Value(&m.data.PostgresDatabase),
+				huh.NewInput().
+					Title("User").
+					Description("PostgreSQL user").
+					Placeholder("bibd").
+					Value(&m.data.PostgresUser),
+				huh.NewInput().
+					Title("Password").
+					Description("PostgreSQL password").
+					Value(&m.data.PostgresPassword).
+					EchoMode(huh.EchoModePassword),
+				huh.NewSelect[string]().
+					Title("SSL Mode").
+					Description("PostgreSQL SSL mode").
+					Options(
+						huh.NewOption("Require (recommended)", "require"),
+						huh.NewOption("Verify CA", "verify-ca"),
+						huh.NewOption("Verify Full", "verify-full"),
+						huh.NewOption("Disable (not recommended)", "disable"),
+					).
+					Value(&m.data.PostgresSSLMode),
+			}
+
+		default: // Default to container mode
+			fields = []huh.Field{
+				huh.NewNote().
+					Title("🐘 PostgreSQL Configuration").
+					Description("Configure PostgreSQL connection settings."),
+				huh.NewInput().
+					Title("Database Name").
+					Description("PostgreSQL database name").
+					Placeholder("bibd").
+					Value(&m.data.PostgresDatabase),
+			}
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(fields...),
+		).WithTheme(theme)
+
+	case "postgres-test":
+		// Run PostgreSQL connection test if not already done
+		if !m.postgresTestDone {
+			m.runPostgresTest()
+		}
+
+		// Format test results
+		var testDisplay string
+		if m.postgresTestResult != nil {
+			if m.postgresTestResult.Success {
+				testDisplay = fmt.Sprintf(`✓ PostgreSQL connection successful!
+
+Server Version: %s
+Database: %s
+User: %s
+Connection Time: %s`,
+					m.postgresTestResult.ServerVersion,
+					m.postgresTestResult.Database,
+					m.postgresTestResult.User,
+					m.postgresTestResult.Duration.Round(time.Millisecond))
+			} else {
+				testDisplay = fmt.Sprintf(`✗ PostgreSQL connection failed
+
+Error: %s
+
+Troubleshooting:
+• Check that PostgreSQL is running
+• Verify host, port, and credentials
+• Ensure the database exists
+• Check firewall settings`,
+					m.postgresTestResult.Error)
+			}
+		} else {
+			postgresMode := m.getPostgresDeploymentMode()
+			if postgresMode == "container" {
+				testDisplay = `⏭ PostgreSQL Container Mode
+
+Connection will be tested after container deployment.
+The container will be configured automatically.`
+			} else {
+				testDisplay = "Testing PostgreSQL connection..."
+			}
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔌 PostgreSQL Connection Test").
+					Description(testDisplay),
+				huh.NewConfirm().
+					Title("Continue?").
+					Description("Press Enter to continue").
+					Affirmative("Continue").
+					Negative("Retry Test").
+					Value(new(bool)),
 			),
 		).WithTheme(theme)
 
@@ -1583,6 +1910,106 @@ If you only need local/private access, go back and deselect bib.dev.`
 						huh.NewOption("Full - Replicate all data", "full"),
 					).
 					Value(&m.data.P2PMode),
+			),
+		).WithTheme(theme)
+
+	case "bootstrap-peers":
+		// Bootstrap peer configuration
+		bootstrapDesc := `Bootstrap peers help your node discover other nodes on the network.
+
+Options:
+• Public Network (bib.dev) - Connect to the global bib network
+• Private Only - Only use custom bootstrap peers
+
+The public network allows your node to participate in the 
+global bib ecosystem and discover peers worldwide.`
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🌐 Bootstrap Peers").
+					Description(bootstrapDesc),
+				huh.NewConfirm().
+					Title("Use bib.dev public bootstrap?").
+					Description("Connect to the public bib network").
+					Affirmative("Yes, use public network").
+					Negative("No, private only").
+					Value(&m.data.UsePublicBootstrap),
+			),
+		).WithTheme(theme)
+
+	case "bootstrap-confirm":
+		// Confirmation dialog for public network
+		confirmDesc := `⚠️  PUBLIC NETWORK CONFIRMATION
+
+You're about to connect to the bib.dev PUBLIC NETWORK.
+
+This means:
+• Your node will be discoverable by users worldwide
+• Your public identity will be visible on the network
+• Published data will be accessible to network participants
+• You'll participate in the global P2P mesh
+
+This is required for:
+• Collaborating with users outside your local network
+• Accessing publicly shared datasets
+• Contributing to the bib ecosystem
+
+Your private data remains private - only explicitly 
+published data is shared.`
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🌍 Public Network Confirmation").
+					Description(confirmDesc),
+				huh.NewConfirm().
+					Title("Connect to bib.dev public network?").
+					Description("This requires explicit confirmation").
+					Affirmative("Yes, Connect to Public Network").
+					Negative("No, Private Network Only").
+					Value(&m.data.BibDevConfirmed),
+			),
+		).WithTheme(theme)
+
+	case "custom-bootstrap":
+		// Show current custom bootstrap peers
+		var customPeersDisplay string
+		if len(m.data.CustomBootstrapPeers) > 0 {
+			customPeersDisplay = "Current custom bootstrap peers:\n"
+			for i, peer := range m.data.CustomBootstrapPeers {
+				// Truncate long multiaddrs
+				displayPeer := peer
+				if len(displayPeer) > 60 {
+					displayPeer = displayPeer[:57] + "..."
+				}
+				customPeersDisplay += fmt.Sprintf("  %d. %s\n", i+1, displayPeer)
+			}
+		} else {
+			customPeersDisplay = "No custom bootstrap peers configured."
+		}
+
+		// Show status based on public bootstrap setting
+		if m.data.UsePublicBootstrap && m.data.BibDevConfirmed {
+			customPeersDisplay += "\n\n✓ Using bib.dev public bootstrap"
+		} else if m.data.UsePublicBootstrap {
+			customPeersDisplay += "\n\n⚠️ Public bootstrap selected but not confirmed"
+		} else {
+			customPeersDisplay += "\n\n⚠️ Private network only - custom peers required"
+		}
+
+		customPeersDisplay += "\n\nYou can add custom peers in multiaddr format:\n/ip4/<ip>/tcp/<port>/p2p/<peerID>"
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔧 Custom Bootstrap Peers").
+					Description(customPeersDisplay),
+				huh.NewInput().
+					Title("Add Custom Bootstrap Peer").
+					Description("Enter multiaddr (leave empty to skip)").
+					Placeholder("/ip4/1.2.3.4/tcp/4001/p2p/Qm...").
+					Value(&m.customBootstrapInput),
 			),
 		).WithTheme(theme)
 
@@ -1700,6 +2127,94 @@ If you only need local/private access, go back and deselect bib.dev.`
 			),
 		).WithTheme(theme)
 
+	case "service-install":
+		// Initialize service installer if not done
+		if m.serviceInstaller == nil {
+			serviceConfig := local.DefaultServiceConfig()
+			serviceConfig.ConfigPath = m.configPath
+			if m.configPath == "" {
+				if configDir, err := config.UserConfigDir(config.AppBibd); err == nil {
+					serviceConfig.ConfigPath = filepath.Join(configDir, "config.yaml")
+					serviceConfig.WorkingDirectory = configDir
+				}
+			}
+			m.serviceInstaller = local.NewServiceInstaller(serviceConfig)
+		}
+
+		// Detect service type
+		serviceType := local.DetectServiceType()
+		var serviceTypeDesc string
+		switch serviceType {
+		case local.ServiceTypeSystemd:
+			serviceTypeDesc = "systemd (Linux)"
+		case local.ServiceTypeLaunchd:
+			serviceTypeDesc = "launchd (macOS)"
+		case local.ServiceTypeWindows:
+			serviceTypeDesc = "Windows Service"
+		}
+
+		// Build service install description
+		var serviceDesc string
+		if m.installService {
+			// Generate preview of service file
+			content, _ := m.serviceInstaller.Generate()
+			preview := content
+			if len(preview) > 500 {
+				preview = preview[:500] + "\n... (truncated)"
+			}
+
+			if m.userService {
+				serviceDesc = fmt.Sprintf(`🔧 Service Configuration
+
+Type: %s (User Service)
+Path: %s
+
+Preview:
+%s`, serviceTypeDesc, m.serviceInstaller.GetServiceFilePath(), preview)
+			} else {
+				serviceDesc = fmt.Sprintf(`🔧 Service Configuration
+
+Type: %s (System Service)
+Path: %s
+
+Preview:
+%s`, serviceTypeDesc, m.serviceInstaller.GetServiceFilePath(), preview)
+			}
+		} else {
+			serviceDesc = fmt.Sprintf(`🔧 Service Installation
+
+Detected service type: %s
+
+Installing bibd as a service allows it to:
+• Start automatically at boot
+• Run in the background
+• Restart on failure
+
+You can choose:
+• System service - Runs as root/system (recommended for servers)
+• User service - Runs as your user (no root required)`, serviceTypeDesc)
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🛠️  Service Installation").
+					Description(serviceDesc),
+				huh.NewConfirm().
+					Title("Install as service?").
+					Description("Install bibd to run automatically").
+					Affirmative("Yes, install service").
+					Negative("No, I'll run manually").
+					Value(&m.installService),
+				huh.NewConfirm().
+					Title("User-level service?").
+					Description("User service doesn't require root/admin").
+					Affirmative("Yes, user service").
+					Negative("No, system service").
+					Value(&m.userService),
+			),
+		).WithTheme(theme)
+
 	case "confirm":
 		m.currentForm = huh.NewForm(
 			huh.NewGroup(
@@ -1768,6 +2283,33 @@ func (m *SetupWizardModel) handleStepCompletion() bool {
 		// Check if user wants to retry tests
 		// The confirm value will be false if user selected "Retry Tests"
 		// For now, always proceed - retry can be done by going back
+		return true
+
+	case "bootstrap-confirm":
+		// Handle public network confirmation for daemon setup
+		if !m.data.BibDevConfirmed {
+			// User declined public network - disable public bootstrap
+			m.data.UsePublicBootstrap = false
+		}
+		return true
+
+	case "custom-bootstrap":
+		// Add the custom bootstrap peer if provided
+		if m.customBootstrapInput != "" {
+			// Basic validation - should start with /
+			if strings.HasPrefix(m.customBootstrapInput, "/") {
+				m.data.AddCustomBootstrapPeer(m.customBootstrapInput)
+			}
+			// Clear input for next entry
+			m.customBootstrapInput = ""
+		}
+		return true
+
+	case "service-install":
+		// Update service config based on user selection
+		if m.serviceInstaller != nil && m.installService {
+			m.serviceInstaller.Config.UserService = m.userService
+		}
 		return true
 
 	default:
@@ -1839,6 +2381,136 @@ func (m *SetupWizardModel) runTargetDetection() {
 	if target := m.targetSelector.SelectedTarget(); target != nil && target.Available {
 		m.data.DeploymentTarget = string(target.Type)
 	}
+}
+
+// getPostgresDeploymentMode returns the PostgreSQL deployment mode based on storage backend selection
+func (m *SetupWizardModel) getPostgresDeploymentMode() string {
+	switch m.data.StorageBackend {
+	case "postgres-container":
+		return "container"
+	case "postgres-local":
+		return "local"
+	case "postgres-remote":
+		return "remote"
+	case "postgres-cnpg":
+		return "cnpg"
+	case "postgres-external":
+		return "external"
+	case "postgres":
+		// Default based on deployment target
+		switch m.data.DeploymentTarget {
+		case tui.DeployTargetDocker, tui.DeployTargetPodman:
+			return "container"
+		case tui.DeployTargetKubernetes:
+			return "statefulset"
+		default:
+			return "local"
+		}
+	default:
+		return "container"
+	}
+}
+
+// runPostgresTest tests the PostgreSQL connection
+func (m *SetupWizardModel) runPostgresTest() {
+	if m.postgresTestDone {
+		return
+	}
+
+	mode := m.getPostgresDeploymentMode()
+
+	// For container deployments, skip actual test (will be tested after deployment)
+	if mode == "container" || mode == "cnpg" || mode == "statefulset" {
+		m.postgresTestDone = true
+		m.postgresTestResult = nil // Will show "skip" message
+		return
+	}
+
+	// Set defaults if not provided
+	if m.data.PostgresHost == "" {
+		m.data.PostgresHost = "localhost"
+	}
+	// Convert port string to int if needed
+	if m.postgresPortStr != "" {
+		port, err := strconv.Atoi(m.postgresPortStr)
+		if err == nil {
+			m.data.PostgresPort = port
+		}
+	}
+	if m.data.PostgresPort == 0 {
+		m.data.PostgresPort = 5432
+	}
+	if m.data.PostgresDatabase == "" {
+		m.data.PostgresDatabase = "bibd"
+	}
+	if m.data.PostgresUser == "" {
+		m.data.PostgresUser = "bibd"
+	}
+	if m.data.PostgresSSLMode == "" {
+		m.data.PostgresSSLMode = "disable"
+	}
+
+	// Build connection string
+	connStr := m.data.GetPostgresConnectionString()
+
+	// Test the connection
+	start := time.Now()
+	result := testPostgresConnection(connStr)
+	result.Duration = time.Since(start)
+	result.Database = m.data.PostgresDatabase
+	result.User = m.data.PostgresUser
+
+	m.postgresTestResult = result
+	m.postgresTestDone = true
+}
+
+// testPostgresConnection tests a PostgreSQL connection
+func testPostgresConnection(connStr string) *PostgresTestResult {
+	result := &PostgresTestResult{}
+
+	// Try to connect using database/sql with pgx driver
+	// Note: This requires the pgx driver to be imported
+	// For now, we'll do a simple TCP connection test
+
+	// Parse host and port from connection string
+	// Connection string format: postgres://user:pass@host:port/db?sslmode=...
+	host := "localhost"
+	port := "5432"
+
+	// Simple parsing (production would use proper URL parsing)
+	if strings.Contains(connStr, "@") {
+		parts := strings.Split(connStr, "@")
+		if len(parts) >= 2 {
+			hostPart := parts[1]
+			if slashIdx := strings.Index(hostPart, "/"); slashIdx > 0 {
+				hostPart = hostPart[:slashIdx]
+			}
+			if colonIdx := strings.Index(hostPart, ":"); colonIdx > 0 {
+				host = hostPart[:colonIdx]
+				port = hostPart[colonIdx+1:]
+			} else {
+				host = hostPart
+			}
+		}
+	}
+
+	// Test TCP connection
+	addr := fmt.Sprintf("%s:%s", host, port)
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("Cannot connect to %s: %v", addr, err)
+		return result
+	}
+	conn.Close()
+
+	// For a full implementation, we would use database/sql with pgx
+	// to actually authenticate and query server version.
+	// For now, we mark success if TCP connection works.
+	result.Success = true
+	result.ServerVersion = "(TCP connection verified)"
+
+	return result
 }
 
 // runConnectionTests tests connections to all selected nodes
