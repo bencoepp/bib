@@ -90,8 +90,48 @@ import (
 	"bib/internal/tui/layout"
 	"bib/internal/tui/themes"
 
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// Re-export bubbles components for convenience
+type (
+	// KeyBinding is a key binding from bubbles/key
+	KeyBinding = key.Binding
+
+	// TextInput is a text input from bubbles/textinput
+	TextInput = textinput.Model
+
+	// Viewport is a viewport from bubbles/viewport
+	Viewport = viewport.Model
+)
+
+// NewKeyBinding creates a new key binding
+func NewKeyBinding(opts ...key.BindingOpt) KeyBinding {
+	return key.NewBinding(opts...)
+}
+
+// WithKeys sets the keys for a binding
+func WithKeys(keys ...string) key.BindingOpt {
+	return key.WithKeys(keys...)
+}
+
+// WithHelp sets the help text for a binding
+func WithHelp(keyStr, desc string) key.BindingOpt {
+	return key.WithHelp(keyStr, desc)
+}
+
+// NewTextInput creates a new text input
+func NewTextInput() TextInput {
+	return textinput.New()
+}
+
+// NewViewport creates a new viewport
+func NewViewport(width, height int) Viewport {
+	return viewport.New(width, height)
+}
 
 // Re-export commonly used types for convenience
 

@@ -1199,18 +1199,18 @@
 ## Phase 5: TUI (Bubbletea + Wish)
 
 ### 5.1 Core TUI Framework
-- [ ] **TUI-001**: Bubbletea application structure
+- [x] **TUI-001**: Bubbletea application structure
   - Main model with screen navigation
   - Shared styles (lipgloss)
   - Key bindings configuration
-- [ ] **TUI-002**: Component library
+- [x] **TUI-002**: Component library
   - Tables (bubbles/table)
   - Lists (bubbles/list)
   - Text inputs (bubbles/textinput)
   - Viewports (bubbles/viewport)
   - Progress bars (bubbles/progress)
   - Spinners (bubbles/spinner)
-- [ ] **TUI-003**: Theme system
+- [x] **TUI-003**: Theme system
   - Light/dark themes
   - Custom color schemes
   - Configurable via config file
