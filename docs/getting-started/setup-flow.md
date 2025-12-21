@@ -12,12 +12,13 @@ This document describes the complete setup and initialization flow for bib and b
 4. [Guided Setup Mode](#guided-setup-mode)
 5. [CLI Setup (bib)](#cli-setup-bib)
 6. [Daemon Setup (bibd)](#daemon-setup-bibd)
-7. [Mode-Specific Configuration](#mode-specific-configuration)
-8. [Peer Connection & Bootstrap](#peer-connection--bootstrap)
-9. [Security & Trust](#security--trust)
-10. [Post-Setup Actions](#post-setup-actions)
-11. [Error Recovery](#error-recovery)
-12. [Reconfiguration](#reconfiguration)
+7. [Deployment Targets](#deployment-targets)
+8. [Mode-Specific Configuration](#mode-specific-configuration)
+9. [Peer Connection & Bootstrap](#peer-connection--bootstrap)
+10. [Security & Trust](#security--trust)
+11. [Post-Setup Actions](#post-setup-actions)
+12. [Error Recovery](#error-recovery)
+13. [Reconfiguration](#reconfiguration)
 
 ---
 
@@ -29,7 +30,7 @@ The bib setup process is designed to get users operational quickly while support
 
 | Principle | Description |
 |-----------|-------------|
-| **Auto-detect** | Detect existing configurations and running daemons |
+| **Auto-detect** | Detect existing configurations, running daemons, and nearby peers |
 | **Progressive disclosure** | Simple defaults with optional deep customization |
 | **Fail gracefully** | Save progress on failure, allow resume |
 | **Verify everything** | Test connections, authentication, and network health |
@@ -38,8 +39,14 @@ The bib setup process is designed to get users operational quickly while support
 
 | Component | Purpose | Setup Command |
 |-----------|---------|---------------|
-| **bib** | CLI client for interacting with bibd | `bib setup` |
+| **bib** | CLI client for interacting with bibd nodes | `bib setup` |
 | **bibd** | Background daemon for P2P, storage, jobs | `bib setup --daemon` |
+
+### Important Notes
+
+- **bib CLI does NOT require a local bibd instance**. Users can connect to remote bibd nodes, including the public `bib.dev` network.
+- **Local bibd is encouraged** for best performance and offline capability, but not required.
+- **bibd can be deployed** locally, in Docker/Podman containers, or on Kubernetes.
 
 ---
 
@@ -62,22 +69,6 @@ When a user runs `bib` for the first time (no configuration exists), the system 
 │     No    │    Yes                                          │
 │           │     └──────────► Execute command normally        │
 │           ▼                                                  │
-│  ┌─────────────────┐                                        │
-│  │ Detect local    │                                        │
-│  │ bibd running?   │                                        │
-│  └────────┬────────┘                                        │
-│           │                                                  │
-│     No    │    Yes                                          │
-│           │     │                                           │
-│           │     ▼                                           │
-│           │  ┌─────────────────────────────────────┐        │
-│           │  │ "Local bibd detected at localhost:  │        │
-│           │  │  4000. Would you like to connect?"  │        │
-│           │  │                                     │        │
-│           │  │  [Connect] [Setup New] [Cancel]     │        │
-│           │  └─────────────────────────────────────┘        │
-│           │                                                  │
-│           ▼                                                  │
 │  ┌─────────────────────────────────────────────────┐        │
 │  │          Launch Setup Wizard                     │        │
 │  │                                                  │        │
@@ -89,20 +80,106 @@ When a user runs `bib` for the first time (no configuration exists), the system 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Detection Logic
+### Detection & Discovery
 
-1. **Check for config file**: Look for `~/.config/bib/config.yaml`
-2. **Scan for local bibd**:
-   - Check Unix socket: `/var/run/bibd.sock` or `~/.config/bibd/bibd.sock`
-   - Check localhost ports: `4000`, `8080`
-   - Query health endpoint if found
-3. **Offer appropriate action** based on detection results
+During CLI setup, bib discovers available bibd instances using multiple methods:
+
+| Method | Scope | Description |
+|--------|-------|-------------|
+| **Localhost scan** | Local machine | Check ports 4000, 8080 on localhost |
+| **Unix socket** | Local machine | Check `/var/run/bibd.sock`, `~/.config/bibd/bibd.sock` |
+| **mDNS** | Local network | Discover `_bib._tcp.local` services |
+| **P2P Discovery** | Nearby peers | DHT-based peer discovery |
+
+### Node Selection
+
+After discovery, the wizard presents all found nodes plus the public bib.dev network:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Connect to bibd Nodes                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Select bibd nodes to connect to.                            │
+│  You can select multiple nodes for redundancy.               │
+│                                                              │
+│  Discovered Nodes:                                           │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ [✓] localhost:4000          (local, 2ms)            │    │
+│  │ [ ] 192.168.1.50:4000       (LAN, mDNS, 5ms)        │    │
+│  │ [ ] workstation.local:4000  (LAN, mDNS, 8ms)        │    │
+│  │ [ ] 10.0.0.25:4000          (nearby peer, 15ms)     │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  Public Network:                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ [ ] bib.dev                 (public bootstrap)       │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  [Select All Local] [Add Custom...] [Continue]               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### bib.dev Connection Confirmation
+
+If the user selects `bib.dev`, explicit confirmation is required:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Connect to Public Network (bib.dev)             │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  You've selected to connect to the public bib.dev network.   │
+│                                                              │
+│  This will:                                                  │
+│  • Connect you to the global bib peer-to-peer network       │
+│  • Allow access to public datasets and topics               │
+│  • Enable discovery of other public nodes                   │
+│                                                              │
+│  ⚠️  Data you publish will be visible to other network       │
+│     participants unless you run your own private bibd.       │
+│                                                              │
+│  Confirm connection to bib.dev?                              │
+│                                                              │
+│  [Yes, Connect] [No, Skip] [Learn More]                      │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### No Nodes Found
+
+If no local nodes are discovered:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   No Local Nodes Found                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  No bibd instances were detected on your local machine       │
+│  or network.                                                 │
+│                                                              │
+│  Options:                                                    │
+│                                                              │
+│  ● Connect to bib.dev (public network)                       │
+│    Access the global bib network without running bibd        │
+│                                                              │
+│  ○ Set up local bibd                                         │
+│    Run your own bibd instance for best performance           │
+│                                                              │
+│  ○ Enter custom address                                      │
+│    Connect to a specific bibd node                           │
+│                                                              │
+│  [Continue]                                                  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Quick Start Mode
 
-Quick Start creates a minimal working configuration in seconds, defaulting to **Proxy mode** for the daemon.
+Quick Start creates a minimal working configuration in seconds.
 
 ### CLI Quick Start
 
@@ -113,11 +190,18 @@ bib setup --quick
 **Prompts:**
 1. **Name**: Your display name
 2. **Email**: Your email address
+3. **bib.dev confirmation**: Confirm connection to public network (if no local nodes found)
+
+**Discovery:**
+- Scans for local/nearby bibd instances
+- If found: automatically connects to local nodes
+- If not found: prompts to connect to bib.dev
 
 **Actions:**
 - Generates Ed25519 identity key at `~/.config/bib/identity.pem`
-- Creates minimal config pointing to `localhost:4000`
-- Tests connection if bibd is detected
+- Discovers and connects to available nodes
+- If connecting to bib.dev: requires explicit confirmation
+- Tests connection to selected nodes
 
 **Resulting Config:**
 
@@ -128,6 +212,15 @@ identity:
   email: "john@example.com"
   key: "~/.config/bib/identity.pem"
 
+# Multiple nodes can be configured
+nodes:
+  - address: "localhost:4000"
+    alias: "local"
+    default: true
+  - address: "bib.dev:4000"
+    alias: "public"
+
+# Legacy single-server fallback
 server: "localhost:4000"
 
 output:
@@ -141,50 +234,36 @@ log:
 ### Daemon Quick Start
 
 ```bash
+# Local deployment (default)
 bib setup --daemon --quick
+
+# Docker/Podman deployment
+bib setup --daemon --quick --target docker
+bib setup --daemon --quick --target podman
+
+# Kubernetes deployment
+bib setup --daemon --quick --target kubernetes
 ```
 
 **Prompts:**
 1. **Name**: Node display name
 2. **Email**: Admin contact email
+3. **Deployment target** (if not specified via flag): Local / Docker / Podman / Kubernetes
 
-**Actions:**
-- Generates Ed25519 P2P identity at `~/.config/bibd/identity.pem`
-- Creates Proxy mode configuration
-- Connects to public bootstrap nodes (`bib.dev`)
-- Starts bibd immediately
-- Installs as system service (if permissions allow)
+**Actions (varies by target):**
 
-**Resulting Config:**
+| Target | Actions |
+|--------|---------|
+| **Local** | Generate config, create systemd/launchd service, start bibd |
+| **Docker** | Generate docker-compose.yaml, run `docker compose up -d` |
+| **Podman** | Generate podman-compose.yaml or pod, run containers |
+| **Kubernetes** | Generate manifests, optionally apply with kubectl |
 
-```yaml
-# ~/.config/bibd/config.yaml (quick start)
-identity:
-  name: "My Node"
-  email: "admin@example.com"
-
-server:
-  host: "0.0.0.0"
-  port: 4000
-  data_dir: "~/.local/share/bibd"
-
-p2p:
-  enabled: true
-  mode: proxy
-  identity:
-    key_path: "~/.config/bibd/identity.pem"
-  bootstrap:
-    peers:
-      - "/dns4/bib.dev/tcp/4001/p2p/QmBootstrap..."
-      - "/dns4/bib.dev/udp/4001/quic-v1/p2p/QmBootstrap..."
-
-database:
-  backend: sqlite
-
-log:
-  level: info
-  format: pretty
-```
+**Quick Start Defaults:**
+- Proxy mode (no PostgreSQL required)
+- SQLite backend
+- Public bootstrap (bib.dev)
+- Minimal resource usage
 
 ---
 
@@ -237,7 +316,9 @@ If setup is interrupted (Ctrl+C, error, or system issue):
 
 ## CLI Setup (bib)
 
-The CLI setup configures the `bib` command-line tool for interacting with a bibd daemon.
+The CLI setup configures the `bib` command-line tool for interacting with bibd nodes.
+
+> **Note:** Running a local bibd instance is encouraged for best performance and offline capability, but is **not required**. You can connect to remote bibd nodes or the public bib.dev network.
 
 ### Setup Steps
 
@@ -256,38 +337,66 @@ Step 3: Output Preferences                                     │
     │   • Color output (yes/no)                                │
     │                                                          │
     ▼                                                          │
-Step 4: Connection                                             │
-    │   • Server address (default: localhost:4000)             │
-    │   • TLS enabled (auto-detect)                            │
+Step 4: Node Discovery ───────────────────────────────────────┤
+    │   • Scan localhost, mDNS, nearby peers                   │
+    │   • Display discovered nodes with latency                │
+    │   • Show bib.dev public network option                   │
     │                                                          │
     ▼                                                          │
-Step 5: Logging                                                │
+Step 5: Node Selection                                         │
+    │   • Multi-select from discovered nodes                   │
+    │   • Add custom node addresses                            │
+    │   • Confirm bib.dev connection (if selected)             │
+    │   • Set default node                                     │
+    │                                                          │
+    ▼                                                          │
+Step 6: Logging                                                │
     │   • Log level (debug/info/warn/error)                    │
     │                                                          │
     ▼                                                          │
-Step 6: Connection Test ──────────────────────────────────────┤
-    │   • Attempt connection to configured daemon              │
-    │   • If successful: show node info, peer count            │
-    │   • If failed: offer to continue or reconfigure          │
+Step 7: Connection Test ──────────────────────────────────────┤
+    │   • Test connectivity to all selected nodes              │
+    │   • Show node info, version, peer count                  │
+    │   • If failed: offer to retry or remove node             │
     │                                                          │
     ▼                                                          │
-Step 7: Authentication Test                                    │
+Step 8: Authentication Test                                    │
     │   • Authenticate with generated identity key             │
-    │   • If new user: auto-register (if enabled on server)    │
+    │   • Register on each node (if auto-registration enabled) │
     │   • Show session info on success                         │
     │                                                          │
     ▼                                                          │
-Step 8: Network Health Check                                   │
-    │   • Query connected peers                                │
+Step 9: Network Health Check                                   │
+    │   • Query connected peers on each node                   │
     │   • Show bootstrap connection status                     │
     │   • Display network summary                              │
     │                                                          │
     ▼                                                          │
-Step 9: Confirmation & Save                                    │
-        • Review all settings                                  │
+Step 10: Confirmation & Save                                   │
+        • Review all settings and connected nodes              │
         • Save configuration                                   │
         • Show next steps                                      │
 ────────────────────────────────────────────────────────────────
+```
+
+### Node Discovery Details
+
+The wizard discovers bibd instances using multiple methods:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   🔍 Discovering Nodes...                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Scanning for bibd instances...                              │
+│                                                              │
+│  ✓ Localhost scan       Found 1 instance                     │
+│  ✓ mDNS discovery       Found 2 instances                    │
+│  ✓ Peer discovery       Found 1 nearby peer                  │
+│                                                              │
+│  4 nodes discovered in 2.3 seconds                           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Identity Key Generation
@@ -324,7 +433,16 @@ The identity key is stored separately from SSH keys:
 
 ## Daemon Setup (bibd)
 
-The daemon setup configures the bibd background service.
+The daemon setup configures the bibd background service. bibd can be deployed in multiple ways depending on your environment.
+
+### Deployment Targets
+
+| Target | Description | PostgreSQL Options |
+|--------|-------------|-------------------|
+| **Local** | Run bibd directly on host | Any (local, remote, container-managed) |
+| **Docker** | Run bibd in Docker container | Separate container in same compose |
+| **Podman** | Run bibd in Podman container (rootful or rootless) | Separate container in same pod/compose |
+| **Kubernetes** | Deploy bibd to K8s cluster | StatefulSet, CloudNativePG, or external |
 
 ### Setup Steps Overview
 
@@ -332,76 +450,368 @@ The daemon setup configures the bibd background service.
 Step 1: Welcome
     │
     ▼
-Step 2: Identity ─────────────────────────────────────────────┐
+Step 2: Deployment Target ────────────────────────────────────┐
+    │   • Local / Docker / Podman / Kubernetes                 │
+    │   → Determines subsequent configuration options          │
+    │                                                          │
+    ▼                                                          │
+Step 3: Identity                                               │
     │   • Node name                                            │
     │   • Admin email                                          │
     │   → Generates P2P identity                               │
     │                                                          │
     ▼                                                          │
-Step 3: Server Configuration                                   │
-    │   • Listen host (default: 0.0.0.0)                       │
-    │   • Listen port (default: 4000)                          │
-    │   • Data directory                                       │
+Step 4: Server Configuration                                   │
+    │   • Listen host/port (varies by target)                  │
+    │   • Data directory/volume configuration                  │
     │                                                          │
     ▼                                                          │
-Step 4: TLS / Security Hardening                               │
+Step 5: TLS / Security Hardening                               │
     │   • Enable TLS (yes/no)                                  │
     │   • Certificate source (generate/provide)                │
     │   • Client certificate requirements                      │
     │   • Certificate pinning options                          │
     │                                                          │
     ▼                                                          │
-Step 5: Storage Backend                                        │
+Step 6: Storage Backend                                        │
     │   • SQLite (lightweight) or PostgreSQL (production)      │
-    │   • If PostgreSQL: configuration wizard                  │
+    │   • PostgreSQL setup (varies by deployment target)       │
     │                                                          │
     ▼                                                          │
-Step 6: P2P Networking                                         │
+Step 7: P2P Networking                                         │
     │   • Enable P2P (yes/no)                                  │
-    │   • Listen addresses                                     │
+    │   • Listen addresses / port mappings                     │
     │                                                          │
     ▼                                                          │
-Step 7: P2P Mode Selection                                     │
+Step 8: P2P Mode Selection                                     │
     │   • Proxy / Selective / Full                             │
     │   → Mode-specific configuration (see below)              │
     │                                                          │
     ▼                                                          │
-Step 8: Bootstrap Peers                                        │
-    │   • Use public bootstrap (bib.dev)                       │
+Step 9: Bootstrap Peers                                        │
+    │   • Use public bootstrap (bib.dev) - requires confirm    │
     │   • Add custom bootstrap peers                           │
     │                                                          │
     ▼                                                          │
-Step 9: Logging                                                │
+Step 10: Logging                                               │
     │   • Log level and format                                 │
     │   • Audit logging                                        │
     │                                                          │
     ▼                                                          │
-Step 10: Clustering (Optional)                                 │
+Step 11: Clustering (Optional)                                 │
     │   • Enable HA clustering                                 │
     │   • Cluster configuration                                │
     │                                                          │
     ▼                                                          │
-Step 11: Break Glass (Optional)                                │
+Step 12: Break Glass (Optional)                                │
     │   • Emergency access configuration                       │
     │                                                          │
     ▼                                                          │
-Step 12: Confirmation                                          │
+Step 13: Confirmation                                          │
     │   • Review all settings                                  │
     │   • Confirm configuration                                │
     │                                                          │
     ▼                                                          │
-Step 13: Connectivity Test                                     │
+Step 14: Connectivity Test                                     │
     │   • Test bootstrap peer connectivity                     │
     │   • Verify P2P identity                                  │
     │                                                          │
     ▼                                                          │
-Step 14: Deployment                                            │
-        • Create system user (if needed)                       │
-        • Install systemd/launchd service                      │
-        • Start bibd                                           │
+Step 15: Deployment ──────────────────────────────────────────┤
+        • Generate configuration files                         │
+        • Create manifests/compose files (if applicable)       │
+        • Deploy and start bibd                                │
         • Verify startup                                       │
 ────────────────────────────────────────────────────────────────
 ```
+
+---
+
+## Deployment Targets
+
+### Deployment Target Selection
+
+The first major choice in daemon setup is the deployment target:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Deployment Target                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Where will bibd run?                                        │
+│                                                              │
+│  ● Local                                                     │
+│    Run bibd directly on this machine                         │
+│    Best for: development, single-user, dedicated servers     │
+│                                                              │
+│  ○ Docker                                                    │
+│    Run bibd in a Docker container                            │
+│    Best for: isolated deployments, easy updates              │
+│                                                              │
+│  ○ Podman                                                    │
+│    Run bibd in a Podman container (rootful or rootless)      │
+│    Best for: rootless containers, RHEL/Fedora environments   │
+│                                                              │
+│  ○ Kubernetes                                                │
+│    Deploy bibd to a Kubernetes cluster                       │
+│    Best for: production, high availability, scaling          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Local Deployment
+
+bibd runs directly on the host machine as a system service.
+
+**PostgreSQL Options for Local:**
+- **SQLite**: Embedded, no setup required (Proxy/Selective modes only)
+- **Managed Container**: bibd manages a Docker/Podman PostgreSQL container
+- **Local PostgreSQL**: Connect to PostgreSQL installed on host
+- **Remote PostgreSQL**: Connect to external PostgreSQL server
+
+**Generated Files:**
+- `~/.config/bibd/config.yaml`
+- `~/.config/bibd/identity.pem`
+- `/etc/systemd/system/bibd.service` (Linux) or `~/Library/LaunchAgents/dev.bib.bibd.plist` (macOS)
+
+### Docker Deployment
+
+bibd and PostgreSQL run in separate Docker containers managed by Docker Compose.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Docker Deployment                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ✓ Docker detected and running                               │
+│                                                              │
+│  Configuration:                                              │
+│  ├── Compose file:  ./bibd/docker-compose.yaml               │
+│  ├── Config dir:    ./bibd/config/                           │
+│  ├── Data volume:   bibd-data                                │
+│  └── Network:       bibd-network                             │
+│                                                              │
+│  Services:                                                   │
+│  ├── bibd:     ghcr.io/bencoepp/bibd:latest                  │
+│  └── postgres: postgres:16-alpine (if Full mode)             │
+│                                                              │
+│  Ports:                                                      │
+│  ├── 4000:4000  (gRPC API)                                   │
+│  └── 4001:4001  (P2P)                                        │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Generated Files:**
+```
+./bibd/
+├── docker-compose.yaml
+├── config/
+│   ├── config.yaml
+│   └── identity.pem
+└── .env
+```
+
+**Auto-Start:**
+After generation, the wizard runs:
+```bash
+cd ./bibd && docker compose up -d
+```
+
+### Podman Deployment
+
+bibd and PostgreSQL run in Podman containers, supporting both rootful and rootless modes.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Podman Deployment                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ✓ Podman detected                                           │
+│                                                              │
+│  Container Mode:                                             │
+│  ● Rootless (recommended, running as user)                   │
+│  ○ Rootful (running as root)                                 │
+│                                                              │
+│  Deployment Style:                                           │
+│  ● Pod (containers share network namespace)                  │
+│  ○ Compose (podman-compose, separate networks)               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Rootless Podman:**
+- Containers run without root privileges
+- Data stored in `~/.local/share/containers/`
+- Ports > 1024 unless configured with `net.ipv4.ip_unprivileged_port_start`
+
+**Rootful Podman:**
+- Containers run with root privileges
+- Data stored in `/var/lib/containers/`
+- Can bind to privileged ports
+
+**Generated Files (Pod mode):**
+```
+./bibd/
+├── bibd-pod.yaml           # Kubernetes-style pod definition
+├── config/
+│   ├── config.yaml
+│   └── identity.pem
+└── start.sh                # Convenience script
+```
+
+**Generated Files (Compose mode):**
+```
+./bibd/
+├── podman-compose.yaml
+├── config/
+│   ├── config.yaml
+│   └── identity.pem
+└── .env
+```
+
+**Auto-Start:**
+```bash
+# Pod mode
+podman play kube ./bibd/bibd-pod.yaml
+
+# Compose mode  
+cd ./bibd && podman-compose up -d
+```
+
+### Kubernetes Deployment
+
+bibd is deployed to a Kubernetes cluster with full production configuration.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Kubernetes Deployment                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ✓ kubectl configured                                        │
+│  ✓ Current context: my-cluster                               │
+│                                                              │
+│  Namespace: bibd (will be created)                           │
+│                                                              │
+│  Output Options:                                             │
+│  ● Generate manifests and apply                              │
+│  ○ Generate manifests only (manual apply)                    │
+│  ○ Generate Helm values only                                 │
+│                                                              │
+│  Output Directory: ./bibd-k8s/                               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**PostgreSQL Options for Kubernetes:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Kubernetes PostgreSQL Setup                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  PostgreSQL deployment strategy:                             │
+│                                                              │
+│  ● StatefulSet                                               │
+│    Deploy PostgreSQL as a StatefulSet in the cluster         │
+│    Creates: StatefulSet, Service, PVC, Secret                │
+│                                                              │
+│  ○ CloudNativePG Operator                                    │
+│    Use CloudNativePG for production PostgreSQL               │
+│    Requires: CloudNativePG operator installed                │
+│    Creates: Cluster CR, Secrets                              │
+│                                                              │
+│  ○ External                                                  │
+│    Connect to external PostgreSQL (RDS, Cloud SQL, etc.)     │
+│    Creates: Secret with connection string                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Generated Kubernetes Resources:**
+
+| Resource | Purpose |
+|----------|---------|
+| `Namespace` | Isolated namespace for bibd resources |
+| `Deployment` or `StatefulSet` | bibd workload |
+| `Service` | Internal ClusterIP service |
+| `Service` (LoadBalancer/Ingress) | External access |
+| `ConfigMap` | bibd configuration |
+| `Secret` | Identity keys, database credentials |
+| `PersistentVolumeClaim` | Data storage |
+| `ServiceAccount` | RBAC identity |
+| `NetworkPolicy` | Network security (optional) |
+
+**PostgreSQL Resources (if StatefulSet):**
+
+| Resource | Purpose |
+|----------|---------|
+| `StatefulSet` | PostgreSQL workload |
+| `Service` | PostgreSQL internal service |
+| `PersistentVolumeClaim` | Database storage |
+| `Secret` | Database credentials |
+
+**Generated Files:**
+```
+./bibd-k8s/
+├── namespace.yaml
+├── configmap.yaml
+├── secret.yaml
+├── bibd-deployment.yaml    # or statefulset.yaml
+├── bibd-service.yaml
+├── bibd-ingress.yaml       # if external access configured
+├── postgres-statefulset.yaml  # if StatefulSet selected
+├── postgres-service.yaml
+├── postgres-pvc.yaml
+├── postgres-secret.yaml
+├── kustomization.yaml      # for kustomize users
+└── values.yaml             # Helm values (for future Helm chart)
+```
+
+**Apply Options:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Apply Manifests                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Manifests generated in ./bibd-k8s/                          │
+│                                                              │
+│  Apply to cluster now?                                       │
+│                                                              │
+│  [Yes, Apply Now] [No, Manual Apply Later]                   │
+│                                                              │
+│  To apply manually:                                          │
+│  kubectl apply -k ./bibd-k8s/                                │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**External Access Configuration:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   External Access                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  How should bibd be accessible from outside the cluster?     │
+│                                                              │
+│  ○ None (internal only)                                      │
+│                                                              │
+│  ● LoadBalancer                                              │
+│    Cloud provider provisions external IP                     │
+│                                                              │
+│  ○ NodePort                                                  │
+│    Expose on node ports (30000-32767)                        │
+│                                                              │
+│  ○ Ingress                                                   │
+│    Use Ingress controller with hostname                      │
+│    Hostname: bibd.example.com                                │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> **Note:** Helm chart for bibd is planned but not yet available. The wizard generates Helm-compatible `values.yaml` for future use.
 
 ---
 
@@ -448,7 +858,7 @@ Prompts for initial topic subscriptions:
 
 ### Full Mode
 
-Requires PostgreSQL and extensive configuration confirmation.
+Requires PostgreSQL and extensive configuration confirmation. PostgreSQL setup options depend on the deployment target selected earlier.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -462,16 +872,40 @@ Requires PostgreSQL and extensive configuration confirmation.
 │  • Sufficient disk space for all network data               │
 │  • Stable network connection                                 │
 │                                                              │
-│  PostgreSQL Configuration:                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### PostgreSQL Options by Deployment Target
+
+| Deployment Target | PostgreSQL Options |
+|-------------------|-------------------|
+| **Local** | Managed container (Docker/Podman), local install, remote server |
+| **Docker** | Separate container in same docker-compose (required) |
+| **Podman** | Separate container in same pod/compose (required) |
+| **Kubernetes** | StatefulSet, CloudNativePG, or external (RDS, Cloud SQL) |
+
+#### Local Deployment - PostgreSQL Setup
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           PostgreSQL Setup (Local Deployment)                │
+├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  ○ Managed (bibd runs PostgreSQL container)                 │
-│  ○ External (connect to existing PostgreSQL)                │
-│  ○ Kubernetes (deploy PostgreSQL to cluster)                │
+│  How should PostgreSQL be provided?                          │
+│                                                              │
+│  ● Managed Container                                         │
+│    bibd manages a Docker/Podman PostgreSQL container         │
+│                                                              │
+│  ○ Local Installation                                        │
+│    Connect to PostgreSQL installed on this machine           │
+│                                                              │
+│  ○ Remote Server                                             │
+│    Connect to an external PostgreSQL server                  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### Managed PostgreSQL Setup
+If "Managed Container" is selected:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -493,7 +927,106 @@ Requires PostgreSQL and extensive configuration confirmation.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### External PostgreSQL Setup
+#### Docker Deployment - PostgreSQL Setup
+
+When deploying bibd in Docker, PostgreSQL runs as a separate container in the same compose file:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           PostgreSQL Setup (Docker Deployment)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  PostgreSQL will run as a separate container in the same    │
+│  docker-compose configuration.                               │
+│                                                              │
+│  PostgreSQL Image: postgres:16-alpine                        │
+│  Container Name:   bibd-postgres                             │
+│  Volume:          bibd-postgres-data                         │
+│  Network:         bibd-network (internal)                    │
+│                                                              │
+│  Generated docker-compose.yaml will include:                 │
+│  • bibd service                                              │
+│  • postgres service                                          │
+│  • Shared network                                            │
+│  • Persistent volumes                                        │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Podman Deployment - PostgreSQL Setup
+
+When deploying bibd in Podman, PostgreSQL runs as a separate container:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           PostgreSQL Setup (Podman Deployment)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  PostgreSQL will run as a separate container.                │
+│                                                              │
+│  Container Mode: Rootless                                    │
+│                                                              │
+│  Deployment Style:                                           │
+│  ● Pod (bibd and postgres in same pod)                       │
+│    Containers share localhost, simpler networking            │
+│                                                              │
+│  ○ Compose (separate containers with podman-compose)         │
+│    More flexible, similar to Docker Compose                  │
+│                                                              │
+│  PostgreSQL Image: postgres:16-alpine                        │
+│  Volume:          bibd-postgres-data                         │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Kubernetes Deployment - PostgreSQL Setup
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│          PostgreSQL Setup (Kubernetes Deployment)            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  How should PostgreSQL be deployed?                          │
+│                                                              │
+│  ● StatefulSet                                               │
+│    Deploy PostgreSQL as a StatefulSet in the cluster         │
+│    Simple, suitable for dev/test and small production        │
+│                                                              │
+│  ○ CloudNativePG                                             │
+│    Use CloudNativePG operator for production PostgreSQL      │
+│    Requires: CloudNativePG operator pre-installed            │
+│    Features: HA, backups, monitoring                         │
+│                                                              │
+│  ○ External                                                  │
+│    Connect to external managed PostgreSQL                    │
+│    Examples: AWS RDS, Google Cloud SQL, Azure Database       │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+If "StatefulSet" is selected:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│            PostgreSQL StatefulSet Configuration              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Namespace:     bibd                                         │
+│  Image:         postgres:16-alpine                           │
+│  Replicas:      1 (single instance)                          │
+│                                                              │
+│  Storage:                                                    │
+│  ├── Storage Class: standard (cluster default)               │
+│  └── PVC Size:      50Gi                                     │
+│                                                              │
+│  Resources:                                                  │
+│  ├── CPU:     500m request, 2000m limit                      │
+│  └── Memory:  512Mi request, 2Gi limit                       │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+If "External" is selected:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -502,12 +1035,12 @@ Requires PostgreSQL and extensive configuration confirmation.
 │                                                              │
 │  Connection String:                                          │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │ postgres://user:pass@localhost:5432/bibd            │    │
+│  │ postgres://user:pass@rds.example.com:5432/bibd      │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                              │
 │  Or configure individually:                                  │
 │                                                              │
-│  Host:     localhost                                         │
+│  Host:     rds.example.com                                   │
 │  Port:     5432                                              │
 │  Database: bibd                                              │
 │  User:     bibd                                              │
@@ -518,31 +1051,6 @@ Requires PostgreSQL and extensive configuration confirmation.
 │                                                              │
 │  ✓ Connection successful                                     │
 │    PostgreSQL 16.1, bibd database exists                     │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-#### Kubernetes PostgreSQL Setup
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              Kubernetes PostgreSQL Setup                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Deploy PostgreSQL to your Kubernetes cluster.              │
-│                                                              │
-│  Kubernetes Context: my-cluster (detected)                   │
-│  Namespace:          bibd                                    │
-│                                                              │
-│  Deployment Options:                                         │
-│  ● Deploy new PostgreSQL StatefulSet                        │
-│  ○ Use existing PostgreSQL service                          │
-│  ○ Use CloudNativePG operator                               │
-│                                                              │
-│  Storage Class: standard (default)                           │
-│  PVC Size:      50Gi                                         │
-│                                                              │
-│  [Deploy] [Show YAML] [Skip - Configure Later]               │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -594,7 +1102,9 @@ Before proceeding, all settings must be confirmed:
 │                                                              │
 │  Bootstrap peers help your node discover the network.        │
 │                                                              │
-│  ☑ Use public bootstrap nodes (bib.dev)                      │
+│  Public Bootstrap:                                           │
+│  ☐ Use public bootstrap nodes (bib.dev)                      │
+│    ⚠️  Requires confirmation in next step                    │
 │                                                              │
 │  Custom Bootstrap Peers (optional):                          │
 │  ┌─────────────────────────────────────────────────────┐    │
@@ -603,6 +1113,34 @@ Before proceeding, all settings must be confirmed:
 │  └─────────────────────────────────────────────────────┘    │
 │                                                              │
 │  [Add Peer] [Remove] [Test Connectivity]                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### bib.dev Confirmation
+
+If the public bootstrap is selected, explicit confirmation is required:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           Connect to Public Bootstrap (bib.dev)              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  You've selected to use the public bib.dev bootstrap.        │
+│                                                              │
+│  This will:                                                  │
+│  • Connect your node to the global bib P2P network          │
+│  • Enable discovery of public peers                         │
+│  • Allow your node to be discovered by others               │
+│                                                              │
+│  ⚠️  Your node will be visible to other network participants │
+│     and may serve data to them (depending on mode).          │
+│                                                              │
+│  For private networks, use only custom bootstrap peers.      │
+│                                                              │
+│  Confirm connection to bib.dev?                              │
+│                                                              │
+│  [Yes, Connect to Public Network] [No, Private Only]         │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -712,24 +1250,18 @@ bib connect --trust-first-use node1.example.com:4000
 
 ## Post-Setup Actions
 
-After configuration is complete, the wizard performs deployment actions.
+After configuration is complete, the wizard performs deployment actions based on the selected target.
 
-### Daemon Deployment
+### Deployment Actions by Target
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Deployment                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Setting up bibd...                                          │
-│                                                              │
-│  ✓ Configuration saved to ~/.config/bibd/config.yaml        │
-│  ✓ Data directory created: ~/.local/share/bibd              │
-│  ✓ P2P identity generated                                    │
-│  ⠋ Creating system service...                                │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+| Target | Actions |
+|--------|---------|
+| **Local** | Generate config, create system service, start bibd |
+| **Docker** | Generate docker-compose.yaml, run `docker compose up -d` |
+| **Podman** | Generate pod/compose files, run containers |
+| **Kubernetes** | Generate manifests, optionally apply with kubectl |
+
+### Local Deployment
 
 **Deployment Steps:**
 
@@ -743,7 +1275,7 @@ After configuration is complete, the wizard performs deployment actions.
 5. **Start bibd** and verify it's running
 6. **Run health check** to confirm operational
 
-### Service Installation (Linux)
+**Service Installation (Linux):**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -764,7 +1296,131 @@ After configuration is complete, the wizard performs deployment actions.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Verification
+### Docker Deployment
+
+**Deployment Steps:**
+
+1. **Generate files** in output directory:
+   - `docker-compose.yaml`
+   - `config/config.yaml`
+   - `config/identity.pem`
+   - `.env` (environment variables)
+2. **Run `docker compose up -d`** to start containers
+3. **Wait for containers** to be healthy
+4. **Run health check** against bibd container
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│               Docker Deployment Complete! ✓                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Files generated in ./bibd/                                  │
+│                                                              │
+│  Starting containers...                                      │
+│  ✓ Network bibd-network created                              │
+│  ✓ Volume bibd-data created                                  │
+│  ✓ Container bibd-postgres started (healthy)                 │
+│  ✓ Container bibd started (healthy)                          │
+│                                                              │
+│  Services:                                                   │
+│  ├── bibd:     Running (ghcr.io/bencoepp/bibd:latest)        │
+│  └── postgres: Running (postgres:16-alpine)                  │
+│                                                              │
+│  Ports:                                                      │
+│  ├── 4000 → bibd gRPC API                                    │
+│  └── 4001 → bibd P2P                                         │
+│                                                              │
+│  Management:                                                 │
+│  • cd ./bibd && docker compose logs -f                       │
+│  • cd ./bibd && docker compose down                          │
+│  • cd ./bibd && docker compose up -d                         │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Podman Deployment
+
+**Deployment Steps:**
+
+1. **Generate files** in output directory:
+   - `bibd-pod.yaml` (pod mode) or `podman-compose.yaml` (compose mode)
+   - `config/config.yaml`
+   - `config/identity.pem`
+   - `start.sh` (convenience script)
+2. **Run containers**:
+   - Pod mode: `podman play kube bibd-pod.yaml`
+   - Compose mode: `podman-compose up -d`
+3. **Wait for containers** to be healthy
+4. **Run health check** against bibd container
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│               Podman Deployment Complete! ✓                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Mode: Rootless, Pod                                         │
+│  Files generated in ./bibd/                                  │
+│                                                              │
+│  Starting pod...                                             │
+│  ✓ Pod bibd-pod created                                      │
+│  ✓ Container bibd-pod-postgres started                       │
+│  ✓ Container bibd-pod-bibd started                           │
+│                                                              │
+│  Pod Status: Running                                         │
+│                                                              │
+│  Management:                                                 │
+│  • podman pod logs -f bibd-pod                               │
+│  • podman pod stop bibd-pod                                  │
+│  • podman pod start bibd-pod                                 │
+│  • podman play kube --down bibd-pod.yaml                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Kubernetes Deployment
+
+**Deployment Steps:**
+
+1. **Generate manifests** in output directory
+2. **Optionally apply** with `kubectl apply -k`
+3. **Wait for pods** to be ready (if applied)
+4. **Show connection instructions**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│             Kubernetes Deployment Complete! ✓                │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Manifests generated in ./bibd-k8s/                          │
+│                                                              │
+│  Applied to cluster: my-cluster                              │
+│  Namespace: bibd                                             │
+│                                                              │
+│  ✓ Namespace created                                         │
+│  ✓ ConfigMap created                                         │
+│  ✓ Secret created                                            │
+│  ✓ PostgreSQL StatefulSet created                            │
+│  ✓ PostgreSQL Service created                                │
+│  ✓ bibd Deployment created                                   │
+│  ✓ bibd Service created                                      │
+│  ✓ bibd LoadBalancer created                                 │
+│                                                              │
+│  Waiting for pods...                                         │
+│  ✓ postgres-0: Running                                       │
+│  ✓ bibd-xxxxx: Running                                       │
+│                                                              │
+│  External Access:                                            │
+│  └── LoadBalancer: 203.0.113.50:4000 (pending...)            │
+│                                                              │
+│  Management:                                                 │
+│  • kubectl -n bibd get pods                                  │
+│  • kubectl -n bibd logs -f deployment/bibd                   │
+│  • kubectl -n bibd port-forward svc/bibd 4000:4000           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Verification (Local Deployment)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -806,19 +1462,18 @@ For CLI setup, verification includes:
 │                                                              │
 │  bib CLI is configured and connected.                        │
 │                                                              │
-│  Connection Test:                                            │
-│  ├── Server:      localhost:4000 ✓                           │
-│  ├── TLS:         Enabled ✓                                  │
-│  └── Latency:     2ms                                        │
+│  Connected Nodes:                                            │
+│  ├── localhost:4000 ✓ (default)                              │
+│  ├── 192.168.1.50:4000 ✓                                     │
+│  └── bib.dev:4000 ✓ (public)                                 │
 │                                                              │
-│  Authentication Test:                                        │
+│  Authentication:                                             │
 │  ├── Identity:    ~/.config/bib/identity.pem ✓               │
 │  ├── User:        john@example.com                           │
-│  ├── Role:        user                                       │
-│  └── Session:     Active ✓                                   │
+│  └── Sessions:    3 active                                   │
 │                                                              │
 │  Network Health:                                             │
-│  ├── Connected Peers:  5                                     │
+│  ├── Connected Peers:  12                                    │
 │  ├── Bootstrap:        2/2 connected                         │
 │  └── DHT Status:       Healthy                               │
 │                                                              │
@@ -969,11 +1624,34 @@ bib config reset --all
 | `bib setup` | Interactive CLI setup wizard |
 | `bib setup --quick` | Quick start with minimal prompts |
 | `bib setup --daemon` | Interactive daemon setup wizard |
-| `bib setup --daemon --quick` | Quick daemon setup (Proxy mode) |
+| `bib setup --daemon --quick` | Quick daemon setup (local, Proxy mode) |
+| `bib setup --daemon --target <target>` | Specify deployment target |
 | `bib setup --daemon --cluster` | Initialize new HA cluster |
 | `bib setup --daemon --cluster-join <token>` | Join existing cluster |
 | `bib setup --reconfigure [section]` | Reconfigure specific sections |
 | `bib setup --fresh` | Reset and start fresh |
+
+### Deployment Target Options
+
+| Flag | Target | Description |
+|------|--------|-------------|
+| `--target local` | Local | Run bibd directly on host (default) |
+| `--target docker` | Docker | Run in Docker containers |
+| `--target podman` | Podman | Run in Podman containers (rootful/rootless) |
+| `--target kubernetes` | Kubernetes | Deploy to Kubernetes cluster |
+
+**Examples:**
+
+```bash
+# Quick start with Docker
+bib setup --daemon --quick --target docker
+
+# Full setup for Kubernetes
+bib setup --daemon --target kubernetes
+
+# Podman with rootless mode
+bib setup --daemon --target podman
+```
 
 ### Connection Commands
 

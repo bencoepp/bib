@@ -141,13 +141,20 @@ Bib provides two setup modes: **Quick Start** for getting running fast, and **Gu
 
 > 📘 For comprehensive setup documentation, see [Setup Flow](setup-flow.md).
 
+### Important Notes
+
+- **bib CLI does NOT require a local bibd instance**. You can connect to remote nodes or the public `bib.dev` network.
+- **Local bibd is encouraged** for best performance and offline capability, but not required.
+- **bibd can be deployed** locally, in Docker/Podman containers, or on Kubernetes.
+
 ### First Run Behavior
 
 When you run `bib` for the first time without configuration:
 
-1. **Auto-detection**: bib checks for a running local bibd daemon
-2. **If found**: Offers to connect to the detected daemon
-3. **If not found**: Launches the setup wizard
+1. **Auto-detection**: bib discovers local and nearby bibd instances (mDNS, localhost scan)
+2. **Node selection**: Choose which nodes to connect to (can select multiple)
+3. **bib.dev option**: Connect to public network (requires explicit confirmation)
+4. **Setup wizard**: Configure identity, output preferences, and test connections
 
 ### Option 1: Quick Start (Recommended for New Users)
 
@@ -157,15 +164,23 @@ Get running in seconds with minimal prompts:
 # Quick CLI setup
 bib setup --quick
 
-# Quick daemon setup (Proxy mode)
+# Quick daemon setup (local, Proxy mode)
 bib setup --daemon --quick
+
+# Quick daemon setup with Docker
+bib setup --daemon --quick --target docker
+
+# Quick daemon setup with Podman
+bib setup --daemon --quick --target podman
 ```
 
 Quick Start:
 - Prompts only for name and email
 - Generates Ed25519 identity key automatically
+- Discovers and connects to local/nearby nodes
+- Requires confirmation for bib.dev connection
 - Uses sensible defaults (Proxy mode, SQLite, public bootstrap)
-- Starts bibd immediately after daemon setup
+- Starts bibd/containers immediately after daemon setup
 
 ### Option 2: Guided Setup
 
@@ -175,8 +190,14 @@ Full interactive wizard with all configuration options:
 # CLI setup
 bib setup
 
-# Daemon setup
+# Daemon setup (local)
 bib setup --daemon
+
+# Daemon setup (Docker)
+bib setup --daemon --target docker
+
+# Daemon setup (Kubernetes)
+bib setup --daemon --target kubernetes
 ```
 
 **CLI Setup Steps:**
@@ -185,9 +206,11 @@ bib setup --daemon
 |------|-------------|
 | **Identity** | Name, email → generates `~/.config/bib/identity.pem` |
 | **Output** | Default format (table/json/yaml), colors |
-| **Connection** | bibd server address (default: `localhost:4000`) |
+| **Node Discovery** | Scan for local/nearby bibd instances |
+| **Node Selection** | Choose nodes to connect to (multi-select) |
+| **bib.dev Confirmation** | Explicit confirmation for public network |
 | **Logging** | Log verbosity level |
-| **Connection Test** | Verify connectivity to daemon |
+| **Connection Test** | Verify connectivity to all selected nodes |
 | **Auth Test** | Authenticate with generated identity |
 | **Network Health** | Check peer connections |
 
@@ -195,15 +218,16 @@ bib setup --daemon
 
 | Step | Description |
 |------|-------------|
+| **Deployment Target** | Local, Docker, Podman, or Kubernetes |
 | **Identity** | Node name, admin email |
-| **Server** | Host, port, data directory |
+| **Server** | Host, port, data directory/volumes |
 | **TLS/Security** | TLS setup, certificate pinning, hardening options |
-| **Storage** | SQLite or PostgreSQL (with setup wizard) |
+| **Storage** | SQLite or PostgreSQL (options vary by deployment target) |
 | **P2P Mode** | Proxy, Selective, or Full (with mode-specific config) |
-| **Bootstrap** | Public (bib.dev) + custom peers, connectivity test |
+| **Bootstrap** | Public (bib.dev, requires confirmation) + custom peers |
 | **Clustering** | Optional HA cluster configuration |
 | **Break Glass** | Optional emergency access |
-| **Deployment** | Install service, start bibd, verify |
+| **Deployment** | Generate files, start containers/service, verify |
 
 **Navigation:**
 - `Tab` / `↓` — Next field
@@ -211,6 +235,15 @@ bib setup --daemon
 - `Enter` — Proceed to next step
 - `Esc` — Go back to previous step
 - `Ctrl+C` — Save progress and exit (can resume later)
+
+### Deployment Targets
+
+| Target | Command | Description |
+|--------|---------|-------------|
+| Local | `bib setup --daemon` | Run bibd directly on host |
+| Docker | `bib setup --daemon --target docker` | Run in Docker containers |
+| Podman | `bib setup --daemon --target podman` | Run in Podman (rootful/rootless) |
+| Kubernetes | `bib setup --daemon --target kubernetes` | Deploy to K8s cluster |
 
 ### Configuration File Locations
 

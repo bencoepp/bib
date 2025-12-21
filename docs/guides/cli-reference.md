@@ -89,6 +89,7 @@ bib setup [flags]
 |------|-------|------|---------|-------------|
 | `--daemon` | `-d` | bool | `false` | Configure bibd daemon instead of CLI |
 | `--quick` | `-q` | bool | `false` | Quick start with minimal prompts |
+| `--target` | `-t` | string | `local` | Deployment target: `local`, `docker`, `podman`, `kubernetes` |
 | `--format` | `-f` | string | `yaml` | Config file format: `yaml`, `toml`, `json` |
 | `--cluster` | | bool | `false` | Initialize new HA cluster (requires `--daemon`) |
 | `--cluster-join` | | string | `""` | Join existing cluster with token (requires `--daemon`) |
@@ -104,11 +105,23 @@ bib setup --quick
 # Configure bib CLI interactively
 bib setup
 
-# Quick daemon setup (Proxy mode)
+# Quick daemon setup (local, Proxy mode)
 bib setup --daemon --quick
 
-# Full interactive daemon setup
+# Full interactive daemon setup (local)
 bib setup --daemon
+
+# Daemon setup for Docker
+bib setup --daemon --target docker
+
+# Quick Docker setup
+bib setup --daemon --quick --target docker
+
+# Daemon setup for Podman (rootful/rootless)
+bib setup --daemon --target podman
+
+# Daemon setup for Kubernetes
+bib setup --daemon --target kubernetes
 
 # Initialize HA cluster on first node
 bib setup --daemon --cluster
