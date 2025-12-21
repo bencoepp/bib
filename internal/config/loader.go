@@ -72,7 +72,7 @@ func LoadBib(cfgFile string) (*BibConfig, error) {
 
 	// Set defaults
 	defaults := DefaultBibConfig()
-	setViperDefaults(v, &defaults)
+	setViperDefaults(v, defaults)
 
 	// Load config file
 	if cfgFile != "" {
@@ -169,7 +169,7 @@ func LoadBibd(cfgFile string) (*BibdConfig, error) {
 
 	// Set defaults
 	defaults := DefaultBibdConfig()
-	setViperDefaults(v, &defaults)
+	setViperDefaults(v, defaults)
 
 	// Load config file
 	if cfgFile != "" {
