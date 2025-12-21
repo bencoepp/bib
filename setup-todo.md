@@ -771,61 +771,221 @@ bib setup --daemon --quick --target=local
 
 ### 4.1 Docker Detection
 
-- [ ] Check for `docker` command availability
-- [ ] Verify Docker daemon is running
-- [ ] Check Docker version compatibility
-- [ ] Display Docker info in wizard
+- [x] Check for `docker` command availability
+- [x] Verify Docker daemon is running
+- [x] Check Docker version compatibility
+- [x] Display Docker info in wizard
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/docker/detect.go`
+- `internal/deploy/docker/detect_test.go`
+
+**Implementation notes:**
+- Created `docker` package under `internal/deploy/` with detection support:
+  - `Detector` struct with configurable timeout
+  - `DockerInfo` struct containing:
+    - Available, DaemonRunning flags
+    - Version, APIVersion, ServerOS
+    - ComposeAvailable, ComposeVersion, ComposeCommand
+    - Error message
+  - `NewDetector()` with 10s default timeout
+  - `Detect()` method that checks:
+    - docker command existence
+    - Docker daemon status via `docker version`
+    - Docker API version
+    - Server OS
+    - docker-compose (standalone) availability
+    - docker compose (plugin) availability - preferred
+- Helper functions:
+  - `FormatDockerInfo()` - formats info with icons (🐳, ✓, ✗, ⚠)
+  - `IsUsable()` - returns true if Docker can be used for deployment
+  - `GetComposeCommand()` - returns command parts for compose
+- Comprehensive unit tests (10 tests)
 
 ### 4.2 Docker Compose Generation
 
-- [ ] Create `docker-compose.yaml` template
-- [ ] Include bibd service configuration
-- [ ] Include PostgreSQL service (if Full mode)
-- [ ] Configure volumes for data persistence
-- [ ] Configure network for inter-container communication
-- [ ] Generate `.env` file for environment variables
-- [ ] Generate `config/config.yaml`
-- [ ] Generate `config/identity.pem`
+- [x] Create `docker-compose.yaml` template
+- [x] Include bibd service configuration
+- [x] Include PostgreSQL service (if Full mode)
+- [x] Configure volumes for data persistence
+- [x] Configure network for inter-container communication
+- [x] Generate `.env` file for environment variables
+- [x] Generate `config/config.yaml`
+- [x] Generate `config/identity.pem`
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/docker/compose.go`
-- `internal/deploy/docker/templates/docker-compose.yaml.tmpl`
-- `internal/deploy/docker/templates/env.tmpl`
+- `internal/deploy/docker/compose_test.go`
+
+**Implementation notes:**
+- Created `ComposeConfig` struct with all configuration options:
+  - ProjectName, BibdImage, BibdTag
+  - P2PEnabled, P2PMode
+  - StorageBackend (sqlite/postgres)
+  - PostgreSQL settings: Image, Tag, Database, User, Password
+  - Network ports: APIPort, P2PPort, MetricsPort
+  - TLSEnabled, Bootstrap settings
+  - Name, Email for identity
+  - OutputDir, ExtraEnv
+- `DefaultComposeConfig()` with sensible defaults:
+  - bibd image: ghcr.io/bib-project/bibd:latest
+  - postgres image: postgres:16-alpine
+  - Ports: 4000 (API), 4001 (P2P), 9090 (metrics)
+- `ComposeGenerator` with methods:
+  - `Generate()` - generates all files, returns `GeneratedFiles`
+  - `generateCompose()` - docker-compose.yaml with:
+    - bibd service with ports, volumes, healthcheck
+    - postgres service (if needed) with healthcheck
+    - Named volumes for persistence
+    - Bridge network for P2P
+    - Environment variable substitution
+  - `generateEnvFile()` - .env with all config
+  - `generateConfigYaml()` - bibd config.yaml
+- `GeneratedFiles` struct with:
+  - `Files` map of filename to content
+  - `WriteToDir()` method to write all files
+- Helper functions:
+  - `GeneratePassword()` - generates random password
+  - `GetComposeUpCommand()`, `GetComposeDownCommand()`, `GetComposeLogsCommand()`
+  - `FormatStartInstructions()` - human-readable deployment instructions
+- Features:
+  - Auto-generates postgres password if not set
+  - SQLite mode: simpler compose without postgres
+  - PostgreSQL mode: full compose with depends_on and healthchecks
+  - Supports custom environment variables
+  - Supports custom bootstrap peers
+- Comprehensive unit tests (13 tests)
 
 ### 4.3 Docker PostgreSQL Setup
 
-- [ ] Configure PostgreSQL as separate service in compose
-- [ ] Set up internal networking between bibd and postgres
-- [ ] Configure persistent volume for postgres data
-- [ ] Generate secure database credentials
+- [x] Configure PostgreSQL as separate service in compose
+- [x] Set up internal networking between bibd and postgres
+- [x] Configure persistent volume for postgres data
+- [x] Generate secure database credentials
 
-**Files to modify:**
+**Files modified:**
 - `internal/deploy/docker/compose.go`
+
+**Implementation notes:**
+- Enhanced `ComposeConfig` with additional PostgreSQL options:
+  - `PostgresSSLMode` - SSL mode (disable, require, verify-ca, verify-full)
+  - `PostgresMaxConns` - Maximum connections (default: 100)
+  - `PostgresSharedBufs` - shared_buffers setting (default: 128MB)
+  - `PostgresWorkMem` - work_mem setting (default: 4MB)
+  - `PostgresExposePort` - Whether to expose postgres port externally
+  - `PostgresExternalPort` - External port for postgres (default: 5432)
+- Enhanced docker-compose.yaml template for PostgreSQL:
+  - Optional external port exposure
+  - POSTGRES_INITDB_ARGS for encoding settings
+  - Custom postgres.conf mount when memory settings configured
+  - Always uses bibd-network for internal communication
+  - Proper healthcheck with pg_isready
+- Added `generatePostgresConf()` method:
+  - Connection settings (listen_addresses, max_connections)
+  - Memory settings (shared_buffers, work_mem, maintenance_work_mem, effective_cache_size)
+  - WAL settings (wal_level, max_wal_size, min_wal_size)
+  - Logging settings
+  - Locale settings (UTC timezone, C locale)
+- Added `generateInitSQL()` method:
+  - Enables uuid-ossp and pgcrypto extensions
+  - Creates bib schema
+  - Grants permissions to bibd user
+  - Sets default search path
+- Updated `Generate()` to include postgres.conf and init.sql for PostgreSQL mode
 
 ### 4.4 Docker Deployment
 
-- [ ] Implement `DeployDocker()` function
-- [ ] Create output directory structure
-- [ ] Write all generated files
-- [ ] Run `docker compose up -d`
-- [ ] Wait for containers to be healthy
-- [ ] Display container status
+- [x] Implement `DeployDocker()` function
+- [x] Create output directory structure
+- [x] Write all generated files
+- [x] Run `docker compose up -d`
+- [x] Wait for containers to be healthy
+- [x] Display container status
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/docker/deploy.go`
+- `internal/deploy/docker/deploy_test.go`
+
+**Implementation notes:**
+- Created `DeployConfig` struct with options:
+  - ComposeConfig, OutputDir
+  - AutoStart, PullImages, WaitForHealthy
+  - HealthTimeout (default: 120s)
+  - Verbose mode
+- Created `Deployer` struct with methods:
+  - `Deploy()` - full deployment workflow:
+    1. Detect Docker availability
+    2. Generate all files
+    3. Create output directory
+    4. Write files
+    5. Generate identity key placeholder
+    6. Pull images (optional)
+    7. Start containers (optional)
+    8. Wait for healthy (optional)
+    9. Show status
+  - `Stop()` - stops containers
+  - `Logs()` - gets container logs
+  - `Status()` - gets deployment status
+- Created `DeployResult` struct with:
+  - Success, OutputDir, FilesGenerated
+  - ContainersStarted, ContainersHealthy
+  - Error message, Logs array
+- Created `DeploymentStatus` and `ContainerStatus` structs
+- Added `FormatStatus()` for display with icons
+- Helper methods:
+  - `pullImages()` - runs docker compose pull
+  - `startContainers()` - runs docker compose up -d
+  - `waitForHealthy()` - polls until containers healthy or timeout
+  - `checkHealth()` - checks container health status
+  - `getContainerStatus()` - gets docker compose ps output
+  - `generateIdentityKey()` - creates placeholder identity key
+- Comprehensive unit tests (12 tests)
 
 ### 4.5 Docker Quick Start
 
-- [ ] Implement quick start for Docker deployment
-- [ ] Minimal prompts (name, email)
-- [ ] SQLite + Proxy mode defaults
-- [ ] Auto-generate and start containers
+- [x] Implement quick start for Docker deployment
+- [x] Minimal prompts (name, email)
+- [x] SQLite + Proxy mode defaults
+- [x] Auto-generate and start containers
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Added `docker` package import
+- Updated `setupBibdQuick()` to route to:
+  - `setupBibdQuickDocker()` for Docker target
+  - `setupBibdQuickPodman()` for Podman target
+- Implemented `setupBibdQuickDocker()`:
+  1. Detect Docker availability
+  2. Prompt for name/email
+  3. Prompt for public network (bib.dev)
+  4. Prompt for output directory (default: ~/bibd-docker)
+  5. Prompt for auto-start
+  6. Deploy using Docker deployer
+  7. Show summary with commands
+- Implemented `setupBibdQuickPodman()`:
+  1. Check for Podman (or Docker compatibility)
+  2. Prompt for name/email
+  3. Prompt for public network
+  4. Prompt for output directory (default: ~/bibd-podman)
+  5. Generate files (no auto-start for Podman)
+  6. Show summary with Podman-specific commands
+- Features:
+  - Minimal prompts (4-5 questions)
+  - SQLite + Proxy mode defaults
+  - Auto-detection of compose command
+  - Clear status indicators
+  - Helpful command examples
+
+**Usage:**
+```bash
+# Docker quick setup
+bib setup --daemon --quick --target=docker
+
+# Podman quick setup
+bib setup --daemon --quick --target=podman
+```
 
 ---
 

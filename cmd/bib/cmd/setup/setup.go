@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"bib/internal/auth"
 	"bib/internal/config"
 	"bib/internal/deploy"
+	"bib/internal/deploy/docker"
 	"bib/internal/deploy/local"
 	"bib/internal/discovery"
 	"bib/internal/tui"
@@ -676,10 +678,10 @@ func setupBibdQuick() error {
 	switch target {
 	case TargetLocal:
 		return setupBibdQuickLocal()
-	case TargetDocker, TargetPodman:
-		// TODO: Implement in Phase 4.5
-		fmt.Printf("Quick setup for %s not yet implemented. Running full wizard...\n", target)
-		return setupBibdWizard()
+	case TargetDocker:
+		return setupBibdQuickDocker()
+	case TargetPodman:
+		return setupBibdQuickPodman()
 	case TargetKubernetes:
 		// TODO: Implement in Phase 5.6
 		fmt.Println("Quick setup for Kubernetes not yet implemented. Running full wizard...")
@@ -959,6 +961,418 @@ func setupBibdQuickLocal() error {
 	}
 	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println("  • View help: bibd --help")
+	fmt.Println()
+
+	return nil
+}
+
+// setupBibdQuickDocker runs quick Docker daemon setup
+func setupBibdQuickDocker() error {
+	fmt.Println("🐳 Quick Setup - bibd (Docker)")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	// Step 1: Detect Docker
+	fmt.Println("🔍 Detecting Docker...")
+	detector := docker.NewDetector()
+	dockerInfo := detector.Detect(ctx)
+
+	if !dockerInfo.IsUsable() {
+		fmt.Println("❌ Docker is not available or not properly configured.")
+		if dockerInfo.Error != "" {
+			fmt.Printf("   Error: %s\n", dockerInfo.Error)
+		}
+		fmt.Println("\nPlease ensure Docker is installed and running, then try again.")
+		return fmt.Errorf("docker not available")
+	}
+
+	fmt.Printf("   ✓ Docker %s with %s\n", dockerInfo.Version, dockerInfo.ComposeCommand)
+	fmt.Println()
+
+	// Get the huh theme
+	theme := huh.ThemeCatppuccin()
+
+	// Step 2: Prompt for name and email
+	var name, email string
+	nameEmailForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("🐳 Quick Setup - bibd (Docker)").
+				Description("We just need a few details to deploy bibd with Docker.\n\nYour name and email are used for the node's identity."),
+			huh.NewInput().
+				Title("Your Name").
+				Description("Display name for this node's identity").
+				Placeholder("John Doe").
+				Value(&name).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Email").
+				Description("Email address for the node's identity").
+				Placeholder("you@example.com").
+				Value(&email).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("email is required")
+					}
+					if !strings.Contains(s, "@") {
+						return fmt.Errorf("please enter a valid email address")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(theme)
+
+	if err := nameEmailForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 3: Ask about public network
+	var usePublicNetwork bool
+	networkForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Connect to public network (bib.dev)?").
+				Description("This makes your node discoverable on the global network").
+				Affirmative("Yes, connect").
+				Negative("No, private only").
+				Value(&usePublicNetwork),
+		),
+	).WithTheme(theme)
+
+	if err := networkForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 4: Ask about output directory
+	homeDir, _ := os.UserHomeDir()
+	defaultOutputDir := filepath.Join(homeDir, "bibd-docker")
+	outputDir := defaultOutputDir
+
+	outputDirForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Output Directory").
+				Description("Where to save Docker Compose files").
+				Placeholder(defaultOutputDir).
+				Value(&outputDir),
+		),
+	).WithTheme(theme)
+
+	if err := outputDirForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	if outputDir == "" {
+		outputDir = defaultOutputDir
+	}
+
+	// Step 5: Ask about auto-starting
+	var autoStart bool
+	startForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Start containers now?").
+				Description("Automatically start bibd after generating files").
+				Affirmative("Yes, start now").
+				Negative("No, I'll start later").
+				Value(&autoStart),
+		),
+	).WithTheme(theme)
+
+	if err := startForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 6: Deploy
+	fmt.Println()
+
+	composeConfig := docker.DefaultComposeConfig()
+	composeConfig.Name = name
+	composeConfig.Email = email
+	composeConfig.UsePublicBootstrap = usePublicNetwork
+	composeConfig.StorageBackend = "sqlite" // Default to SQLite for quick setup
+	composeConfig.P2PEnabled = true
+	composeConfig.P2PMode = "proxy"
+
+	deployConfig := &docker.DeployConfig{
+		ComposeConfig:  composeConfig,
+		OutputDir:      outputDir,
+		AutoStart:      autoStart,
+		PullImages:     true,
+		WaitForHealthy: true,
+		HealthTimeout:  120 * time.Second,
+		Verbose:        true,
+	}
+
+	deployer := docker.NewDeployer(deployConfig)
+	result, err := deployer.Deploy(ctx)
+
+	if err != nil {
+		fmt.Printf("\n❌ Deployment failed: %v\n", err)
+		return err
+	}
+
+	// Step 7: Show summary
+	fmt.Println("\n" + strings.Repeat("─", 50))
+	fmt.Println("✅ Docker Quick Setup Complete!")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	fmt.Printf("  Identity:  %s <%s>\n", name, email)
+	fmt.Printf("  Output:    %s\n", outputDir)
+	fmt.Printf("  Storage:   SQLite (proxy mode)\n")
+	if usePublicNetwork {
+		fmt.Printf("  Network:   Public (bib.dev)\n")
+	} else {
+		fmt.Printf("  Network:   Private only\n")
+	}
+	if result.ContainersStarted {
+		fmt.Printf("  Status:    🟢 Running\n")
+	} else {
+		fmt.Printf("  Status:    📦 Files generated\n")
+	}
+	fmt.Println()
+
+	composeCmd := strings.Join(dockerInfo.GetComposeCommand(), " ")
+	fmt.Println("Commands:")
+	fmt.Printf("  • Start:  cd %s && %s up -d\n", outputDir, composeCmd)
+	fmt.Printf("  • Stop:   cd %s && %s down\n", outputDir, composeCmd)
+	fmt.Printf("  • Logs:   cd %s && %s logs -f bibd\n", outputDir, composeCmd)
+	fmt.Printf("  • Status: cd %s && %s ps\n", outputDir, composeCmd)
+	fmt.Println()
+	fmt.Println("  • Connect CLI: bib setup")
+	fmt.Println()
+
+	return nil
+}
+
+// setupBibdQuickPodman runs quick Podman daemon setup
+func setupBibdQuickPodman() error {
+	fmt.Println("🦭 Quick Setup - bibd (Podman)")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	// For now, Podman uses the same Docker compose format via podman-compose
+	// or podman compose. We'll reuse the Docker deployer with some adjustments.
+
+	// Step 1: Check if podman is available
+	detector := docker.NewDetector()
+	// Try docker first (podman often symlinks to docker)
+	dockerInfo := detector.Detect(ctx)
+
+	// Also check for podman specifically
+	podmanAvailable := false
+	if _, err := exec.LookPath("podman"); err == nil {
+		podmanAvailable = true
+	}
+
+	if !dockerInfo.IsUsable() && !podmanAvailable {
+		fmt.Println("❌ Podman is not available or not properly configured.")
+		fmt.Println("\nPlease ensure Podman is installed and running, then try again.")
+		fmt.Println("You can also try: podman machine start")
+		return fmt.Errorf("podman not available")
+	}
+
+	if podmanAvailable && !dockerInfo.IsUsable() {
+		fmt.Println("   ✓ Podman detected")
+		fmt.Println("   ⚠️ Note: podman-compose or podman compose required")
+		fmt.Println()
+	} else {
+		fmt.Printf("   ✓ Using Docker compatibility mode\n")
+		fmt.Println()
+	}
+
+	// Get the huh theme
+	theme := huh.ThemeCatppuccin()
+
+	// Step 2: Prompt for name and email
+	var name, email string
+	nameEmailForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("🦭 Quick Setup - bibd (Podman)").
+				Description("We just need a few details to deploy bibd with Podman.\n\nYour name and email are used for the node's identity."),
+			huh.NewInput().
+				Title("Your Name").
+				Description("Display name for this node's identity").
+				Placeholder("John Doe").
+				Value(&name).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Email").
+				Description("Email address for the node's identity").
+				Placeholder("you@example.com").
+				Value(&email).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("email is required")
+					}
+					if !strings.Contains(s, "@") {
+						return fmt.Errorf("please enter a valid email address")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(theme)
+
+	if err := nameEmailForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 3: Ask about public network
+	var usePublicNetwork bool
+	networkForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Connect to public network (bib.dev)?").
+				Description("This makes your node discoverable on the global network").
+				Affirmative("Yes, connect").
+				Negative("No, private only").
+				Value(&usePublicNetwork),
+		),
+	).WithTheme(theme)
+
+	if err := networkForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 4: Ask about output directory
+	homeDir, _ := os.UserHomeDir()
+	defaultOutputDir := filepath.Join(homeDir, "bibd-podman")
+	outputDir := defaultOutputDir
+
+	outputDirForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Output Directory").
+				Description("Where to save container configuration files").
+				Placeholder(defaultOutputDir).
+				Value(&outputDir),
+		),
+	).WithTheme(theme)
+
+	if err := outputDirForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	if outputDir == "" {
+		outputDir = defaultOutputDir
+	}
+
+	// Step 5: Deploy using Docker deployer (compatible with Podman)
+	fmt.Println()
+
+	composeConfig := docker.DefaultComposeConfig()
+	composeConfig.ProjectName = "bibd"
+	composeConfig.Name = name
+	composeConfig.Email = email
+	composeConfig.UsePublicBootstrap = usePublicNetwork
+	composeConfig.StorageBackend = "sqlite"
+	composeConfig.P2PEnabled = true
+	composeConfig.P2PMode = "proxy"
+
+	deployConfig := &docker.DeployConfig{
+		ComposeConfig:  composeConfig,
+		OutputDir:      outputDir,
+		AutoStart:      false, // Don't auto-start with Podman (may need different commands)
+		PullImages:     false,
+		WaitForHealthy: false,
+		Verbose:        true,
+	}
+
+	deployer := docker.NewDeployer(deployConfig)
+	result, err := deployer.Deploy(ctx)
+
+	if err != nil && !strings.Contains(err.Error(), "Docker") {
+		fmt.Printf("\n❌ Deployment failed: %v\n", err)
+		return err
+	}
+
+	// For Podman, we just generate the files
+	if result == nil || len(result.FilesGenerated) == 0 {
+		// Manual file generation if docker deployer failed
+		files, err := docker.NewComposeGenerator(composeConfig).Generate()
+		if err != nil {
+			return fmt.Errorf("failed to generate files: %w", err)
+		}
+
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
+
+		if err := files.WriteToDir(outputDir); err != nil {
+			return fmt.Errorf("failed to write files: %w", err)
+		}
+	}
+
+	// Step 6: Show summary
+	fmt.Println("\n" + strings.Repeat("─", 50))
+	fmt.Println("✅ Podman Quick Setup Complete!")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	fmt.Printf("  Identity:  %s <%s>\n", name, email)
+	fmt.Printf("  Output:    %s\n", outputDir)
+	fmt.Printf("  Storage:   SQLite (proxy mode)\n")
+	if usePublicNetwork {
+		fmt.Printf("  Network:   Public (bib.dev)\n")
+	} else {
+		fmt.Printf("  Network:   Private only\n")
+	}
+	fmt.Printf("  Status:    📦 Files generated\n")
+	fmt.Println()
+
+	fmt.Println("To start with Podman:")
+	fmt.Printf("  cd %s\n", outputDir)
+	fmt.Println()
+	fmt.Println("  # Using podman-compose:")
+	fmt.Println("  podman-compose up -d")
+	fmt.Println()
+	fmt.Println("  # Or using podman compose (if available):")
+	fmt.Println("  podman compose up -d")
+	fmt.Println()
+	fmt.Println("  # Or create a pod manually:")
+	fmt.Println("  podman play kube docker-compose.yaml")
+	fmt.Println()
+	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println()
 
 	return nil
