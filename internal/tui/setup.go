@@ -62,30 +62,166 @@ type SetupData struct {
 	BreakGlassAccessLevel string
 	BreakGlassUserName    string
 	BreakGlassUserKey     string
+
+	// === New fields for enhanced setup flow ===
+
+	// Deployment Target (bibd only)
+	DeploymentTarget string // local, docker, podman, kubernetes
+
+	// Multi-Node Selection (bib CLI only)
+	SelectedNodes   []NodeSelection // Nodes selected for connection
+	BibDevConfirmed bool            // User confirmed connection to public bib.dev network
+
+	// Docker Deployment (bibd only)
+	DockerComposeDir string // Output directory for docker-compose files
+
+	// Podman Deployment (bibd only)
+	PodmanMode  string // rootful, rootless
+	PodmanStyle string // pod, compose
+
+	// Kubernetes Deployment (bibd only)
+	KubernetesNamespace      string // Target namespace
+	KubernetesContext        string // kubectl context to use
+	KubernetesOutputDir      string // Output directory for manifests
+	KubernetesApplyManifests bool   // Whether to apply manifests after generation
+	KubernetesExternalAccess string // none, loadbalancer, nodeport, ingress
+	KubernetesIngressHost    string // Hostname for ingress (if ingress selected)
+
+	// PostgreSQL Deployment (bibd only - for Full mode)
+	PostgresDeployment   string // managed, local, remote, statefulset, cloudnativepg, external
+	PostgresHost         string // For remote/external connections
+	PostgresPort         int    // For remote/external connections
+	PostgresDatabase     string // Database name
+	PostgresUser         string // Username
+	PostgresPassword     string // Password (will be generated if empty)
+	PostgresSSLMode      string // disable, require, verify-ca, verify-full
+	PostgresStorageClass string // Kubernetes storage class
+	PostgresStorageSize  string // PVC size (e.g., "50Gi")
+
+	// Bootstrap Peers (bibd only)
+	UsePublicBootstrap   bool     // Use bib.dev public bootstrap
+	CustomBootstrapPeers []string // Additional custom bootstrap peers
 }
+
+// NodeSelection represents a selected node for connection
+type NodeSelection struct {
+	Address         string // Node address (host:port)
+	Alias           string // User-friendly alias
+	IsDefault       bool   // Whether this is the default node
+	DiscoveryMethod string // How it was discovered: local, mdns, p2p, manual, public
+}
+
+// DeploymentTarget constants
+const (
+	DeployTargetLocal      = "local"
+	DeployTargetDocker     = "docker"
+	DeployTargetPodman     = "podman"
+	DeployTargetKubernetes = "kubernetes"
+)
+
+// PodmanMode constants
+const (
+	PodmanModeRootful  = "rootful"
+	PodmanModeRootless = "rootless"
+)
+
+// PodmanStyle constants
+const (
+	PodmanStylePod     = "pod"
+	PodmanStyleCompose = "compose"
+)
+
+// KubernetesExternalAccess constants
+const (
+	K8sAccessNone         = "none"
+	K8sAccessLoadBalancer = "loadbalancer"
+	K8sAccessNodePort     = "nodeport"
+	K8sAccessIngress      = "ingress"
+)
+
+// PostgresDeployment constants
+const (
+	PostgresDeployManaged       = "managed"       // bibd manages container (local deployment)
+	PostgresDeployLocal         = "local"         // Connect to local PostgreSQL installation
+	PostgresDeployRemote        = "remote"        // Connect to remote PostgreSQL server
+	PostgresDeployStatefulSet   = "statefulset"   // Deploy as Kubernetes StatefulSet
+	PostgresDeployCloudNativePG = "cloudnativepg" // Use CloudNativePG operator
+	PostgresDeployExternal      = "external"      // Use external managed service (RDS, Cloud SQL, etc.)
+)
 
 // DefaultSetupData returns setup data with sensible defaults
 func DefaultSetupData() *SetupData {
 	return &SetupData{
-		Host:           "0.0.0.0",
-		Port:           8080,
-		DataDir:        "~/.local/share/bibd",
-		LogLevel:       "info",
-		LogFormat:      "pretty",
-		OutputFormat:   "table",
-		ColorEnabled:   true,
-		ServerAddr:     "localhost:8080",
+		// Server defaults
+		Host:    "0.0.0.0",
+		Port:    4000,
+		DataDir: "~/.local/share/bibd",
+
+		// Logging defaults
+		LogLevel:  "info",
+		LogFormat: "pretty",
+
+		// Output defaults (CLI)
+		OutputFormat: "table",
+		ColorEnabled: true,
+		ServerAddr:   "localhost:4000",
+
+		// Storage defaults
 		StorageBackend: "sqlite",
+
+		// P2P defaults
 		P2PEnabled:     true,
 		P2PMode:        "proxy",
 		P2PListenAddrs: []string{"/ip4/0.0.0.0/tcp/4001", "/ip4/0.0.0.0/udp/4001/quic-v1"},
-		ClusterName:    "bib-cluster",
-		ClusterAddr:    "0.0.0.0:4002",
-		IsVoter:        true,
+
+		// Cluster defaults
+		ClusterName: "bib-cluster",
+		ClusterAddr: "0.0.0.0:4002",
+		IsVoter:     true,
+
 		// Break Glass defaults
 		BreakGlassEnabled:     false,
 		BreakGlassMaxDuration: "1h",
 		BreakGlassAccessLevel: "readonly",
+
+		// === New field defaults ===
+
+		// Deployment target defaults
+		DeploymentTarget: DeployTargetLocal,
+
+		// Multi-node selection defaults (CLI)
+		SelectedNodes:   []NodeSelection{},
+		BibDevConfirmed: false,
+
+		// Docker defaults
+		DockerComposeDir: "./bibd",
+
+		// Podman defaults
+		PodmanMode:  PodmanModeRootless,
+		PodmanStyle: PodmanStylePod,
+
+		// Kubernetes defaults
+		KubernetesNamespace:      "bibd",
+		KubernetesContext:        "", // Will be auto-detected
+		KubernetesOutputDir:      "./bibd-k8s",
+		KubernetesApplyManifests: true,
+		KubernetesExternalAccess: K8sAccessLoadBalancer,
+		KubernetesIngressHost:    "",
+
+		// PostgreSQL defaults
+		PostgresDeployment:   PostgresDeployManaged,
+		PostgresHost:         "localhost",
+		PostgresPort:         5432,
+		PostgresDatabase:     "bibd",
+		PostgresUser:         "bibd",
+		PostgresPassword:     "", // Will be generated
+		PostgresSSLMode:      "prefer",
+		PostgresStorageClass: "", // Use cluster default
+		PostgresStorageSize:  "50Gi",
+
+		// Bootstrap defaults
+		UsePublicBootstrap:   true,
+		CustomBootstrapPeers: []string{},
 	}
 }
 
@@ -779,6 +915,125 @@ func (d *SetupData) ToBibdConfig() *config.BibdConfig {
 	}
 
 	return cfg
+}
+
+// === Helper methods for new setup data fields ===
+
+// AddSelectedNode adds a node to the selected nodes list
+func (d *SetupData) AddSelectedNode(address, alias, discoveryMethod string, isDefault bool) {
+	// Check if node already exists
+	for i, node := range d.SelectedNodes {
+		if node.Address == address {
+			// Update existing node
+			d.SelectedNodes[i].Alias = alias
+			d.SelectedNodes[i].IsDefault = isDefault
+			d.SelectedNodes[i].DiscoveryMethod = discoveryMethod
+			return
+		}
+	}
+	// Add new node
+	d.SelectedNodes = append(d.SelectedNodes, NodeSelection{
+		Address:         address,
+		Alias:           alias,
+		IsDefault:       isDefault,
+		DiscoveryMethod: discoveryMethod,
+	})
+}
+
+// RemoveSelectedNode removes a node from the selected nodes list
+func (d *SetupData) RemoveSelectedNode(address string) {
+	for i, node := range d.SelectedNodes {
+		if node.Address == address {
+			d.SelectedNodes = append(d.SelectedNodes[:i], d.SelectedNodes[i+1:]...)
+			return
+		}
+	}
+}
+
+// GetDefaultNode returns the default node, or the first node if no default is set
+func (d *SetupData) GetDefaultNode() *NodeSelection {
+	for i := range d.SelectedNodes {
+		if d.SelectedNodes[i].IsDefault {
+			return &d.SelectedNodes[i]
+		}
+	}
+	if len(d.SelectedNodes) > 0 {
+		return &d.SelectedNodes[0]
+	}
+	return nil
+}
+
+// SetDefaultNode sets a node as the default, clearing default from others
+func (d *SetupData) SetDefaultNode(address string) {
+	for i := range d.SelectedNodes {
+		d.SelectedNodes[i].IsDefault = (d.SelectedNodes[i].Address == address)
+	}
+}
+
+// HasNode checks if a node is in the selected nodes list
+func (d *SetupData) HasNode(address string) bool {
+	for _, node := range d.SelectedNodes {
+		if node.Address == address {
+			return true
+		}
+	}
+	return false
+}
+
+// IsContainerDeployment returns true if deploying to Docker or Podman
+func (d *SetupData) IsContainerDeployment() bool {
+	return d.DeploymentTarget == DeployTargetDocker || d.DeploymentTarget == DeployTargetPodman
+}
+
+// IsKubernetesDeployment returns true if deploying to Kubernetes
+func (d *SetupData) IsKubernetesDeployment() bool {
+	return d.DeploymentTarget == DeployTargetKubernetes
+}
+
+// IsLocalDeployment returns true if deploying locally
+func (d *SetupData) IsLocalDeployment() bool {
+	return d.DeploymentTarget == DeployTargetLocal
+}
+
+// RequiresPostgres returns true if the selected mode requires PostgreSQL
+func (d *SetupData) RequiresPostgres() bool {
+	return d.P2PMode == "full"
+}
+
+// GetPostgresConnectionString builds a PostgreSQL connection string from the setup data
+func (d *SetupData) GetPostgresConnectionString() string {
+	sslMode := d.PostgresSSLMode
+	if sslMode == "" {
+		sslMode = "prefer"
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		d.PostgresUser,
+		d.PostgresPassword,
+		d.PostgresHost,
+		d.PostgresPort,
+		d.PostgresDatabase,
+		sslMode,
+	)
+}
+
+// AddCustomBootstrapPeer adds a custom bootstrap peer if not already present
+func (d *SetupData) AddCustomBootstrapPeer(multiaddr string) {
+	for _, peer := range d.CustomBootstrapPeers {
+		if peer == multiaddr {
+			return
+		}
+	}
+	d.CustomBootstrapPeers = append(d.CustomBootstrapPeers, multiaddr)
+}
+
+// RemoveCustomBootstrapPeer removes a custom bootstrap peer
+func (d *SetupData) RemoveCustomBootstrapPeer(multiaddr string) {
+	for i, peer := range d.CustomBootstrapPeers {
+		if peer == multiaddr {
+			d.CustomBootstrapPeers = append(d.CustomBootstrapPeers[:i], d.CustomBootstrapPeers[i+1:]...)
+			return
+		}
+	}
 }
 
 // Backward compatibility helpers for setup.go

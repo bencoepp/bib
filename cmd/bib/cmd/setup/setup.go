@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"bib/internal/config"
@@ -16,19 +17,113 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DeploymentTarget represents the target environment for bibd deployment
+type DeploymentTarget string
+
+const (
+	// TargetLocal runs bibd directly on the host machine
+	TargetLocal DeploymentTarget = "local"
+	// TargetDocker runs bibd in Docker containers
+	TargetDocker DeploymentTarget = "docker"
+	// TargetPodman runs bibd in Podman containers
+	TargetPodman DeploymentTarget = "podman"
+	// TargetKubernetes deploys bibd to a Kubernetes cluster
+	TargetKubernetes DeploymentTarget = "kubernetes"
+)
+
+// ValidTargets returns all valid deployment targets
+func ValidTargets() []DeploymentTarget {
+	return []DeploymentTarget{TargetLocal, TargetDocker, TargetPodman, TargetKubernetes}
+}
+
+// IsValid checks if a deployment target is valid
+func (t DeploymentTarget) IsValid() bool {
+	for _, valid := range ValidTargets() {
+		if t == valid {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidReconfigureSections returns valid sections for --reconfigure
+func ValidReconfigureSections(isDaemon bool) []string {
+	if isDaemon {
+		return []string{
+			"identity",
+			"server",
+			"tls",
+			"storage",
+			"p2p",
+			"p2p-mode",
+			"bootstrap",
+			"logging",
+			"cluster",
+			"break-glass",
+		}
+	}
+	return []string{
+		"identity",
+		"output",
+		"connection",
+		"logging",
+	}
+}
+
 var (
 	setupDaemon      bool
 	setupFormat      string
 	setupCluster     bool
 	setupClusterJoin string
+
+	// New flags for enhanced setup flow
+	setupQuick       bool
+	setupTarget      string
+	setupReconfigure string
+	setupFresh       bool
 )
 
 // Cmd represents the setup command
 var Cmd = &cobra.Command{
-	Use:         "setup",
-	Short:       "setup.short",
-	Long:        "setup.long",
-	Example:     "setup.example",
+	Use:   "setup",
+	Short: "Configure bib CLI or bibd daemon",
+	Long: `Interactive setup wizard for configuring bib CLI or bibd daemon.
+
+The setup wizard guides you through configuration with sensible defaults.
+Use --quick for minimal prompts, or run without flags for full guided setup.
+
+For daemon setup, use --target to specify where bibd will run:
+  - local:      Run directly on this machine (default)
+  - docker:     Run in Docker containers
+  - podman:     Run in Podman containers (rootful or rootless)
+  - kubernetes: Deploy to a Kubernetes cluster`,
+	Example: `  # Quick CLI setup (minimal prompts)
+  bib setup --quick
+
+  # Full interactive CLI setup
+  bib setup
+
+  # Quick daemon setup (local, Proxy mode)
+  bib setup --daemon --quick
+
+  # Daemon setup for Docker
+  bib setup --daemon --target docker
+
+  # Daemon setup for Kubernetes
+  bib setup --daemon --target kubernetes
+
+  # Initialize HA cluster
+  bib setup --daemon --cluster
+
+  # Join existing cluster
+  bib setup --daemon --cluster-join <token>
+
+  # Reconfigure specific section
+  bib setup --reconfigure identity
+  bib setup --daemon --reconfigure p2p-mode
+
+  # Reset and start fresh
+  bib setup --fresh`,
 	Annotations: map[string]string{"i18n": "true"},
 	RunE:        runSetup,
 }
@@ -39,13 +134,38 @@ func NewCommand() *cobra.Command {
 }
 
 func init() {
+	// Existing flags
 	Cmd.Flags().BoolVarP(&setupDaemon, "daemon", "d", false, "configure bibd daemon instead of bib CLI")
 	Cmd.Flags().StringVarP(&setupFormat, "format", "f", "yaml", "config file format (yaml, toml, json)")
 	Cmd.Flags().BoolVar(&setupCluster, "cluster", false, "initialize a new HA cluster (outputs join token)")
 	Cmd.Flags().StringVar(&setupClusterJoin, "cluster-join", "", "join an existing cluster using this token")
+
+	// New flags for enhanced setup flow
+	Cmd.Flags().BoolVarP(&setupQuick, "quick", "q", false, "quick start with minimal prompts and sensible defaults")
+	Cmd.Flags().StringVarP(&setupTarget, "target", "t", "local", "deployment target: local, docker, podman, kubernetes (requires --daemon)")
+	Cmd.Flags().StringVar(&setupReconfigure, "reconfigure", "", "reconfigure a specific section without full wizard")
+	Cmd.Flags().BoolVar(&setupFresh, "fresh", false, "reset configuration and start fresh (deletes existing config)")
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {
+	// Validate flags
+	if err := validateSetupFlags(); err != nil {
+		return err
+	}
+
+	// Handle --fresh flag: delete existing config before proceeding
+	if setupFresh {
+		if err := handleFreshSetup(); err != nil {
+			return err
+		}
+	}
+
+	// Handle --reconfigure flag: run partial wizard for specific section
+	if setupReconfigure != "" {
+		return runReconfigure(setupReconfigure, setupDaemon)
+	}
+
+	// Daemon setup
 	if setupDaemon {
 		if setupCluster {
 			return setupBibdCluster()
@@ -53,9 +173,154 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		if setupClusterJoin != "" {
 			return setupBibdJoinCluster()
 		}
+		if setupQuick {
+			return setupBibdQuick()
+		}
 		return setupBibdWizard()
 	}
+
+	// CLI setup
+	if setupQuick {
+		return setupBibQuick()
+	}
 	return setupBibWizard()
+}
+
+// validateSetupFlags validates flag combinations and values
+func validateSetupFlags() error {
+	// Validate --target: only valid with --daemon
+	if setupTarget != "local" && !setupDaemon {
+		return fmt.Errorf("--target flag requires --daemon flag")
+	}
+
+	// Validate --target value
+	target := DeploymentTarget(setupTarget)
+	if !target.IsValid() {
+		validTargets := make([]string, len(ValidTargets()))
+		for i, t := range ValidTargets() {
+			validTargets[i] = string(t)
+		}
+		return fmt.Errorf("invalid deployment target %q, must be one of: %s", setupTarget, strings.Join(validTargets, ", "))
+	}
+
+	// Validate --cluster and --cluster-join: only valid with --daemon
+	if (setupCluster || setupClusterJoin != "") && !setupDaemon {
+		return fmt.Errorf("--cluster and --cluster-join flags require --daemon flag")
+	}
+
+	// Validate --cluster and --cluster-join are mutually exclusive
+	if setupCluster && setupClusterJoin != "" {
+		return fmt.Errorf("--cluster and --cluster-join are mutually exclusive")
+	}
+
+	// Validate --reconfigure section
+	if setupReconfigure != "" {
+		validSections := ValidReconfigureSections(setupDaemon)
+		isValid := false
+		for _, section := range validSections {
+			if setupReconfigure == section {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			return fmt.Errorf("invalid reconfigure section %q, must be one of: %s", setupReconfigure, strings.Join(validSections, ", "))
+		}
+	}
+
+	// Validate --format value
+	validFormats := []string{"yaml", "toml", "json"}
+	isValidFormat := false
+	for _, f := range validFormats {
+		if setupFormat == f {
+			isValidFormat = true
+			break
+		}
+	}
+	if !isValidFormat {
+		return fmt.Errorf("invalid format %q, must be one of: %s", setupFormat, strings.Join(validFormats, ", "))
+	}
+
+	return nil
+}
+
+// handleFreshSetup deletes existing configuration to start fresh
+func handleFreshSetup() error {
+	var appName string
+	if setupDaemon {
+		appName = config.AppBibd
+	} else {
+		appName = config.AppBib
+	}
+
+	configDir, err := config.UserConfigDir(appName)
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	configPath := configDir + "/config.yaml"
+	partialPath := configDir + "/config.yaml.partial"
+
+	// Check if config exists
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Printf("⚠️  This will delete your existing configuration at:\n   %s\n\n", configPath)
+		fmt.Print("Are you sure you want to continue? [y/N]: ")
+
+		var response string
+		if _, err := fmt.Scanln(&response); err != nil {
+			// If user just hits enter, treat as "no"
+			response = "n"
+		}
+		response = strings.ToLower(strings.TrimSpace(response))
+
+		if response != "y" && response != "yes" {
+			fmt.Println("Cancelled.")
+			os.Exit(0)
+		}
+
+		// Delete existing config
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to delete config file: %w", err)
+		}
+		fmt.Println("✓ Deleted existing configuration")
+	}
+
+	// Delete partial config if exists
+	if err := os.Remove(partialPath); err == nil {
+		fmt.Println("✓ Deleted partial configuration")
+	}
+
+	return nil
+}
+
+// runReconfigure runs the wizard for a specific section only
+func runReconfigure(section string, isDaemon bool) error {
+	// TODO: Implement reconfigure for specific sections (Phase 10.4)
+	// For now, show a message that this feature is coming
+	fmt.Printf("Reconfiguring section: %s\n", section)
+	fmt.Println("Note: Full reconfigure support is coming soon. For now, please run the full setup wizard.")
+	return nil
+}
+
+// setupBibQuick runs quick CLI setup with minimal prompts
+func setupBibQuick() error {
+	// TODO: Implement quick CLI setup (Phase 2.9)
+	// For now, fall back to full wizard
+	fmt.Println("Running quick setup...")
+	return setupBibWizard()
+}
+
+// setupBibdQuick runs quick daemon setup with minimal prompts
+func setupBibdQuick() error {
+	// TODO: Implement quick daemon setup (Phase 3.5, 4.5, 5.6, 6.7)
+	// For now, fall back to full wizard
+	fmt.Printf("Running quick setup for target: %s\n", setupTarget)
+	return setupBibdWizard()
+}
+
+// GetDeploymentTarget returns the current deployment target
+func GetDeploymentTarget() DeploymentTarget {
+	return DeploymentTarget(setupTarget)
 }
 
 // SetupWizardModel wraps the wizard and huh form for a step-by-step setup
