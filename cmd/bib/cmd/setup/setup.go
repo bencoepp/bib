@@ -484,6 +484,7 @@ type SetupWizardModel struct {
 	discoveryResult *discovery.DiscoveryResult
 	nodeSelector    *component.NodeSelector
 	discoveryDone   bool
+	bibDevConfirmed bool // User has explicitly confirmed bib.dev connection
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -539,6 +540,21 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			Description: "Select nodes to connect to",
 			HelpText:    "Select one or more bibd nodes to connect to. You can also add the public bib.dev network or enter custom addresses.",
 			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
+			ID:          "bib-dev-confirm",
+			Title:       "Public Network",
+			Description: "Confirm bib.dev connection",
+			HelpText:    "bib.dev is a public network. Your public identity and published data will be visible to other users.",
+			ShouldSkip: func() bool {
+				// Skip if daemon setup OR if bib.dev is not selected
+				if isDaemon {
+					return true
+				}
+				// Check if node selector exists and bib.dev is selected
+				// This will be evaluated when the wizard navigates to this step
+				return false // Will be checked dynamically in the form
+			},
 		},
 		{
 			ID:          "connection",
@@ -873,6 +889,51 @@ Public Key:  %s...
 			),
 		).WithTheme(theme)
 
+	case "bib-dev-confirm":
+		// Check if bib.dev is selected - if not, this step should be auto-skipped
+		if m.nodeSelector == nil || !m.nodeSelector.IsBibDevSelected() {
+			// Not selected, show a simple "skipping" form that auto-proceeds
+			m.currentForm = huh.NewForm(
+				huh.NewGroup(
+					huh.NewNote().
+						Title("Public Network").
+						Description("bib.dev not selected, skipping confirmation."),
+				),
+			).WithTheme(theme)
+			return
+		}
+
+		// Build the confirmation dialog
+		bibDevWarning := `☁️  You have selected to connect to bib.dev
+
+bib.dev is the PUBLIC bib network. By connecting, you agree that:
+
+  ⚠️  Your public identity (name, email) will be visible to others
+  ⚠️  Any data you publish will be accessible to the public network
+  ⚠️  Your IP address may be logged by public infrastructure
+  ⚠️  You are subject to the bib.dev Terms of Service
+
+This is recommended if you want to:
+  ✓  Collaborate with users outside your local network
+  ✓  Access publicly shared datasets and topics
+  ✓  Contribute to the public bib ecosystem
+
+If you only need local/private access, go back and deselect bib.dev.`
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🌐 Public Network Confirmation").
+					Description(bibDevWarning),
+				huh.NewConfirm().
+					Title("Connect to bib.dev public network?").
+					Description("This requires explicit confirmation").
+					Affirmative("Yes, Connect to Public Network").
+					Negative("No, Go Back").
+					Value(&m.bibDevConfirmed),
+			),
+		).WithTheme(theme)
+
 	case "connection":
 		// Summarize selected nodes from the node selector
 		var connectionSummary string
@@ -1164,6 +1225,50 @@ func (m *SetupWizardModel) getWelcomeText() string {
 	return "Welcome! This wizard will help you configure the bib CLI.\n\nWe'll configure your identity, output preferences, and connection settings.\n\nPress Enter to continue..."
 }
 
+// handleStepCompletion handles step-specific completion logic
+// Returns true if we should proceed to next step, false if we should go back
+func (m *SetupWizardModel) handleStepCompletion() bool {
+	step := m.wizard.CurrentStep()
+	if step == nil {
+		return true
+	}
+
+	switch step.ID {
+	case "bib-dev-confirm":
+		// Check if bib.dev is actually selected
+		if m.nodeSelector == nil || !m.nodeSelector.IsBibDevSelected() {
+			// Not selected, auto-proceed (step was skipped anyway)
+			return true
+		}
+
+		// Check if user confirmed - we need to extract the value from the form
+		// The confirm field should have been filled in
+		// If user selected "No", we should go back to node selection
+		if !m.bibDevConfirmed {
+			// User said no - deselect bib.dev and go back
+			m.nodeSelector.SetBibDevSelected(false)
+			m.data.BibDevConfirmed = false
+			return false // Go back to previous step
+		}
+
+		// User confirmed
+		m.data.BibDevConfirmed = true
+		return true
+
+	case "node-selection":
+		// After node selection, check if bib.dev is selected
+		// If so, the next step (bib-dev-confirm) will handle confirmation
+		if m.nodeSelector != nil && m.nodeSelector.IsBibDevSelected() {
+			// Reset confirmation state so user must confirm again
+			m.bibDevConfirmed = false
+		}
+		return true
+
+	default:
+		return true
+	}
+}
+
 // runNodeDiscovery runs node discovery for CLI setup
 func (m *SetupWizardModel) runNodeDiscovery() {
 	if m.discoveryDone {
@@ -1235,6 +1340,17 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// If form completed, move to next step
 				if m.currentForm.State == huh.StateCompleted {
+					// Handle step-specific completion logic
+					if !m.handleStepCompletion() {
+						// Step completion returned false, meaning we should go back
+						m.wizard.PrevStep()
+						m.updateFormForCurrentStep()
+						if m.currentForm != nil {
+							return m, m.currentForm.Init()
+						}
+						return m, nil
+					}
+
 					// Mark current step as completed and update progress
 					if step := m.wizard.CurrentStep(); step != nil {
 						m.progress.MarkStepCompleted(step.ID)

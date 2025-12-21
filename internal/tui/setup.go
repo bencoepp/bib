@@ -828,7 +828,7 @@ func boolToYesNo(b bool) string {
 
 // ToBibConfig converts setup data to a BibConfig
 func (d *SetupData) ToBibConfig() *config.BibConfig {
-	return &config.BibConfig{
+	cfg := &config.BibConfig{
 		Log: config.LogConfig{
 			Level:  d.LogLevel,
 			Format: "text",
@@ -843,8 +843,37 @@ func (d *SetupData) ToBibConfig() *config.BibConfig {
 			Format: d.OutputFormat,
 			Color:  d.ColorEnabled,
 		},
-		Server: d.ServerAddr,
 	}
+
+	// Convert selected nodes to FavoriteNodes
+	if len(d.SelectedNodes) > 0 {
+		cfg.Connection = config.ConnectionConfig{
+			DefaultNode:     d.ServerAddr,
+			BibDevConfirmed: d.BibDevConfirmed,
+			FavoriteNodes:   make([]config.FavoriteNode, len(d.SelectedNodes)),
+			Mode:            "sequential",
+			AutoDetect:      true,
+			Timeout:         "10s",
+			RetryAttempts:   3,
+		}
+
+		for i, node := range d.SelectedNodes {
+			cfg.Connection.FavoriteNodes[i] = config.FavoriteNode{
+				Alias:           node.Alias,
+				Address:         node.Address,
+				Default:         node.IsDefault,
+				Priority:        i, // Lower index = higher priority
+				DiscoveryMethod: node.DiscoveryMethod,
+			}
+
+			// Set DefaultNode to the default node's address
+			if node.IsDefault {
+				cfg.Connection.DefaultNode = node.Address
+			}
+		}
+	}
+
+	return cfg
 }
 
 // ToBibdConfig converts setup data to a BibdConfig

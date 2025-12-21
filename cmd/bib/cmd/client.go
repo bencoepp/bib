@@ -181,13 +181,7 @@ func resolveConnectionTarget(cfg *config.BibConfig) (connectionTarget, error) {
 		return target, nil
 	}
 
-	// 3. Legacy server setting
-	if cfg.Server != "" {
-		target.TCPAddress = cfg.Server
-		return target, nil
-	}
-
-	// 4. First favorite node
+	// 3. First favorite node
 	if len(cfg.Connection.FavoriteNodes) > 0 {
 		node := cfg.Connection.FavoriteNodes[0]
 		if node.UnixSocket != "" {
@@ -202,7 +196,7 @@ func resolveConnectionTarget(cfg *config.BibConfig) (connectionTarget, error) {
 		return target, nil
 	}
 
-	// 5. Auto-detect via mDNS if enabled
+	// 4. Auto-detect via mDNS if enabled
 	if cfg.Connection.AutoDetect {
 		// TODO: Implement mDNS discovery
 		// For now, try localhost

@@ -492,6 +492,12 @@ type FavoriteNode struct {
 
 	// UnixSocket is the path to a Unix socket (or named pipe on Windows)
 	UnixSocket string `mapstructure:"unix_socket,omitempty"`
+
+	// Default indicates this is the default node for connections
+	Default bool `mapstructure:"default,omitempty"`
+
+	// DiscoveryMethod records how this node was discovered (local, mdns, p2p, manual, public)
+	DiscoveryMethod string `mapstructure:"discovery_method,omitempty"`
 }
 
 // ConnectionTLSConfig holds TLS settings for client connections
@@ -516,6 +522,9 @@ type ConnectionConfig struct {
 
 	// FavoriteNodes is a list of preferred nodes for connection
 	FavoriteNodes []FavoriteNode `mapstructure:"favorite_nodes"`
+
+	// BibDevConfirmed indicates the user has explicitly confirmed connection to bib.dev public network
+	BibDevConfirmed bool `mapstructure:"bib_dev_confirmed,omitempty"`
 
 	// Mode is the connection mode: "sequential" or "parallel"
 	// sequential: try socket -> TCP -> P2P in order
@@ -544,8 +553,45 @@ type BibConfig struct {
 	Identity   IdentityConfig   `mapstructure:"identity"`
 	Output     OutputConfig     `mapstructure:"output"`
 	Locale     string           `mapstructure:"locale"`     // UI locale (en, de, fr, ru, zh-tw). Empty = auto-detect from system
-	Server     string           `mapstructure:"server"`     // bibd server address to connect to (legacy)
-	Connection ConnectionConfig `mapstructure:"connection"` // Connection settings with favorite nodes
+	Connection ConnectionConfig `mapstructure:"connection"` // Connection settings with nodes
+}
+
+// GetDefaultServerAddress returns the default server address.
+func (c *BibConfig) GetDefaultServerAddress() string {
+	if c.Connection.DefaultNode != "" {
+		return c.Connection.DefaultNode
+	}
+	// Check FavoriteNodes for a default
+	for _, node := range c.Connection.FavoriteNodes {
+		if node.Default && node.Address != "" {
+			return node.Address
+		}
+	}
+	// Use the first FavoriteNode
+	if len(c.Connection.FavoriteNodes) > 0 && c.Connection.FavoriteNodes[0].Address != "" {
+		return c.Connection.FavoriteNodes[0].Address
+	}
+	return ""
+}
+
+// GetFavoriteNodes returns all configured favorite nodes.
+func (c *BibConfig) GetFavoriteNodes() []FavoriteNode {
+	return c.Connection.FavoriteNodes
+}
+
+// HasBibDevNode returns true if bib.dev is configured as a node
+func (c *BibConfig) HasBibDevNode() bool {
+	for _, node := range c.Connection.FavoriteNodes {
+		if node.Address == "bib.dev:4000" || node.DiscoveryMethod == "public" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsBibDevConfirmed returns true if the user has confirmed bib.dev connection
+func (c *BibConfig) IsBibDevConfirmed() bool {
+	return c.Connection.BibDevConfirmed
 }
 
 // BibdConfig is the complete configuration for the bibd daemon
@@ -816,7 +862,6 @@ func DefaultBibConfig() *BibConfig {
 			Format: "table",
 			Color:  true,
 		},
-		Server: "localhost:8080",
 		Connection: ConnectionConfig{
 			FavoriteNodes: []FavoriteNode{},
 			AutoDetect:    true,

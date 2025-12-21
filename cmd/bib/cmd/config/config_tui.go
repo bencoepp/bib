@@ -136,9 +136,9 @@ func runBibConfigForm(cfg *config.BibConfig, cfgPath string) error {
 				Title("🔗 Server"),
 
 			huh.NewInput().
-				Title("Server Address").
+				Title("Default Server Address").
 				Description("bibd server address (host:port)").
-				Value(&cfg.Server),
+				Value(&cfg.Connection.DefaultNode),
 		),
 	).WithTheme(theme)
 

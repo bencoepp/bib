@@ -101,6 +101,20 @@ func LoadBib(cfgFile string) (*BibConfig, error) {
 		return nil, fmt.Errorf("failed to resolve secrets: %w", err)
 	}
 
+	// Ensure DefaultNode is set if we have FavoriteNodes but no DefaultNode
+	if cfg.Connection.DefaultNode == "" && len(cfg.Connection.FavoriteNodes) > 0 {
+		// Find the default node or use the first one
+		for _, node := range cfg.Connection.FavoriteNodes {
+			if node.Default {
+				cfg.Connection.DefaultNode = node.Address
+				break
+			}
+		}
+		if cfg.Connection.DefaultNode == "" {
+			cfg.Connection.DefaultNode = cfg.Connection.FavoriteNodes[0].Address
+		}
+	}
+
 	return &cfg, nil
 }
 
@@ -126,7 +140,6 @@ func SaveBib(cfg *BibConfig, path string) error {
 	v.Set("output.format", cfg.Output.Format)
 	v.Set("output.color", cfg.Output.Color)
 	v.Set("locale", cfg.Locale)
-	v.Set("server", cfg.Server)
 
 	// Connection settings
 	v.Set("connection.default_node", cfg.Connection.DefaultNode)
@@ -135,6 +148,7 @@ func SaveBib(cfg *BibConfig, path string) error {
 	v.Set("connection.timeout", cfg.Connection.Timeout)
 	v.Set("connection.retry_attempts", cfg.Connection.RetryAttempts)
 	v.Set("connection.pool_size", cfg.Connection.PoolSize)
+	v.Set("connection.bib_dev_confirmed", cfg.Connection.BibDevConfirmed)
 	v.Set("connection.tls.skip_verify", cfg.Connection.TLS.SkipVerify)
 	v.Set("connection.tls.ca_file", cfg.Connection.TLS.CAFile)
 	v.Set("connection.tls.cert_file", cfg.Connection.TLS.CertFile)
@@ -145,11 +159,13 @@ func SaveBib(cfg *BibConfig, path string) error {
 		nodes := make([]map[string]interface{}, len(cfg.Connection.FavoriteNodes))
 		for i, node := range cfg.Connection.FavoriteNodes {
 			nodes[i] = map[string]interface{}{
-				"id":          node.ID,
-				"alias":       node.Alias,
-				"priority":    node.Priority,
-				"address":     node.Address,
-				"unix_socket": node.UnixSocket,
+				"id":               node.ID,
+				"alias":            node.Alias,
+				"priority":         node.Priority,
+				"address":          node.Address,
+				"unix_socket":      node.UnixSocket,
+				"default":          node.Default,
+				"discovery_method": node.DiscoveryMethod,
 			}
 		}
 		v.Set("connection.favorite_nodes", nodes)
@@ -213,7 +229,8 @@ func setViperDefaults(v *viper.Viper, cfg interface{}) {
 		v.SetDefault("identity.key", c.Identity.Key)
 		v.SetDefault("output.format", c.Output.Format)
 		v.SetDefault("output.color", c.Output.Color)
-		v.SetDefault("server", c.Server)
+		v.SetDefault("connection.default_node", c.Connection.DefaultNode)
+		v.SetDefault("connection.auto_detect", c.Connection.AutoDetect)
 	case *BibdConfig:
 		v.SetDefault("log.level", c.Log.Level)
 		v.SetDefault("log.format", c.Log.Format)
@@ -363,7 +380,8 @@ func NewViperFromConfig(appName string, cfg interface{}) *viper.Viper {
 		v.Set("identity.key", c.Identity.Key)
 		v.Set("output.format", c.Output.Format)
 		v.Set("output.color", c.Output.Color)
-		v.Set("server", c.Server)
+		v.Set("connection.default_node", c.Connection.DefaultNode)
+		v.Set("connection.auto_detect", c.Connection.AutoDetect)
 	case *BibdConfig:
 		v.Set("log.level", c.Log.Level)
 		v.Set("log.format", c.Log.Format)

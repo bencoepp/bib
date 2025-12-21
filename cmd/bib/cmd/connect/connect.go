@@ -69,10 +69,8 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	} else {
 		// Try to load from config
 		cfg, err := config.LoadBib("")
-		if err == nil && cfg.Connection.DefaultNode != "" {
-			address = cfg.Connection.DefaultNode
-		} else if err == nil && cfg.Server != "" {
-			address = cfg.Server
+		if err == nil && cfg.GetDefaultServerAddress() != "" {
+			address = cfg.GetDefaultServerAddress()
 		} else {
 			address = "localhost:4000"
 		}

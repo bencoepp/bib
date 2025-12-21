@@ -68,9 +68,9 @@ func TestDefaultBibConfig(t *testing.T) {
 		t.Error("expected output color to be true")
 	}
 
-	// Server configuration
-	if cfg.Server != "localhost:8080" {
-		t.Errorf("expected server 'localhost:8080', got %q", cfg.Server)
+	// Connection configuration
+	if !cfg.Connection.AutoDetect {
+		t.Error("expected auto detect to be true")
 	}
 }
 
@@ -551,8 +551,8 @@ func TestLoadBib_Defaults(t *testing.T) {
 	if cfg.Log.Level != defaults.Log.Level {
 		t.Errorf("expected log level %q, got %q", defaults.Log.Level, cfg.Log.Level)
 	}
-	if cfg.Server != defaults.Server {
-		t.Errorf("expected server %q, got %q", defaults.Server, cfg.Server)
+	if cfg.Connection.AutoDetect != defaults.Connection.AutoDetect {
+		t.Errorf("expected auto detect %v, got %v", defaults.Connection.AutoDetect, cfg.Connection.AutoDetect)
 	}
 }
 
@@ -564,7 +564,12 @@ func TestLoadBib_WithConfigFile(t *testing.T) {
 log:
   level: debug
   format: json
-server: "custom-server:9090"
+connection:
+  default_node: "custom-server:9090"
+  favorite_nodes:
+    - alias: "Custom Server"
+      address: "custom-server:9090"
+      default: true
 identity:
   name: "Test User"
 `
@@ -583,8 +588,8 @@ identity:
 	if cfg.Log.Format != "json" {
 		t.Errorf("expected log format 'json', got %q", cfg.Log.Format)
 	}
-	if cfg.Server != "custom-server:9090" {
-		t.Errorf("expected server 'custom-server:9090', got %q", cfg.Server)
+	if cfg.Connection.DefaultNode != "custom-server:9090" {
+		t.Errorf("expected default_node 'custom-server:9090', got %q", cfg.Connection.DefaultNode)
 	}
 	if cfg.Identity.Name != "Test User" {
 		t.Errorf("expected identity name 'Test User', got %q", cfg.Identity.Name)
@@ -608,10 +613,10 @@ func TestLoadBib_InvalidConfigFile(t *testing.T) {
 
 func TestLoadBib_WithEnvVars(t *testing.T) {
 	os.Setenv("BIB_LOG_LEVEL", "error")
-	os.Setenv("BIB_SERVER", "env-server:1234")
+	os.Setenv("BIB_CONNECTION_DEFAULT_NODE", "env-server:1234")
 	defer func() {
 		os.Unsetenv("BIB_LOG_LEVEL")
-		os.Unsetenv("BIB_SERVER")
+		os.Unsetenv("BIB_CONNECTION_DEFAULT_NODE")
 	}()
 
 	cfg, err := LoadBib("")
@@ -622,8 +627,8 @@ func TestLoadBib_WithEnvVars(t *testing.T) {
 	if cfg.Log.Level != "error" {
 		t.Errorf("expected log level 'error' from env, got %q", cfg.Log.Level)
 	}
-	if cfg.Server != "env-server:1234" {
-		t.Errorf("expected server 'env-server:1234' from env, got %q", cfg.Server)
+	if cfg.Connection.DefaultNode != "env-server:1234" {
+		t.Errorf("expected connection.default_node 'env-server:1234' from env, got %q", cfg.Connection.DefaultNode)
 	}
 }
 
@@ -723,7 +728,9 @@ func TestNewViperFromConfig_Bib(t *testing.T) {
 			Level:  "debug",
 			Format: "json",
 		},
-		Server: "test:8080",
+		Connection: ConnectionConfig{
+			DefaultNode: "test:8080",
+		},
 		Output: OutputConfig{
 			Format: "table",
 			Color:  false,
@@ -735,8 +742,8 @@ func TestNewViperFromConfig_Bib(t *testing.T) {
 	if v.GetString("log.level") != "debug" {
 		t.Errorf("expected log.level 'debug', got %q", v.GetString("log.level"))
 	}
-	if v.GetString("server") != "test:8080" {
-		t.Errorf("expected server 'test:8080', got %q", v.GetString("server"))
+	if v.GetString("connection.default_node") != "test:8080" {
+		t.Errorf("expected connection.default_node 'test:8080', got %q", v.GetString("connection.default_node"))
 	}
 	if v.GetBool("output.color") != false {
 		t.Error("expected output.color to be false")
@@ -836,7 +843,9 @@ func TestLoadBib_JSONFormat(t *testing.T) {
 		"level": "warn",
 		"format": "text"
 	},
-	"server": "json-server:8080"
+	"connection": {
+		"default_node": "json-server:8080"
+	}
 }`
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
@@ -850,8 +859,8 @@ func TestLoadBib_JSONFormat(t *testing.T) {
 	if cfg.Log.Level != "warn" {
 		t.Errorf("expected log level 'warn', got %q", cfg.Log.Level)
 	}
-	if cfg.Server != "json-server:8080" {
-		t.Errorf("expected server 'json-server:8080', got %q", cfg.Server)
+	if cfg.Connection.DefaultNode != "json-server:8080" {
+		t.Errorf("expected connection.default_node 'json-server:8080', got %q", cfg.Connection.DefaultNode)
 	}
 }
 
@@ -860,12 +869,12 @@ func TestLoadBib_TOMLFormat(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.toml")
 
-	// TOML: root-level keys must come before sections
-	configContent := `server = "toml-server:8080"
-
-[log]
+	configContent := `[log]
 level = "error"
 format = "json"
+
+[connection]
+default_node = "toml-server:8080"
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
@@ -879,8 +888,8 @@ format = "json"
 	if cfg.Log.Level != "error" {
 		t.Errorf("expected log level 'error', got %q", cfg.Log.Level)
 	}
-	if cfg.Server != "toml-server:8080" {
-		t.Errorf("expected server 'toml-server:8080', got %q", cfg.Server)
+	if cfg.Connection.DefaultNode != "toml-server:8080" {
+		t.Errorf("expected connection.default_node 'toml-server:8080', got %q", cfg.Connection.DefaultNode)
 	}
 }
 
@@ -908,5 +917,169 @@ func BenchmarkResolveSecrets(b *testing.B) {
 			},
 		}
 		_ = resolveSecrets(cfg)
+	}
+}
+
+// ==================== Multi-Node Configuration Tests ====================
+
+func TestBibConfig_GetDefaultServerAddress(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      BibConfig
+		expected string
+	}{
+		{
+			name: "uses Connection.DefaultNode first",
+			cfg: BibConfig{
+				Connection: ConnectionConfig{
+					DefaultNode: "default:4000",
+				},
+			},
+			expected: "default:4000",
+		},
+		{
+			name: "uses default FavoriteNode if no DefaultNode",
+			cfg: BibConfig{
+				Connection: ConnectionConfig{
+					FavoriteNodes: []FavoriteNode{
+						{Address: "node1:4000", Default: false},
+						{Address: "node2:4000", Default: true},
+					},
+				},
+			},
+			expected: "node2:4000",
+		},
+		{
+			name: "uses first FavoriteNode if no default",
+			cfg: BibConfig{
+				Connection: ConnectionConfig{
+					FavoriteNodes: []FavoriteNode{
+						{Address: "first:4000"},
+						{Address: "second:4000"},
+					},
+				},
+			},
+			expected: "first:4000",
+		},
+		{
+			name:     "returns empty if nothing configured",
+			cfg:      BibConfig{},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.cfg.GetDefaultServerAddress()
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestBibConfig_GetFavoriteNodes(t *testing.T) {
+	t.Run("returns FavoriteNodes if configured", func(t *testing.T) {
+		cfg := BibConfig{
+			Connection: ConnectionConfig{
+				FavoriteNodes: []FavoriteNode{
+					{Alias: "node1", Address: "node1:4000"},
+					{Alias: "node2", Address: "node2:4000"},
+				},
+			},
+		}
+		nodes := cfg.GetFavoriteNodes()
+		if len(nodes) != 2 {
+			t.Errorf("expected 2 nodes, got %d", len(nodes))
+		}
+	})
+
+	t.Run("returns nil if nothing configured", func(t *testing.T) {
+		cfg := BibConfig{}
+		nodes := cfg.GetFavoriteNodes()
+		if nodes != nil {
+			t.Errorf("expected nil, got %v", nodes)
+		}
+	})
+}
+
+func TestBibConfig_HasBibDevNode(t *testing.T) {
+	t.Run("returns true for bib.dev:4000 address", func(t *testing.T) {
+		cfg := BibConfig{
+			Connection: ConnectionConfig{
+				FavoriteNodes: []FavoriteNode{
+					{Address: "localhost:4000"},
+					{Address: "bib.dev:4000"},
+				},
+			},
+		}
+		if !cfg.HasBibDevNode() {
+			t.Error("expected true for bib.dev:4000")
+		}
+	})
+
+	t.Run("returns true for public discovery method", func(t *testing.T) {
+		cfg := BibConfig{
+			Connection: ConnectionConfig{
+				FavoriteNodes: []FavoriteNode{
+					{Address: "some-address:4000", DiscoveryMethod: "public"},
+				},
+			},
+		}
+		if !cfg.HasBibDevNode() {
+			t.Error("expected true for public discovery method")
+		}
+	})
+
+	t.Run("returns false for no bib.dev node", func(t *testing.T) {
+		cfg := BibConfig{
+			Connection: ConnectionConfig{
+				FavoriteNodes: []FavoriteNode{
+					{Address: "localhost:4000"},
+				},
+			},
+		}
+		if cfg.HasBibDevNode() {
+			t.Error("expected false for no bib.dev node")
+		}
+	})
+}
+
+func TestBibConfig_IsBibDevConfirmed(t *testing.T) {
+	t.Run("returns true when confirmed", func(t *testing.T) {
+		cfg := BibConfig{
+			Connection: ConnectionConfig{
+				BibDevConfirmed: true,
+			},
+		}
+		if !cfg.IsBibDevConfirmed() {
+			t.Error("expected true")
+		}
+	})
+
+	t.Run("returns false when not confirmed", func(t *testing.T) {
+		cfg := BibConfig{}
+		if cfg.IsBibDevConfirmed() {
+			t.Error("expected false")
+		}
+	})
+}
+
+func TestFavoriteNode_NewFields(t *testing.T) {
+	node := FavoriteNode{
+		ID:              "peer-id-123",
+		Alias:           "My Node",
+		Priority:        1,
+		Address:         "localhost:4000",
+		UnixSocket:      "/var/run/bibd.sock",
+		Default:         true,
+		DiscoveryMethod: "local",
+	}
+
+	if !node.Default {
+		t.Error("expected Default to be true")
+	}
+	if node.DiscoveryMethod != "local" {
+		t.Errorf("expected DiscoveryMethod 'local', got %q", node.DiscoveryMethod)
 	}
 }

@@ -233,32 +233,75 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 2.4 bib.dev Confirmation
 
-- [ ] Create confirmation dialog for bib.dev connection
-- [ ] Explain implications (public network, visibility, data publishing)
-- [ ] Require explicit "Yes, Connect to Public Network" confirmation
-- [ ] Store confirmation status in setup data
+- [x] Create confirmation dialog for bib.dev connection
+- [x] Explain implications (public network, visibility, data publishing)
+- [x] Require explicit "Yes, Connect to Public Network" confirmation
+- [x] Store confirmation status in setup data
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Added `bibDevConfirmed` field to `SetupWizardModel`
+- Added "bib-dev-confirm" wizard step between node-selection and connection
+- Step is dynamically shown only when bib.dev is selected in node selector
+- Confirmation dialog explains:
+  - Public identity visibility
+  - Data publishing visibility
+  - IP logging
+  - Terms of Service
+  - Use cases (collaboration, public datasets)
+- Explicit "Yes, Connect to Public Network" vs "No, Go Back" buttons
+- If user selects "No", goes back to node-selection and deselects bib.dev
+- If user confirms, `m.bibDevConfirmed` and `m.data.BibDevConfirmed` are set
+- Added `handleStepCompletion()` method for step-specific completion logic:
+  - Handles bib-dev-confirm to check confirmation and go back on rejection
+  - Handles node-selection to reset confirmation when bib.dev is selected
 
 ### 2.5 Multi-Node Configuration
 
-- [ ] Update config structure to support multiple nodes
-- [ ] Add `nodes` array to bib config:
+- [x] Update config structure to support multiple nodes
+- [x] Add `connection.favorite_nodes` array to bib config:
   ```yaml
-  nodes:
-    - address: "localhost:4000"
-      alias: "local"
-      default: true
-    - address: "bib.dev:4000"
-      alias: "public"
+  connection:
+    default_node: "localhost:4000"
+    favorite_nodes:
+      - address: "localhost:4000"
+        alias: "local"
+        default: true
+      - address: "bib.dev:4000"
+        alias: "public"
+        discovery_method: "public"
   ```
-- [ ] Maintain backward compatibility with `server` field
-- [ ] Implement default node selection
+- [x] Implement default node selection
+- [x] Remove legacy `server` field (no backward compatibility needed)
 
-**Files to modify:**
+**Files modified:**
 - `internal/config/types.go`
 - `internal/config/loader.go`
+- `internal/tui/setup.go`
+- `internal/config/config_test.go`
+- `cmd/bib/cmd/client.go`
+- `cmd/bib/cmd/connect/connect.go`
+- `cmd/bib/cmd/config/config_tui.go`
+
+**Implementation notes:**
+- Removed legacy `Server` field from `BibConfig`
+- Updated `FavoriteNode` struct with new fields:
+  - `Default bool` - marks this as the default node
+  - `DiscoveryMethod string` - how the node was discovered (local, mdns, p2p, manual, public)
+- Updated `ConnectionConfig` with:
+  - `BibDevConfirmed bool` - user explicitly confirmed bib.dev connection
+- Added helper methods to `BibConfig`:
+  - `GetDefaultServerAddress()` - returns default address from DefaultNode or FavoriteNodes
+  - `GetFavoriteNodes()` - returns configured FavoriteNodes
+  - `HasBibDevNode()` - checks if bib.dev is in the config
+  - `IsBibDevConfirmed()` - checks if user confirmed bib.dev
+- Updated `LoadBib()` to ensure DefaultNode is set from FavoriteNodes if missing
+- Updated `SaveBib()` to save new fields
+- Updated `ToBibConfig()` to convert `SetupData.SelectedNodes` to `FavoriteNodes`
+- Updated all code using old `cfg.Server` to use `GetDefaultServerAddress()` or `Connection.DefaultNode`
+- Comprehensive unit tests covering all functionality
 
 ### 2.6 Connection Testing
 
