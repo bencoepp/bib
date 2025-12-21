@@ -31,6 +31,7 @@ func NewCommand() *cobra.Command {
 	Cmd.AddCommand(configInitCmd)
 	Cmd.AddCommand(configValidateCmd)
 	Cmd.AddCommand(configEditCmd)
+	Cmd.AddCommand(NewResetCommand())
 
 	// Add flags
 	Cmd.PersistentFlags().BoolVar(&configDaemon, "daemon", false, "Manage bibd daemon configuration")

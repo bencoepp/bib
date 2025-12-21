@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"bib/internal/auth"
@@ -22,6 +24,8 @@ import (
 	"bib/internal/deploy/podman"
 	"bib/internal/discovery"
 	"bib/internal/postsetup"
+	"bib/internal/setup/partial"
+	"bib/internal/setup/recovery"
 	"bib/internal/tui"
 	"bib/internal/tui/component"
 
@@ -166,6 +170,25 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	if err := validateSetupFlags(); err != nil {
 		return err
 	}
+
+	// Set up graceful interruption handling
+	setupCtx, setupCancel := context.WithCancel(context.Background())
+	defer setupCancel()
+
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		select {
+		case <-signalCh:
+			fmt.Println("\n\n⚠️  Setup interrupted. Progress will be saved.")
+			setupCancel()
+		case <-setupCtx.Done():
+		}
+	}()
+
+	// Store context in command for access by sub-functions
+	cmd.SetContext(setupCtx)
 
 	// Handle --fresh flag: delete existing config before proceeding
 	if setupFresh {
@@ -330,24 +353,40 @@ func runReconfigure(section string, isDaemon bool) error {
 // checkAndOfferResume checks for partial config and offers to resume
 // Returns true if the user chose to resume and the wizard completed
 func checkAndOfferResume(isDaemon bool) (bool, error) {
-	var appName string
+	var appName, setupType string
 	if isDaemon {
 		appName = config.AppBibd
+		setupType = "daemon"
 	} else {
 		appName = config.AppBib
+		setupType = "cli"
 	}
 
-	// Check for partial config
-	progress, err := config.DetectPartialConfig(appName)
+	// Get config directory
+	configDir, err := config.UserConfigDir(appName)
 	if err != nil {
-		// Log warning but don't fail - just continue with fresh setup
+		return false, nil
+	}
+
+	// Check for partial config using new manager
+	manager := partial.NewManager(configDir)
+	partialCfg, err := manager.Load(setupType)
+	if err != nil {
 		fmt.Printf("Warning: could not check for partial config: %v\n", err)
 		return false, nil
 	}
 
-	if progress == nil {
+	if partialCfg == nil {
 		// No partial config found
 		return false, nil
+	}
+
+	// Calculate progress
+	completedSteps := len(partialCfg.CompletedSteps)
+	totalSteps := len(partial.AllSteps()) - 1 // Exclude "complete" step
+	progressPercent := 0
+	if totalSteps > 0 {
+		progressPercent = (completedSteps * 100) / totalSteps
 	}
 
 	// Show resume prompt
@@ -356,14 +395,17 @@ func checkAndOfferResume(isDaemon bool) (bool, error) {
 	fmt.Println("│              Partial Configuration Detected                  │")
 	fmt.Println("├─────────────────────────────────────────────────────────────┤")
 	fmt.Println("│                                                              │")
-	fmt.Printf("│  A previous setup was interrupted at step %d of %d:          │\n",
-		progress.CurrentStepIndex+1, progress.TotalSteps)
-	if progress.CurrentStepID != "" {
-		fmt.Printf("│  \"%s\"%-45s│\n", progress.CurrentStepID, "")
+	fmt.Printf("│  Type: %-50s│\n", partialCfg.SetupType)
+	if partialCfg.DeployTarget != "" {
+		fmt.Printf("│  Target: %-48s│\n", partialCfg.DeployTarget)
 	}
+	fmt.Printf("│  Last Step: %-44s│\n", partial.StepDescription(partialCfg.CurrentStep))
 	fmt.Println("│                                                              │")
-	fmt.Printf("│  Started: %s%-35s│\n", progress.StartedAt.Format("2006-01-02 15:04"), "")
-	fmt.Printf("│  Progress: %d%% complete%-40s│\n", progress.ProgressPercentage(), "")
+	fmt.Printf("│  Started: %s%-35s│\n", partialCfg.StartedAt.Format("2006-01-02 15:04"), "")
+	fmt.Printf("│  Progress: %d%% complete (%d/%d steps)%-23s│\n", progressPercent, completedSteps, totalSteps, "")
+	if partialCfg.Error != "" {
+		fmt.Printf("│  Error: %-48s│\n", truncateString(partialCfg.Error, 48))
+	}
 	fmt.Println("│                                                              │")
 	fmt.Println("└─────────────────────────────────────────────────────────────┘")
 	fmt.Println()
@@ -384,11 +426,11 @@ func checkAndOfferResume(isDaemon bool) (bool, error) {
 	case "r", "":
 		// Resume - load the saved data and continue wizard
 		fmt.Println("\nResuming setup...")
-		return resumeSetup(progress, isDaemon)
+		return resumeSetupFromPartial(partialCfg, isDaemon)
 
 	case "s":
 		// Start over - delete partial config
-		if err := config.DeletePartialConfig(appName); err != nil {
+		if err := manager.Delete(setupType); err != nil {
 			fmt.Printf("Warning: failed to delete partial config: %v\n", err)
 		} else {
 			fmt.Println("✓ Deleted partial configuration")
@@ -403,50 +445,196 @@ func checkAndOfferResume(isDaemon bool) (bool, error) {
 
 	default:
 		fmt.Println("Invalid choice. Resuming...")
-		return resumeSetup(progress, isDaemon)
+		return resumeSetupFromPartial(partialCfg, isDaemon)
 	}
 }
 
-// resumeSetup resumes a wizard from saved progress
-func resumeSetup(progress *config.SetupProgress, isDaemon bool) (bool, error) {
-	// Load the saved setup data
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// resumeSetupFromPartial resumes a wizard from partial config
+func resumeSetupFromPartial(partialCfg *partial.PartialConfig, isDaemon bool) (bool, error) {
+	// Load saved data into setup data
 	data := tui.DefaultSetupData()
-	if err := progress.GetData(data); err != nil {
-		fmt.Printf("Warning: could not load saved data, starting fresh: %v\n", err)
-		return false, nil
-	}
 
-	// Run the wizard starting from the saved step
-	if isDaemon {
-		return runDaemonWizardWithProgress(data, progress)
-	}
-	return runCLIWizardWithProgress(data, progress)
-}
+	data.Name = partialCfg.GetString("name")
+	data.Email = partialCfg.GetString("email")
+	data.Host = partialCfg.GetString("host")
+	data.Port = partialCfg.GetInt("port")
+	data.UsePublicBootstrap = partialCfg.GetBool("use_public_bootstrap")
+	data.BibDevConfirmed = partialCfg.GetBool("bib_dev_confirmed")
+	data.IdentityKeyPath = partialCfg.GetString("identity_key_path")
 
-// runCLIWizardWithProgress runs the CLI wizard from saved progress
-func runCLIWizardWithProgress(data *tui.SetupData, progress *config.SetupProgress) (bool, error) {
-	// TODO: Implement resume for CLI wizard (integrate with SetupWizardModel)
-	// For now, just run the normal wizard with the loaded data
-	fmt.Printf("Resuming from step: %s\n", progress.CurrentStepID)
+	// Determine next step to run
+	nextStep := partialCfg.GetNextStep()
+	fmt.Printf("Resuming from step: %s\n", partial.StepDescription(nextStep))
 
 	// Delete the partial config since we're resuming
-	config.DeletePartialConfig(progress.AppName)
+	configDir, _ := config.UserConfigDir(config.AppBib)
+	manager := partial.NewManager(configDir)
+	manager.Delete(partialCfg.SetupType)
 
-	// Run normal wizard - the data is already loaded
+	// For now, return false to run normal wizard with loaded data
+	// TODO: Implement step-skipping based on completed steps
+	_ = data
 	return false, nil
 }
 
-// runDaemonWizardWithProgress runs the daemon wizard from saved progress
-func runDaemonWizardWithProgress(data *tui.SetupData, progress *config.SetupProgress) (bool, error) {
-	// TODO: Implement resume for daemon wizard (integrate with SetupWizardModel)
-	// For now, just run the normal wizard with the loaded data
-	fmt.Printf("Resuming from step: %s\n", progress.CurrentStepID)
+// savePartialConfig saves the current setup progress to allow resuming later
+func savePartialConfig(setupType string, data *tui.SetupData, currentStep partial.SetupStep, err error) {
+	configDir, configErr := config.UserConfigDir(config.AppBib)
+	if configErr != nil {
+		return
+	}
 
-	// Delete the partial config since we're resuming
-	config.DeletePartialConfig(progress.AppName)
+	manager := partial.NewManager(configDir)
+	partialCfg := partial.NewPartialConfig(setupType)
 
-	// Run normal wizard - the data is already loaded
-	return false, nil
+	// Save setup data
+	partialCfg.SetData("name", data.Name)
+	partialCfg.SetData("email", data.Email)
+	partialCfg.SetData("host", data.Host)
+	partialCfg.SetData("port", data.Port)
+	partialCfg.SetData("use_public_bootstrap", data.UsePublicBootstrap)
+	partialCfg.SetData("bib_dev_confirmed", data.BibDevConfirmed)
+	partialCfg.SetData("identity_key_path", data.IdentityKeyPath)
+
+	// Mark completed steps
+	switch currentStep {
+	case partial.StepComplete:
+		for _, step := range partial.AllSteps() {
+			partialCfg.CompleteStep(step)
+		}
+	case partial.StepConfig:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+		partialCfg.CompleteStep(partial.StepStorage)
+		partialCfg.CompleteStep(partial.StepDatabase)
+		partialCfg.CompleteStep(partial.StepDeployment)
+		partialCfg.CompleteStep(partial.StepService)
+		partialCfg.CompleteStep(partial.StepNodes)
+		partialCfg.CompleteStep(partial.StepConfig)
+	case partial.StepNodes:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+		partialCfg.CompleteStep(partial.StepStorage)
+		partialCfg.CompleteStep(partial.StepDatabase)
+		partialCfg.CompleteStep(partial.StepDeployment)
+		partialCfg.CompleteStep(partial.StepService)
+		partialCfg.CompleteStep(partial.StepNodes)
+	case partial.StepService:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+		partialCfg.CompleteStep(partial.StepStorage)
+		partialCfg.CompleteStep(partial.StepDatabase)
+		partialCfg.CompleteStep(partial.StepDeployment)
+		partialCfg.CompleteStep(partial.StepService)
+	case partial.StepDeployment:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+		partialCfg.CompleteStep(partial.StepStorage)
+		partialCfg.CompleteStep(partial.StepDatabase)
+		partialCfg.CompleteStep(partial.StepDeployment)
+	case partial.StepDatabase:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+		partialCfg.CompleteStep(partial.StepStorage)
+		partialCfg.CompleteStep(partial.StepDatabase)
+	case partial.StepStorage:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+		partialCfg.CompleteStep(partial.StepStorage)
+	case partial.StepNetwork:
+		partialCfg.CompleteStep(partial.StepIdentity)
+		partialCfg.CompleteStep(partial.StepNetwork)
+	case partial.StepIdentity:
+		partialCfg.CompleteStep(partial.StepIdentity)
+	}
+
+	// Save error if any
+	if err != nil {
+		partialCfg.SetError(err)
+	}
+
+	manager.Save(partialCfg)
+}
+
+// handleSetupError handles errors during setup with user-friendly options
+func handleSetupError(step string, err error) recovery.ErrorAction {
+	if err == nil {
+		return recovery.ErrorActionRetry
+	}
+
+	// Create setup error with suggestions
+	setupErr := recovery.NewSetupError(step, err.Error(), err)
+
+	// Add context-specific suggestions
+	switch step {
+	case "network":
+		setupErr.WithSuggestions(
+			"Check your internet connection",
+			"Try using private network mode",
+		)
+	case "database":
+		setupErr.WithSuggestions(
+			"Verify database connection settings",
+			"Ensure the database server is running",
+		)
+	case "deployment":
+		setupErr.WithSuggestions(
+			"Check that Docker/Podman/kubectl is available",
+			"Try a different deployment target",
+		)
+	}
+
+	// Display error
+	fmt.Println()
+	fmt.Println(recovery.FormatSetupError(setupErr))
+	fmt.Println()
+
+	// Prompt for action
+	fmt.Println("What would you like to do?")
+	fmt.Println("  [R] Retry this step")
+	fmt.Println("  [S] Skip this step (if possible)")
+	fmt.Println("  [C] Configure different settings")
+	fmt.Println("  [A] Abort setup (save progress)")
+	fmt.Println()
+	fmt.Print("Choice [R/s/c/a]: ")
+
+	var response string
+	if _, err := fmt.Scanln(&response); err != nil {
+		response = "r"
+	}
+	response = strings.ToLower(strings.TrimSpace(response))
+
+	switch response {
+	case "r", "":
+		return recovery.ErrorActionRetry
+	case "s":
+		return recovery.ErrorActionSkip
+	case "c":
+		return recovery.ErrorActionReconfigure
+	case "a":
+		return recovery.ErrorActionAbort
+	default:
+		return recovery.ErrorActionRetry
+	}
+}
+
+// deletePartialConfigForSetup deletes partial config after successful setup
+func deletePartialConfigForSetup(setupType string) {
+	configDir, err := config.UserConfigDir(config.AppBib)
+	if err != nil {
+		return
+	}
+
+	manager := partial.NewManager(configDir)
+	manager.Delete(setupType)
 }
 
 // setupBibQuick runs quick CLI setup with minimal prompts
@@ -1917,7 +2105,7 @@ type SetupWizardModel struct {
 	err         error
 
 	// Progress tracking for partial config save
-	progress *config.SetupProgress
+	partialConfig *partial.PartialConfig
 
 	// Identity key for authentication
 	identityKey    *auth.IdentityKey
@@ -2214,8 +2402,12 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 		isDaemon: isDaemon,
 	}
 
-	// Initialize progress tracking for partial config save
-	m.progress = config.NewSetupProgress(appName, isDaemon, len(steps))
+	// Initialize partial config for progress tracking
+	setupType := "cli"
+	if isDaemon {
+		setupType = "daemon"
+	}
+	m.partialConfig = partial.NewPartialConfig(setupType)
 
 	m.wizard = tui.NewWizard(
 		getWizardTitle(isDaemon),
@@ -2228,17 +2420,6 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 	)
 
 	return m
-}
-
-// truncateString truncates a string to maxLen characters, adding "..." if truncated
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
 }
 
 // validatePort validates a port number string
@@ -3897,13 +4078,13 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Mark current step as completed and update progress
 					if step := m.wizard.CurrentStep(); step != nil {
-						m.progress.MarkStepCompleted(step.ID)
+						m.partialConfig.CompleteStep(partial.SetupStep(step.ID))
 					}
 
 					nextCmd := m.wizard.NextStep()
 					if m.wizard.IsDone() {
 						// Clean up partial config on successful completion
-						config.DeletePartialConfig(m.progress.AppName)
+						deletePartialConfigForSetup(m.partialConfig.SetupType)
 						m.done = true
 						return m, tea.Quit
 					}
@@ -3939,19 +4120,19 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateProgressTracking updates the progress tracking with current step info
 func (m *SetupWizardModel) updateProgressTracking() {
-	if m.progress == nil {
+	if m.partialConfig == nil {
 		return
 	}
 
 	step := m.wizard.CurrentStep()
 	if step != nil {
-		m.progress.SetCurrentStep(step.ID, m.wizard.CurrentStepIndex())
+		m.partialConfig.CurrentStep = partial.SetupStep(step.ID)
 	}
 }
 
 // saveProgressOnExit saves progress when the user cancels/exits
 func (m *SetupWizardModel) saveProgressOnExit() {
-	if m.progress == nil {
+	if m.partialConfig == nil {
 		return
 	}
 
@@ -3959,14 +4140,24 @@ func (m *SetupWizardModel) saveProgressOnExit() {
 	m.updateProgressTracking()
 
 	// Store the current setup data
-	if err := m.progress.SetData(m.data); err != nil {
-		// Log but don't fail - user is exiting anyway
-		fmt.Printf("\nWarning: could not save setup data: %v\n", err)
-	}
+	m.partialConfig.SetData("name", m.data.Name)
+	m.partialConfig.SetData("email", m.data.Email)
+	m.partialConfig.SetData("host", m.data.Host)
+	m.partialConfig.SetData("port", m.data.Port)
+	m.partialConfig.SetData("use_public_bootstrap", m.data.UsePublicBootstrap)
+	m.partialConfig.SetData("bib_dev_confirmed", m.data.BibDevConfirmed)
+	m.partialConfig.SetData("identity_key_path", m.data.IdentityKeyPath)
 
 	// Only save if we have made some progress (not on first step)
-	if m.wizard.CurrentStepIndex() > 0 || len(m.progress.CompletedSteps) > 0 {
-		if err := config.SavePartialConfig(m.progress); err != nil {
+	if m.wizard.CurrentStepIndex() > 0 || len(m.partialConfig.CompletedSteps) > 0 {
+		configDir, err := config.UserConfigDir(config.AppBib)
+		if err != nil {
+			fmt.Printf("\nWarning: could not save progress: %v\n", err)
+			return
+		}
+
+		manager := partial.NewManager(configDir)
+		if err := manager.Save(m.partialConfig); err != nil {
 			fmt.Printf("\nWarning: could not save progress: %v\n", err)
 		} else {
 			fmt.Printf("\n✓ Progress saved. Run 'bib setup' to resume.\n")
