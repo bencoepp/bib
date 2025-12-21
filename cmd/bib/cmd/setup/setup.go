@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"bib/internal/auth"
 	"bib/internal/config"
 	"bib/internal/tui"
 
@@ -471,10 +472,25 @@ type SetupWizardModel struct {
 
 	// Progress tracking for partial config save
 	progress *config.SetupProgress
+
+	// Identity key for authentication
+	identityKey    *auth.IdentityKey
+	identityKeyNew bool // true if key was newly generated
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 	data := tui.DefaultSetupData()
+
+	// Set default identity key path based on app type
+	var appName string
+	if isDaemon {
+		appName = config.AppBibd
+	} else {
+		appName = config.AppBib
+	}
+	if keyPath, err := auth.DefaultIdentityKeyPath(appName); err == nil {
+		data.IdentityKeyPath = keyPath
+	}
 
 	steps := []tui.WizardStep{
 		{
@@ -488,6 +504,12 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			Title:       "Identity",
 			Description: "Configure your identity",
 			HelpText:    "Your identity is used for signing and attributing changes. This information may be visible to others in a collaborative environment.",
+		},
+		{
+			ID:          "identity-key",
+			Title:       "Identity Key",
+			Description: "Generate authentication key",
+			HelpText:    "An Ed25519 keypair is generated for authenticating with bibd nodes. This key is separate from your SSH keys.",
 		},
 		{
 			ID:          "output",
@@ -593,12 +615,6 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 	}
 
 	// Initialize progress tracking for partial config save
-	var appName string
-	if isDaemon {
-		appName = config.AppBibd
-	} else {
-		appName = config.AppBib
-	}
 	m.progress = config.NewSetupProgress(appName, isDaemon, len(steps))
 
 	m.wizard = tui.NewWizard(
@@ -612,6 +628,17 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 	)
 
 	return m
+}
+
+// truncateString truncates a string to maxLen characters, adding "..." if truncated
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func getWizardTitle(isDaemon bool) string {
@@ -670,6 +697,61 @@ func (m *SetupWizardModel) updateFormForCurrentStep() {
 					Description("Your email address").
 					Placeholder("john@example.com").
 					Value(&m.data.Email),
+			),
+		).WithTheme(theme)
+
+	case "identity-key":
+		// Generate or load identity key if not already done
+		if m.identityKey == nil {
+			key, isNew, err := auth.LoadOrGenerateIdentityKey(m.data.IdentityKeyPath)
+			if err != nil {
+				m.err = err
+				m.currentForm = huh.NewForm(
+					huh.NewGroup(
+						huh.NewNote().
+							Title("❌ Key Generation Failed").
+							Description(fmt.Sprintf("Failed to generate identity key: %v\n\nPlease check permissions and try again.", err)),
+					),
+				).WithTheme(theme)
+				return
+			}
+			m.identityKey = key
+			m.identityKeyNew = isNew
+		}
+
+		// Build key info display
+		var statusMsg string
+		if m.identityKeyNew {
+			statusMsg = "✓ Generated new Ed25519 identity key"
+		} else {
+			statusMsg = "✓ Loaded existing identity key"
+		}
+
+		keyInfo := m.identityKey.Info()
+		keyDisplay := fmt.Sprintf(`%s
+
+Location:    %s
+Fingerprint: %s
+Public Key:  %s...
+
+⚠️  Keep your identity key secure! It authenticates you
+   to all bib nodes.`,
+			statusMsg,
+			keyInfo.Path,
+			keyInfo.Fingerprint,
+			truncateString(keyInfo.PublicKey, 50))
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔑 Identity Key").
+					Description(keyDisplay),
+				huh.NewConfirm().
+					Title("Continue?").
+					Description("Press Enter to continue").
+					Affirmative("Continue").
+					Negative("Regenerate").
+					Value(new(bool)),
 			),
 		).WithTheme(theme)
 

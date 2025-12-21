@@ -17,8 +17,9 @@ import (
 // SetupData holds all the data collected during setup
 type SetupData struct {
 	// Identity
-	Name  string
-	Email string
+	Name            string
+	Email           string
+	IdentityKeyPath string // Path to the identity key file
 
 	// Server (bibd only)
 	Host    string
@@ -156,6 +157,9 @@ func DefaultSetupData() *SetupData {
 		Host:    "0.0.0.0",
 		Port:    4000,
 		DataDir: "~/.local/share/bibd",
+
+		// Identity key path will be set during setup based on app name
+		IdentityKeyPath: "",
 
 		// Logging defaults
 		LogLevel:  "info",
@@ -833,6 +837,7 @@ func (d *SetupData) ToBibConfig() *config.BibConfig {
 		Identity: config.IdentityConfig{
 			Name:  d.Name,
 			Email: d.Email,
+			Key:   d.IdentityKeyPath,
 		},
 		Output: config.OutputConfig{
 			Format: d.OutputFormat,
@@ -853,6 +858,7 @@ func (d *SetupData) ToBibdConfig() *config.BibdConfig {
 		Identity: config.IdentityConfig{
 			Name:  d.Name,
 			Email: d.Email,
+			Key:   d.IdentityKeyPath,
 		},
 		Server: config.ServerConfig{
 			Host:    d.Host,

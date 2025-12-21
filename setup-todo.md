@@ -113,18 +113,41 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 2.1 Identity Key Generation
 
-- [ ] Implement `GenerateIdentityKey()` function
-- [ ] Generate Ed25519 keypair
-- [ ] Save private key to `~/.config/bib/identity.pem`
-- [ ] Display public key and fingerprint to user
-- [ ] Add key generation step to wizard
+- [x] Implement `GenerateIdentityKey()` function
+- [x] Generate Ed25519 keypair
+- [x] Save private key to `~/.config/bib/identity.pem`
+- [x] Display public key and fingerprint to user
+- [x] Add key generation step to wizard
 
-**Files to create:**
+**Files created:**
 - `internal/auth/identity.go`
+- `internal/auth/identity_test.go`
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
 - `internal/tui/setup.go`
+
+**Implementation notes:**
+- Created `IdentityKey` struct with methods:
+  - `GenerateIdentityKey()` - generates new Ed25519 keypair
+  - `LoadIdentityKey(path)` - loads existing key from PEM file
+  - `Save(path)` - saves key in OpenSSH format with 0600 permissions
+  - `Fingerprint()` - returns SHA256 fingerprint
+  - `FingerprintLegacy()` - returns MD5 fingerprint
+  - `AuthorizedKey()` - returns public key in OpenSSH format
+  - `Sign(message)` - signs a message
+  - `Signer()` - returns ssh.Signer for authentication
+  - `Info()` - returns displayable key information
+- Added `LoadOrGenerateIdentityKey()` convenience function
+- Added `DefaultIdentityKeyPath()` helper
+- Added `IdentityKeyExists()` check
+- Added `IdentityKeyPath` field to `SetupData`
+- Added "identity-key" wizard step that:
+  - Generates or loads existing key
+  - Displays key location, fingerprint, and truncated public key
+  - Shows warning to keep key secure
+- Updated `ToBibConfig()` and `ToBibdConfig()` to include key path
+- Comprehensive unit tests (13 tests) covering all functionality
 
 ### 2.2 Node Discovery
 
