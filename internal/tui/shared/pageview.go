@@ -87,3 +87,8 @@ func (p *PageView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (p *PageView) View() string {
 	return p.page.View()
 }
+
+// Page returns the underlying app.Page.
+func (p *PageView) Page() app.Page {
+	return p.page
+}

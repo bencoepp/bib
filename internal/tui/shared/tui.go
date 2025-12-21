@@ -3,7 +3,11 @@
 package shared
 
 import (
+	"context"
+	"time"
+
 	"bib/internal/config"
+	"bib/internal/grpc/client"
 	"bib/internal/tui/app"
 	"bib/internal/tui/i18n"
 	"bib/internal/tui/layout"
@@ -11,6 +15,7 @@ import (
 	"bib/internal/tui/themes"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Mode represents the TUI mode.
@@ -23,15 +28,38 @@ const (
 	ModeSSH
 )
 
+// Connection messages
+type (
+	// ConnectingMsg indicates connection is in progress
+	ConnectingMsg struct{}
+
+	// ConnectedMsg indicates successful connection
+	ConnectedMsg struct {
+		Client *client.Client
+	}
+
+	// ConnectionErrorMsg indicates connection failed
+	ConnectionErrorMsg struct {
+		Err error
+	}
+
+	// RetryConnectionMsg triggers a connection retry
+	RetryConnectionMsg struct{}
+)
+
 // TUI is the shared TUI application model that uses the Shell layout.
 type TUI struct {
 	// Mode of operation
 	mode Mode
 
 	// Configuration
-	config *config.BibConfig
-	theme  *themes.Theme
-	i18n   *i18n.I18n
+	config        *config.BibConfig
+	theme         *themes.Theme
+	i18n          *i18n.I18n
+	clientOptions *client.Options
+
+	// gRPC client
+	client *client.Client
 
 	// App state
 	appState *app.State
@@ -44,6 +72,11 @@ type TUI struct {
 
 	// Dialog overlay
 	dialog app.Dialog
+
+	// Connection state
+	connecting      bool
+	connected       bool
+	connectionError string
 
 	// State
 	ready    bool
@@ -95,6 +128,23 @@ func WithSSHContext(user, peerID string) Option {
 	}
 }
 
+// WithClient sets an existing gRPC client.
+func WithClient(c *client.Client) Option {
+	return func(t *TUI) {
+		t.client = c
+		if c != nil {
+			t.connected = c.IsConnected()
+		}
+	}
+}
+
+// WithClientOptions sets the client connection options.
+func WithClientOptions(opts *client.Options) Option {
+	return func(t *TUI) {
+		t.clientOptions = opts
+	}
+}
+
 // New creates a new shared TUI application.
 func New(opts ...Option) *TUI {
 	t := &TUI{
@@ -128,7 +178,6 @@ func New(opts ...Option) *TUI {
 // initializePages creates and registers all pages as ContentViews.
 func (t *TUI) initializePages() {
 	// Create a minimal app reference for pages
-	// Pages need access to state and theme
 	appRef := app.New(
 		app.WithConfig(t.config),
 		app.WithTheme(t.theme),
@@ -164,10 +213,72 @@ func (t *TUI) setupSidebar() {
 
 // Init implements tea.Model.
 func (t *TUI) Init() tea.Cmd {
-	return tea.Batch(
-		t.shell.Init(),
-		t.appState.Connect(),
-	)
+	cmds := []tea.Cmd{t.shell.Init()}
+
+	// If we don't have a client, start connecting
+	if t.client == nil {
+		t.connecting = true
+		cmds = append(cmds, t.connectCmd())
+	} else {
+		t.connected = t.client.IsConnected()
+		t.updatePagesWithClient()
+	}
+
+	return tea.Batch(cmds...)
+}
+
+func (t *TUI) connectCmd() tea.Cmd {
+	return func() tea.Msg {
+		// Build options if not provided
+		opts := t.clientOptions
+		if opts == nil {
+			defaultOpts := client.DefaultOptions()
+			opts = &defaultOpts
+
+			// Apply config settings if available
+			if t.config != nil {
+				connCfg := t.config.Connection
+				if connCfg.Timeout != "" {
+					if timeout, err := time.ParseDuration(connCfg.Timeout); err == nil {
+						opts.Timeout = timeout
+					}
+				}
+				if connCfg.RetryAttempts > 0 {
+					opts.RetryAttempts = connCfg.RetryAttempts
+				}
+				// Apply TLS settings
+				opts.TLS.InsecureSkipVerify = connCfg.TLS.SkipVerify
+				opts.TLS.CAFile = connCfg.TLS.CAFile
+			}
+		}
+
+		// Create client
+		c, err := client.New(*opts)
+		if err != nil {
+			return ConnectionErrorMsg{Err: err}
+		}
+
+		// Connect with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
+		defer cancel()
+
+		if err := c.Connect(ctx); err != nil {
+			return ConnectionErrorMsg{Err: err}
+		}
+
+		return ConnectedMsg{Client: c}
+	}
+}
+
+func (t *TUI) updatePagesWithClient() {
+	// Update dashboard page with client
+	for _, pv := range t.pageViews {
+		if pv.ID() == pages.PageDashboard {
+			if dp, ok := pv.Page().(*pages.DashboardPage); ok {
+				dp.SetClient(t.client)
+			}
+		}
+	}
 }
 
 // Update implements tea.Model.
@@ -175,11 +286,50 @@ func (t *TUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case ConnectedMsg:
+		t.connecting = false
+		t.connected = true
+		t.connectionError = ""
+		t.client = msg.Client
+		t.appState.Connected = true
+		t.updatePagesWithClient()
+		t.updateInfoBar()
+		return t, nil
+
+	case ConnectionErrorMsg:
+		t.connecting = false
+		t.connected = false
+		t.connectionError = msg.Err.Error()
+		t.appState.Connected = false
+		t.updateInfoBar()
+		return t, nil
+
+	case RetryConnectionMsg:
+		t.connecting = true
+		t.connectionError = ""
+		return t, t.connectCmd()
+
 	case tea.KeyMsg:
 		// Handle quit
 		if msg.String() == "ctrl+c" {
 			t.quitting = true
+			if t.client != nil {
+				t.client.Close()
+			}
 			return t, tea.Quit
+		}
+
+		// If showing connection dialog, handle its keys
+		if !t.connected && !t.connecting {
+			switch msg.String() {
+			case "r":
+				// Retry connection
+				return t, func() tea.Msg { return RetryConnectionMsg{} }
+			case "q":
+				t.quitting = true
+				return t, tea.Quit
+			}
+			return t, nil
 		}
 
 		// If dialog is open, send keys to dialog first
@@ -199,14 +349,15 @@ func (t *TUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q":
 			t.quitting = true
+			if t.client != nil {
+				t.client.Close()
+			}
 			return t, tea.Quit
 
 		case "?":
-			// Show help - could add help dialog here
 			return t, nil
 
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			// Number keys switch views
 			idx := int(msg.String()[0] - '1')
 			if idx < len(t.pageViews) {
 				t.shell.SetActiveView(t.pageViews[idx].ID())
@@ -218,8 +369,6 @@ func (t *TUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		t.width = msg.Width
 		t.height = msg.Height
 		t.ready = true
-
-		// Update info bar with connection info
 		t.updateInfoBar()
 	}
 
@@ -243,6 +392,11 @@ func (t *TUI) View() string {
 		return "Loading..."
 	}
 
+	// Show connection dialog if not connected
+	if !t.connected {
+		return t.renderConnectionDialog()
+	}
+
 	content := t.shell.View()
 
 	// Overlay dialog if present
@@ -253,16 +407,61 @@ func (t *TUI) View() string {
 	return content
 }
 
+// renderConnectionDialog renders the connection status/error dialog
+func (t *TUI) renderConnectionDialog() string {
+	boxWidth := 50
+	boxHeight := 10
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(t.theme.Palette.Primary)
+
+	mutedStyle := lipgloss.NewStyle().
+		Foreground(t.theme.Palette.TextMuted)
+
+	errorStyle := lipgloss.NewStyle().
+		Foreground(t.theme.Palette.Error)
+
+	var content string
+	if t.connecting {
+		content = titleStyle.Render("Connecting to bibd...") + "\n\n" +
+			mutedStyle.Render("Please wait...")
+	} else {
+		// Connection error
+		content = titleStyle.Render("Connection Failed") + "\n\n" +
+			errorStyle.Render(t.truncateError(t.connectionError, boxWidth-4)) + "\n\n" +
+			mutedStyle.Render("[r] retry  [q] quit")
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.theme.Palette.Primary).
+		Width(boxWidth).
+		Height(boxHeight).
+		Padding(1, 2).
+		Align(lipgloss.Center, lipgloss.Center).
+		Render(content)
+
+	// Place box in center
+	return lipgloss.Place(t.width, t.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func (t *TUI) truncateError(err string, maxLen int) string {
+	if len(err) <= maxLen {
+		return err
+	}
+	return err[:maxLen-3] + "..."
+}
+
 // overlayDialog renders a dialog centered over the content.
 func (t *TUI) overlayDialog(background, dialog string) string {
-	// For now, just center the dialog (Shell already handles full layout)
 	return dialog
 }
 
 // updateInfoBar updates the info bar with current state.
 func (t *TUI) updateInfoBar() {
 	data := layout.InfoBarData{
-		Connected: t.appState.Connected,
+		Connected: t.connected,
 		ShowTime:  true,
 	}
 
@@ -282,4 +481,9 @@ func (t *TUI) Shell() *layout.Shell {
 // State returns the application state.
 func (t *TUI) State() *app.State {
 	return t.appState
+}
+
+// Client returns the gRPC client.
+func (t *TUI) Client() *client.Client {
+	return t.client
 }
