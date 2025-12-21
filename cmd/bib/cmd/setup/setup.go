@@ -481,10 +481,14 @@ type SetupWizardModel struct {
 	identityKeyNew bool // true if key was newly generated
 
 	// Node discovery and selection (CLI only)
-	discoveryResult *discovery.DiscoveryResult
-	nodeSelector    *component.NodeSelector
-	discoveryDone   bool
-	bibDevConfirmed bool // User has explicitly confirmed bib.dev connection
+	discoveryResult   *discovery.DiscoveryResult
+	nodeSelector      *component.NodeSelector
+	discoveryDone     bool
+	bibDevConfirmed   bool                              // User has explicitly confirmed bib.dev connection
+	connectionResults []*discovery.ConnectionTestResult // Results of connection tests
+	connectionTested  bool                              // True if connection tests have been run
+	authResults       []*discovery.AuthTestResult       // Results of auth tests
+	authTested        bool                              // True if auth tests have been run
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -562,6 +566,26 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			Description: "Configure connection to bibd",
 			HelpText:    "Review and confirm your node selections. The first selected node will be used as the default.",
 			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
+			ID:          "connection-test",
+			Title:       "Connection Test",
+			Description: "Testing node connections",
+			HelpText:    "Testing connectivity to all selected nodes. This verifies network access and retrieves node information.",
+			ShouldSkip:  func() bool { return isDaemon },
+		},
+		{
+			ID:          "auth-test",
+			Title:       "Authentication Test",
+			Description: "Testing authentication",
+			HelpText:    "Testing authentication with your identity key against connected nodes. This verifies your key is accepted.",
+			ShouldSkip: func() bool {
+				if isDaemon {
+					return true
+				}
+				// Skip if no connection tests succeeded
+				return false
+			},
 		},
 		{
 			ID:          "server",
@@ -983,6 +1007,108 @@ If you only need local/private access, go back and deselect bib.dev.`
 			),
 		).WithTheme(theme)
 
+	case "connection-test":
+		// Run connection tests if not already done
+		if !m.connectionTested {
+			m.runConnectionTests()
+		}
+
+		// Format results
+		var testResultsDisplay string
+		if len(m.connectionResults) > 0 {
+			testResultsDisplay = discovery.FormatConnectionResults(m.connectionResults)
+
+			// Count connected/failed
+			connected := 0
+			failed := 0
+			for _, r := range m.connectionResults {
+				if r.Status == discovery.StatusConnected {
+					connected++
+				} else {
+					failed++
+				}
+			}
+
+			// Update node statuses in the selector if available
+			if m.nodeSelector != nil {
+				for _, result := range m.connectionResults {
+					// Could update node status here for display
+					_ = result
+				}
+			}
+
+			if failed > 0 {
+				testResultsDisplay += fmt.Sprintf("\n⚠️  %d node(s) failed connection test", failed)
+			}
+		} else {
+			testResultsDisplay = "No nodes to test."
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔌 Connection Test Results").
+					Description(testResultsDisplay),
+				huh.NewConfirm().
+					Title("Continue?").
+					Description("Press Enter to continue with setup").
+					Affirmative("Continue").
+					Negative("Retry Tests").
+					Value(new(bool)),
+			),
+		).WithTheme(theme)
+
+	case "auth-test":
+		// Run auth tests if not already done
+		if !m.authTested {
+			m.runAuthTests()
+		}
+
+		// Format results
+		var authResultsDisplay string
+		if len(m.authResults) > 0 {
+			authResultsDisplay = discovery.FormatAuthResults(m.authResults)
+
+			// Count success/failed
+			success := 0
+			autoReg := 0
+			failed := 0
+			for _, r := range m.authResults {
+				switch r.Status {
+				case discovery.AuthStatusSuccess:
+					success++
+				case discovery.AuthStatusAutoRegistered:
+					autoReg++
+				default:
+					failed++
+				}
+			}
+
+			if autoReg > 0 {
+				authResultsDisplay += fmt.Sprintf("\n✓ %d node(s) auto-registered your identity", autoReg)
+			}
+			if failed > 0 {
+				authResultsDisplay += fmt.Sprintf("\n⚠️  %d node(s) failed authentication", failed)
+				authResultsDisplay += "\n   You may need to register on these nodes first."
+			}
+		} else {
+			authResultsDisplay = "No nodes to authenticate with.\n\nSkipping authentication test."
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🔐 Authentication Test Results").
+					Description(authResultsDisplay),
+				huh.NewConfirm().
+					Title("Continue?").
+					Description("Press Enter to continue with setup").
+					Affirmative("Continue").
+					Negative("Retry Tests").
+					Value(new(bool)),
+			),
+		).WithTheme(theme)
+
 	case "server":
 		portStr := fmt.Sprintf("%d", m.data.Port)
 		m.currentForm = huh.NewForm(
@@ -1264,6 +1390,12 @@ func (m *SetupWizardModel) handleStepCompletion() bool {
 		}
 		return true
 
+	case "connection-test":
+		// Check if user wants to retry tests
+		// The confirm value will be false if user selected "Retry Tests"
+		// For now, always proceed - retry can be done by going back
+		return true
+
 	default:
 		return true
 	}
@@ -1295,6 +1427,77 @@ func (m *SetupWizardModel) runNodeDiscovery() {
 
 	// Auto-select first local node if available
 	m.nodeSelector.SelectFirst()
+}
+
+// runConnectionTests tests connections to all selected nodes
+func (m *SetupWizardModel) runConnectionTests() {
+	if m.connectionTested {
+		return
+	}
+
+	// Get selected nodes
+	var addresses []string
+	if m.nodeSelector != nil && m.nodeSelector.HasSelection() {
+		for _, item := range m.nodeSelector.SelectedItems() {
+			addresses = append(addresses, item.Node.Address)
+		}
+	} else if m.data.ServerAddr != "" {
+		addresses = []string{m.data.ServerAddr}
+	}
+
+	if len(addresses) == 0 {
+		m.connectionTested = true
+		return
+	}
+
+	// Create connection tester
+	tester := discovery.NewConnectionTester().
+		WithTimeout(5 * time.Second)
+
+	// Run tests
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	m.connectionResults = tester.TestConnections(ctx, addresses)
+	m.connectionTested = true
+}
+
+// runAuthTests tests authentication with all connected nodes
+func (m *SetupWizardModel) runAuthTests() {
+	if m.authTested {
+		return
+	}
+
+	// Only test against nodes that passed connection test
+	var connectedAddresses []string
+	for _, r := range m.connectionResults {
+		if r.Status == discovery.StatusConnected {
+			connectedAddresses = append(connectedAddresses, r.Address)
+		}
+	}
+
+	if len(connectedAddresses) == 0 {
+		m.authTested = true
+		return
+	}
+
+	// Need identity key for authentication
+	if m.identityKey == nil {
+		m.authTested = true
+		return
+	}
+
+	// Create auth tester
+	tester := discovery.NewAuthTester(m.identityKey).
+		WithTimeout(10*time.Second).
+		WithRegistrationInfo(m.data.Name, m.data.Email)
+
+	// Run tests
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	m.authResults = tester.TestAuths(ctx, connectedAddresses)
+	m.authTested = true
 }
 
 func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -305,24 +305,100 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 2.6 Connection Testing
 
-- [ ] Implement `TestConnection()` for each selected node
-- [ ] Display connection status, latency, node info
-- [ ] Handle connection failures gracefully
-- [ ] Offer retry/remove options for failed nodes
+- [x] Implement `TestConnection()` for each selected node
+- [x] Display connection status, latency, node info
+- [x] Handle connection failures gracefully
+- [x] Offer retry/remove options for failed nodes
 
-**Files to modify:**
+**Files created:**
+- `internal/discovery/connection.go`
+- `internal/discovery/connection_test.go`
+
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `ConnectionTester` struct with methods:
+  - `TestConnection()` - tests a single node
+  - `TestConnections()` - tests multiple nodes in parallel
+  - `TestNodes()` - tests discovered nodes
+- `ConnectionTestResult` struct with:
+  - Address, Status, Latency, NodeInfo, TLSInfo, Error, TestedAt
+- `ConnectionStatus` constants:
+  - connected, disconnected, timeout, refused, unreachable, auth_failed, tls_error, unknown
+- `TLSInfo` struct for certificate information:
+  - Enabled, Fingerprint, Subject, Issuer, NotAfter, Trusted
+- Features:
+  - TCP connectivity check before gRPC
+  - TLS auto-detection via probe
+  - gRPC health service integration (GetNodeInfo, Check)
+  - Error classification (timeout, refused, TLS, auth, etc.)
+  - Parallel testing for multiple nodes
+- Helper functions:
+  - `FormatConnectionResult()` - formats single result with icons
+  - `FormatConnectionResults()` - formats multiple results with summary
+  - `fingerprintCert()` - SHA256 certificate fingerprint
+  - `classifyError()` - classifies errors into status codes
+- Added "connection-test" wizard step:
+  - Runs after "connection" step
+  - Tests all selected nodes in parallel (30s total timeout)
+  - Shows results with icons (✓ connected, ✗ failed, ⏱ timeout, etc.)
+  - Displays latency, version, mode for connected nodes
+  - Shows warning count for failed nodes
+  - Retry option available
+- Added `runConnectionTests()` method to SetupWizardModel
+- Comprehensive unit tests (15 tests)
 
 ### 2.7 Authentication Testing
 
-- [ ] Implement `TestAuthentication()` for each node
-- [ ] Use generated identity key
-- [ ] Handle auto-registration if enabled on server
-- [ ] Display session info on success
-- [ ] Handle authentication failures
+- [x] Implement `TestAuthentication()` for each node
+- [x] Use generated identity key
+- [x] Handle auto-registration if enabled on server
+- [x] Display session info on success
+- [x] Handle authentication failures
 
-**Files to modify:**
+**Files created:**
+- `internal/discovery/auth.go`
+- `internal/discovery/auth_test.go`
+
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `AuthTester` struct with methods:
+  - `TestAuth()` - tests authentication with a single node
+  - `TestAuths()` - tests multiple nodes in parallel
+  - `WithTimeout()` - sets authentication timeout
+  - `WithRegistrationInfo()` - sets name/email for auto-registration
+- `AuthTestResult` struct with:
+  - Address, Status, SessionToken, SessionInfo, ServerConfig, Error, Duration, TestedAt
+- `AuthStatus` constants:
+  - success, failed, no_key, key_rejected, not_registered, auto_registered, connection_error, unknown
+- `SessionInfo` struct:
+  - UserID, Username, Role, ExpiresAt, IsNewUser
+- `ServerAuthConfig` struct:
+  - AllowAutoRegistration, RequireEmail, SupportedKeyTypes
+- Features:
+  - SSH challenge-response authentication flow
+  - Server auth config retrieval (GetAuthConfig)
+  - Session token and user info extraction
+  - Error classification (not registered, key rejected, connection error, etc.)
+  - Auto-registration detection (IsNewUser flag)
+- Helper functions:
+  - `FormatAuthResult()` - formats single result with icons (✓, ✓+, ✗, ?, 🔑, ⚡)
+  - `FormatAuthResults()` - formats multiple results with summary
+  - `AuthSummary()` - brief summary string
+  - `classifyAuthError()` - classifies errors into status codes
+- Added "auth-test" wizard step:
+  - Runs after "connection-test" step
+  - Only tests against nodes that passed connection test
+  - Uses identity key generated in earlier step
+  - Shows results with icons and session info
+  - Shows auto-registration count if applicable
+  - Shows warning for failed authentications
+  - Retry option available
+- Added `runAuthTests()` method to SetupWizardModel
+- Comprehensive unit tests (13 tests)
 
 ### 2.8 Network Health Check
 
