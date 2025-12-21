@@ -61,8 +61,8 @@ linters:
     - gocognit  # Cognitive complexity managed by review
     - godot     # Comment formatting too strict
     - godox     # Allow TODO/FIXME comments
-    - goerr113  # Too strict about error wrapping
-    - gomnd     # Magic numbers are sometimes acceptable
+    - err113    # Too strict about error wrapping (formerly goerr113)
+    - mnd       # Magic numbers are sometimes acceptable (formerly gomnd)
     - lll       # Line length managed by editor
     - nlreturn  # Too strict about newlines
     - wsl       # Too strict about whitespace
@@ -95,6 +95,7 @@ linters-settings:
       - performance
       - style
     disabled-checks:
+      - evalOrder  # Causes nil pointer panic in go-critic v0.12.0
       - hugeParam  # Sometimes large params are necessary
       - rangeValCopy  # Sometimes copying is intentional
 
