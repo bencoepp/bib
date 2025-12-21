@@ -402,26 +402,105 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 2.8 Network Health Check
 
-- [ ] Query peer count from each connected node
-- [ ] Display bootstrap connection status
-- [ ] Show DHT status
-- [ ] Create network health summary UI
+- [x] Query peer count from each connected node
+- [x] Display bootstrap connection status
+- [x] Show DHT status
+- [x] Create network health summary UI
 
-**Files to modify:**
+**Files created:**
+- `internal/discovery/network_health.go`
+- `internal/discovery/network_health_test.go`
+
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `NetworkHealthChecker` struct with methods:
+  - `CheckHealth()` - checks health of a single node
+  - `CheckHealthMultiple()` - checks multiple nodes in parallel
+  - `GetSummary()` - creates aggregated summary from results
+  - `WithTimeout()` - sets health check timeout
+- `NetworkHealthResult` struct with:
+  - Address, Status, NodeInfo, Network, Error, Duration, TestedAt
+- `NetworkHealthStatus` constants:
+  - good, degraded, poor, offline
+- `NetworkStats` struct with:
+  - ConnectedPeers, KnownPeers, BootstrapConnected, DHTRoutingTableSize
+  - ActiveStreams, BytesSent, BytesReceived
+- `NetworkHealthSummary` struct with:
+  - TotalNodes, HealthyNodes, DegradedNodes, OfflineNodes
+  - TotalConnectedPeers, AverageConnectedPeers, BootstrapConnected
+  - OverallStatus
+- Features:
+  - gRPC GetNodeInfo with IncludeNetwork flag
+  - Peer count extraction from NetworkInfo
+  - Bootstrap connection status detection
+  - DHT routing table size retrieval
+  - Health status determination based on:
+    - Good: peers > 0 and bootstrap connected
+    - Degraded: peers > 0 or bootstrap connected (not both)
+    - Poor: no peers, no bootstrap
+    - Offline: connection failed
+  - Aggregated summary with overall status
+- Helper functions:
+  - `FormatNetworkHealthResult()` - formats single result with icons (✓, ⚠, ✗, ⊘)
+  - `FormatNetworkHealthResults()` - formats multiple results with summary
+  - `FormatNetworkHealthSummary()` - formats summary with status details
+  - `NetworkHealthStatusIcon()` - returns icon for status
+  - `NetworkHealthBrief()` - brief one-line summary
+- Added "network-health" wizard step:
+  - Runs after "auth-test" step
+  - Only checks nodes that passed connection test
+  - Shows peer count, bootstrap status, DHT info per node
+  - Shows aggregated summary
+  - Provides recommendations based on status
+  - Retry option available
+- Added `runNetworkHealthCheck()` method to SetupWizardModel
+- Comprehensive unit tests (17 tests)
 
 ### 2.9 Quick Start Mode (CLI)
 
-- [ ] Implement `setupBibQuick()` function
-- [ ] Prompt only for name and email
-- [ ] Auto-generate identity key
-- [ ] Auto-discover and select local nodes
-- [ ] Prompt for bib.dev confirmation if no local nodes
-- [ ] Test connections
-- [ ] Save minimal config
+- [x] Implement `setupBibQuick()` function
+- [x] Prompt only for name and email
+- [x] Auto-generate identity key
+- [x] Auto-discover and select local nodes
+- [x] Prompt for bib.dev confirmation if no local nodes
+- [x] Test connections
+- [x] Save minimal config
 
-**Files to modify:**
+**Files created:**
+- `cmd/bib/cmd/setup/setup_test.go`
+
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Implemented complete `setupBibQuick()` function with 9 steps:
+  1. **Name/Email Prompt**: Simple huh form asking for essential identity info
+  2. **Identity Key Generation**: Auto-generates Ed25519 key using `auth.GenerateIdentityKey()`
+  3. **Node Discovery**: Runs 5-second discovery for local/mDNS nodes
+  4. **bib.dev Prompt**: If no local nodes found, prompts for public network connection
+  5. **Node Configuration**: Auto-selects discovered local nodes, adds bib.dev if confirmed
+  6. **Connection Testing**: Tests all configured nodes with 5s timeout per node
+  7. **Default Preferences**: Sets table output, color enabled, info log level
+  8. **Config Save**: Generates and saves config to `~/.config/bib/config.yaml`
+  9. **Summary Display**: Shows identity, key fingerprint, configured nodes, next steps
+- Features:
+  - Minimal user interaction (only name/email required)
+  - Auto-discovery of local bibd instances
+  - Clear progress output with icons
+  - Connection test results displayed
+  - Helpful next steps shown based on configuration
+  - Graceful cancellation with Ctrl+C
+- User-friendly output with:
+  - Step icons (🚀, 👤, 🔑, 🔍, 🌐, 🔌, 💾, ✅)
+  - Status indicators (✓ for success, ✗ for failure)
+  - Summary box with configuration details
+  - Context-aware next steps
+- Added unit tests for:
+  - DeploymentTarget string/IsValid
+  - ValidReconfigureSections for bib/bibd
+  - Setup flag variable access
 
 ---
 

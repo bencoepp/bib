@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -441,10 +442,222 @@ func runDaemonWizardWithProgress(data *tui.SetupData, progress *config.SetupProg
 
 // setupBibQuick runs quick CLI setup with minimal prompts
 func setupBibQuick() error {
-	// TODO: Implement quick CLI setup (Phase 2.9)
-	// For now, fall back to full wizard
-	fmt.Println("Running quick setup...")
-	return setupBibWizard()
+	fmt.Println("🚀 Quick Setup - bib CLI")
+	fmt.Println()
+
+	// Create setup data with defaults
+	data := tui.DefaultSetupData()
+
+	// Get the huh theme
+	theme := huh.ThemeCatppuccin()
+
+	// Step 1: Prompt for name and email only
+	var name, email string
+	nameEmailForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("👤 Quick Setup").
+				Description("We just need a few details to get you started.\n\nYour name and email are used for your identity key."),
+			huh.NewInput().
+				Title("Your Name").
+				Description("Display name for your identity").
+				Placeholder("John Doe").
+				Value(&name).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Email").
+				Description("Email address for your identity").
+				Placeholder("you@example.com").
+				Value(&email).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("email is required")
+					}
+					if !strings.Contains(s, "@") {
+						return fmt.Errorf("please enter a valid email address")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(theme)
+
+	if err := nameEmailForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	data.Name = name
+	data.Email = email
+
+	// Step 2: Generate identity key
+	fmt.Println("\n🔑 Generating identity key...")
+	identityKey, err := auth.GenerateIdentityKey()
+	if err != nil {
+		return fmt.Errorf("failed to generate identity key: %w", err)
+	}
+
+	keyPath, err := auth.DefaultIdentityKeyPath(config.AppBib)
+	if err != nil {
+		return fmt.Errorf("failed to get identity key path: %w", err)
+	}
+	if err := identityKey.Save(keyPath); err != nil {
+		return fmt.Errorf("failed to save identity key: %w", err)
+	}
+	data.IdentityKeyPath = keyPath
+	fmt.Printf("   ✓ Key saved to %s\n", keyPath)
+	fmt.Printf("   ✓ Fingerprint: %s\n", identityKey.Fingerprint())
+
+	// Step 3: Auto-discover local nodes
+	fmt.Println("\n🔍 Discovering local nodes...")
+	discoverer := discovery.NewWithDefaults()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := discoverer.Discover(ctx)
+
+	localNodes := []discovery.DiscoveredNode{}
+	for _, node := range result.Nodes {
+		if node.Method == discovery.MethodLocal || node.Method == discovery.MethodMDNS {
+			localNodes = append(localNodes, node)
+		}
+	}
+
+	// Step 4: Decide on bib.dev
+	useBibDev := false
+	if len(localNodes) == 0 {
+		fmt.Println("   No local nodes found.")
+		fmt.Println()
+
+		// Prompt for bib.dev confirmation
+		bibDevForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🌐 Connect to bib.dev?").
+					Description("No local bibd instances were found.\n\nbib.dev is the PUBLIC bib network where you can:\n  • Collaborate with users worldwide\n  • Access publicly shared datasets\n  • Contribute to the bib ecosystem\n\n⚠️  Your identity will be visible on the public network."),
+				huh.NewConfirm().
+					Title("Connect to bib.dev public network?").
+					Affirmative("Yes, connect").
+					Negative("No, skip for now").
+					Value(&useBibDev),
+			),
+		).WithTheme(theme)
+
+		if err := bibDevForm.Run(); err != nil {
+			if err == huh.ErrUserAborted {
+				fmt.Println("\nSetup cancelled.")
+				return nil
+			}
+			return err
+		}
+
+		data.BibDevConfirmed = useBibDev
+	} else {
+		fmt.Printf("   ✓ Found %d local node(s)\n", len(localNodes))
+	}
+
+	// Step 5: Configure selected nodes
+	if len(localNodes) > 0 {
+		// Add local nodes
+		for i, node := range localNodes {
+			alias := fmt.Sprintf("Local (%s)", node.Address)
+			if node.NodeInfo != nil && node.NodeInfo.Name != "" {
+				alias = node.NodeInfo.Name
+			}
+			data.AddSelectedNode(node.Address, alias, string(node.Method), i == 0)
+		}
+		data.ServerAddr = localNodes[0].Address
+	}
+
+	if useBibDev {
+		// Add bib.dev
+		data.AddSelectedNode("bib.dev:4000", "bib.dev (Public Network)", "public", len(localNodes) == 0)
+		if len(localNodes) == 0 {
+			data.ServerAddr = "bib.dev:4000"
+		}
+	}
+
+	// Step 6: Test connections
+	if len(data.SelectedNodes) > 0 {
+		fmt.Println("\n🔌 Testing connections...")
+		tester := discovery.NewConnectionTester().WithTimeout(5 * time.Second)
+		addresses := make([]string, len(data.SelectedNodes))
+		for i, n := range data.SelectedNodes {
+			addresses[i] = n.Address
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		results := tester.TestConnections(ctx, addresses)
+		cancel()
+
+		connected := 0
+		for _, r := range results {
+			if r.Status == discovery.StatusConnected {
+				connected++
+				fmt.Printf("   ✓ %s connected (%s)\n", r.Address, r.Latency.Round(time.Millisecond))
+			} else {
+				fmt.Printf("   ✗ %s failed: %s\n", r.Address, r.Status)
+			}
+		}
+
+		if connected == 0 {
+			fmt.Println("\n⚠️  No nodes could be connected. You can configure manually later with 'bib setup'.")
+		}
+	} else {
+		fmt.Println("\n⚠️  No nodes configured. You can add nodes later with 'bib connect'.")
+	}
+
+	// Step 7: Set default preferences
+	data.OutputFormat = "table"
+	data.ColorEnabled = true
+	data.LogLevel = "info"
+
+	// Step 8: Generate and save config
+	fmt.Println("\n💾 Saving configuration...")
+	cfg := data.ToBibConfig()
+	configDir, err := config.UserConfigDir(config.AppBib)
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	if err := config.SaveBib(cfg, configPath); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	fmt.Printf("   ✓ Config saved to %s\n", configPath)
+
+	// Step 9: Show summary and next steps
+	fmt.Println("\n" + strings.Repeat("─", 50))
+	fmt.Println("✅ Quick setup complete!")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	fmt.Printf("  Identity: %s <%s>\n", data.Name, data.Email)
+	fmt.Printf("  Key:      %s\n", identityKey.Fingerprint())
+	if len(data.SelectedNodes) > 0 {
+		fmt.Printf("  Nodes:    %d configured\n", len(data.SelectedNodes))
+		fmt.Printf("  Default:  %s\n", data.ServerAddr)
+	} else {
+		fmt.Println("  Nodes:    None configured")
+	}
+	fmt.Println()
+	fmt.Println("Next steps:")
+	if len(data.SelectedNodes) == 0 {
+		fmt.Println("  • Run 'bib connect <address>' to connect to a node")
+		fmt.Println("  • Run 'bib setup' for full configuration")
+	} else {
+		fmt.Println("  • Run 'bib status' to check connection status")
+		fmt.Println("  • Run 'bib topic list' to see available topics")
+	}
+	fmt.Println("  • Run 'bib help' for more commands")
+	fmt.Println()
+
+	return nil
 }
 
 // setupBibdQuick runs quick daemon setup with minimal prompts
@@ -481,14 +694,16 @@ type SetupWizardModel struct {
 	identityKeyNew bool // true if key was newly generated
 
 	// Node discovery and selection (CLI only)
-	discoveryResult   *discovery.DiscoveryResult
-	nodeSelector      *component.NodeSelector
-	discoveryDone     bool
-	bibDevConfirmed   bool                              // User has explicitly confirmed bib.dev connection
-	connectionResults []*discovery.ConnectionTestResult // Results of connection tests
-	connectionTested  bool                              // True if connection tests have been run
-	authResults       []*discovery.AuthTestResult       // Results of auth tests
-	authTested        bool                              // True if auth tests have been run
+	discoveryResult      *discovery.DiscoveryResult
+	nodeSelector         *component.NodeSelector
+	discoveryDone        bool
+	bibDevConfirmed      bool                              // User has explicitly confirmed bib.dev connection
+	connectionResults    []*discovery.ConnectionTestResult // Results of connection tests
+	connectionTested     bool                              // True if connection tests have been run
+	authResults          []*discovery.AuthTestResult       // Results of auth tests
+	authTested           bool                              // True if auth tests have been run
+	networkHealthResults []*discovery.NetworkHealthResult  // Results of network health checks
+	networkHealthChecked bool                              // True if network health has been checked
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -584,6 +799,18 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 					return true
 				}
 				// Skip if no connection tests succeeded
+				return false
+			},
+		},
+		{
+			ID:          "network-health",
+			Title:       "Network Health",
+			Description: "Checking network status",
+			HelpText:    "Querying peer count, bootstrap connection status, and DHT status from connected nodes.",
+			ShouldSkip: func() bool {
+				if isDaemon {
+					return true
+				}
 				return false
 			},
 		},
@@ -1109,6 +1336,57 @@ If you only need local/private access, go back and deselect bib.dev.`
 			),
 		).WithTheme(theme)
 
+	case "network-health":
+		// Run network health check if not already done
+		if !m.networkHealthChecked {
+			m.runNetworkHealthCheck()
+		}
+
+		// Format results
+		var healthDisplay string
+		if len(m.networkHealthResults) > 0 {
+			healthDisplay = discovery.FormatNetworkHealthResults(m.networkHealthResults)
+
+			// Get summary
+			checker := discovery.NewNetworkHealthChecker()
+			summary := checker.GetSummary(m.networkHealthResults)
+
+			// Add summary at the end
+			healthDisplay += "\n" + discovery.FormatNetworkHealthSummary(summary)
+
+			// Add recommendations based on status
+			switch summary.OverallStatus {
+			case discovery.NetworkHealthGood:
+				healthDisplay += "\n✓ Network health is good. You're ready to go!"
+			case discovery.NetworkHealthDegraded:
+				healthDisplay += "\n⚠️  Some nodes have degraded connectivity."
+				if !summary.BootstrapConnected {
+					healthDisplay += "\n   Consider checking bootstrap node configuration."
+				}
+			case discovery.NetworkHealthPoor:
+				healthDisplay += "\n⚠️  Network connectivity is poor."
+				healthDisplay += "\n   Check firewall settings and network configuration."
+			case discovery.NetworkHealthOffline:
+				healthDisplay += "\n✗ Unable to retrieve network health information."
+			}
+		} else {
+			healthDisplay = "No connected nodes to check network health.\n\nSkipping network health check."
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🌐 Network Health Check").
+					Description(healthDisplay),
+				huh.NewConfirm().
+					Title("Continue?").
+					Description("Press Enter to continue with setup").
+					Affirmative("Continue").
+					Negative("Retry Check").
+					Value(new(bool)),
+			),
+		).WithTheme(theme)
+
 	case "server":
 		portStr := fmt.Sprintf("%d", m.data.Port)
 		m.currentForm = huh.NewForm(
@@ -1498,6 +1776,37 @@ func (m *SetupWizardModel) runAuthTests() {
 
 	m.authResults = tester.TestAuths(ctx, connectedAddresses)
 	m.authTested = true
+}
+
+// runNetworkHealthCheck checks network health of all connected nodes
+func (m *SetupWizardModel) runNetworkHealthCheck() {
+	if m.networkHealthChecked {
+		return
+	}
+
+	// Only check nodes that passed connection test
+	var connectedAddresses []string
+	for _, r := range m.connectionResults {
+		if r.Status == discovery.StatusConnected {
+			connectedAddresses = append(connectedAddresses, r.Address)
+		}
+	}
+
+	if len(connectedAddresses) == 0 {
+		m.networkHealthChecked = true
+		return
+	}
+
+	// Create health checker
+	checker := discovery.NewNetworkHealthChecker().
+		WithTimeout(10 * time.Second)
+
+	// Run checks
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	m.networkHealthResults = checker.CheckHealthMultiple(ctx, connectedAddresses)
+	m.networkHealthChecked = true
 }
 
 func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
