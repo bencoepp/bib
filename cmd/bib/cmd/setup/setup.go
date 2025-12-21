@@ -13,6 +13,7 @@ import (
 
 	"bib/internal/auth"
 	"bib/internal/config"
+	"bib/internal/deploy"
 	"bib/internal/discovery"
 	"bib/internal/tui"
 	"bib/internal/tui/component"
@@ -704,6 +705,10 @@ type SetupWizardModel struct {
 	authTested           bool                              // True if auth tests have been run
 	networkHealthResults []*discovery.NetworkHealthResult  // Results of network health checks
 	networkHealthChecked bool                              // True if network health has been checked
+
+	// Deployment target selection (daemon only)
+	targetSelector *component.TargetSelector
+	targetDetected bool // True if target detection has been run
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -738,6 +743,13 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 			Title:       "Identity Key",
 			Description: "Generate authentication key",
 			HelpText:    "An Ed25519 keypair is generated for authenticating with bibd nodes. This key is separate from your SSH keys.",
+		},
+		{
+			ID:          "deployment-target",
+			Title:       "Deployment Target",
+			Description: "Select where to deploy bibd",
+			HelpText:    "Choose how you want to deploy bibd. Local installation runs directly on this machine. Container options (Docker/Podman) provide isolation. Kubernetes is for cluster deployments.",
+			ShouldSkip:  func() bool { return !isDaemon },
 		},
 		{
 			ID:          "output",
@@ -1043,6 +1055,90 @@ Public Key:  %s...
 					Value(new(bool)),
 			),
 		).WithTheme(theme)
+
+	case "deployment-target":
+		// Run target detection if not already done
+		if !m.targetDetected {
+			m.runTargetDetection()
+		}
+
+		// Build target selection display
+		var targetDisplay string
+		var selectedTarget string
+
+		if m.targetSelector != nil && m.targetSelector.DetectionDone {
+			// Format detected targets
+			var sb strings.Builder
+			sb.WriteString("Detected deployment targets:\n\n")
+
+			for i, target := range m.targetSelector.Targets {
+				var icon, status string
+				switch target.Type {
+				case deploy.TargetLocal:
+					icon = "🖥️ "
+				case deploy.TargetDocker:
+					icon = "🐳"
+				case deploy.TargetPodman:
+					icon = "🦭"
+				case deploy.TargetKubernetes:
+					icon = "☸️ "
+				}
+
+				if target.Available {
+					status = "✓"
+				} else {
+					status = "✗"
+				}
+
+				cursor := "  "
+				if i == m.targetSelector.Selected {
+					cursor = "▸ "
+					if target.Available {
+						selectedTarget = string(target.Type)
+					}
+				}
+
+				sb.WriteString(fmt.Sprintf("%s%s %s %s - %s\n",
+					cursor, icon, status, deploy.TargetDisplayName(target.Type), target.Status))
+			}
+
+			// Show summary
+			available := len(m.targetSelector.GetAvailableTargets())
+			sb.WriteString(fmt.Sprintf("\n%d of %d targets available", available, len(m.targetSelector.Targets)))
+
+			targetDisplay = sb.String()
+		} else {
+			targetDisplay = "Detecting available deployment targets..."
+		}
+
+		// Get target options for select
+		targetOptions := []huh.Option[string]{
+			huh.NewOption("Local Installation", "local"),
+			huh.NewOption("Docker", "docker"),
+			huh.NewOption("Podman", "podman"),
+			huh.NewOption("Kubernetes", "kubernetes"),
+		}
+
+		// Default to local if nothing selected
+		if selectedTarget == "" {
+			selectedTarget = "local"
+		}
+
+		m.currentForm = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("🎯 Deployment Target").
+					Description(targetDisplay),
+				huh.NewSelect[string]().
+					Title("Select deployment target").
+					Description("Choose where to deploy bibd").
+					Options(targetOptions...).
+					Value(&selectedTarget),
+			),
+		).WithTheme(theme)
+
+		// Store selection in data
+		m.data.DeploymentTarget = selectedTarget
 
 	case "output":
 		m.currentForm = huh.NewForm(
@@ -1705,6 +1801,44 @@ func (m *SetupWizardModel) runNodeDiscovery() {
 
 	// Auto-select first local node if available
 	m.nodeSelector.SelectFirst()
+}
+
+// runTargetDetection runs deployment target detection for daemon setup
+func (m *SetupWizardModel) runTargetDetection() {
+	if m.targetDetected {
+		return
+	}
+
+	// Initialize target selector
+	m.targetSelector = component.NewTargetSelector()
+
+	// Create detector and run detection
+	detector := deploy.NewTargetDetector().WithTimeout(5 * time.Second)
+
+	// Run detection with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	targets := detector.DetectAll(ctx)
+
+	// Update selector with results
+	m.targetSelector.Targets = targets
+	m.targetSelector.DetectionDone = true
+
+	// Select first available target
+	for i, t := range targets {
+		if t.Available {
+			m.targetSelector.Selected = i
+			break
+		}
+	}
+
+	m.targetDetected = true
+
+	// Update data with selected target
+	if target := m.targetSelector.SelectedTarget(); target != nil && target.Available {
+		m.data.DeploymentTarget = string(target.Type)
+	}
 }
 
 // runConnectionTests tests connections to all selected nodes

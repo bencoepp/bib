@@ -508,21 +508,56 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 3.1 Deployment Target Selection
 
-- [ ] Add deployment target selection as first wizard step
-- [ ] Create deployment target selector UI component
-- [ ] Detect available targets:
-  - [ ] Local: always available
-  - [ ] Docker: check for `docker` command
-  - [ ] Podman: check for `podman` command
-  - [ ] Kubernetes: check for `kubectl` command and valid context
-- [ ] Show detection status for each target
+- [x] Add deployment target selection as first wizard step
+- [x] Create deployment target selector UI component
+- [x] Detect available targets:
+  - [x] Local: always available
+  - [x] Docker: check for `docker` command
+  - [x] Podman: check for `podman` command
+  - [x] Kubernetes: check for `kubectl` command and valid context
+- [x] Show detection status for each target
 
-**Files to create:**
-- `internal/tui/component/target_selector.go`
+**Files created:**
 - `internal/deploy/detect.go`
+- `internal/deploy/detect_test.go`
+- `internal/tui/component/target_selector.go`
+- `internal/tui/component/target_selector_test.go`
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `deploy` package with `TargetDetector`:
+  - `DetectAll()` - detects all targets in parallel
+  - `DetectLocal()` - always available, shows OS/arch and init system
+  - `DetectDocker()` - checks docker command and daemon, gets version and compose status
+  - `DetectPodman()` - checks podman command, detects rootful/rootless mode
+  - `DetectKubernetes()` - checks kubectl, current context, cluster connectivity, CloudNativePG
+- `TargetInfo` struct with:
+  - Type, Available, Version, Status, Error, Details map
+- `TargetType` constants: local, docker, podman, kubernetes
+- Helper functions:
+  - `FormatTargetInfo()` - formats with icons (🖥️, 🐳, 🦭, ☸️)
+  - `TargetDisplayName()` - human-readable names
+  - `TargetDescription()` - descriptions for each target
+- Created `TargetSelector` TUI component:
+  - Bubble Tea model with spinner for detection
+  - Detection runs in parallel on init
+  - Shows status icons (✓ available, ✗ unavailable)
+  - Keyboard navigation (up/down, j/k)
+  - Shows target details for selected item
+  - Helper methods: SelectedTarget(), SelectedTargetType(), IsSelectedAvailable(), etc.
+- Added "deployment-target" wizard step:
+  - Runs after "identity-key" step (daemon only)
+  - Runs target detection on step entry
+  - Shows all detected targets with status
+  - Select dropdown to choose target
+  - Stores selection in `data.DeploymentTarget`
+- Added `runTargetDetection()` method to SetupWizardModel
+- Added `targetSelector` and `targetDetected` fields to model
+- Comprehensive unit tests:
+  - 13 tests for detect.go
+  - 15 tests for target_selector.go
 
 ### 3.2 Local PostgreSQL Options
 
