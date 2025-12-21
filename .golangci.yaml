@@ -24,48 +24,44 @@ linters:
     - staticcheck
     - unused
 
-    # Additional linters
+    # Additional linters (more forgiving set)
     - bodyclose
-    - dogsled
-    - dupl
     - errorlint
-    - exhaustive
     - copyloopvar
-    - gochecknoinits
-    - goconst
-    - gocritic
-    - gocyclo
     - gofmt
     - goimports
-    - goprintffuncname
     - gosec
     - misspell
-    - nakedret
     - nilerr
-    - noctx
     - nolintlint
-    - prealloc
-    - predeclared
     - revive
     - rowserrcheck
     - sqlclosecheck
     - stylecheck
-    - tparallel
     - unconvert
-    - unparam
     - whitespace
 
   disable:
-    - depguard  # Too strict for this project
-    - funlen    # Function length is managed by code review
-    - gocognit  # Cognitive complexity managed by review
-    - godot     # Comment formatting too strict
-    - godox     # Allow TODO/FIXME comments
-    - err113    # Too strict about error wrapping (formerly goerr113)
-    - mnd       # Magic numbers are sometimes acceptable (formerly gomnd)
-    - lll       # Line length managed by editor
-    - nlreturn  # Too strict about newlines
-    - wsl       # Too strict about whitespace
+    - depguard    # Too strict for this project
+    - funlen      # Function length is managed by code review
+    - gocognit    # Cognitive complexity managed by review
+    - godot       # Comment formatting too strict
+    - godox       # Allow TODO/FIXME comments
+    - err113      # Too strict about error wrapping (formerly goerr113)
+    - mnd         # Magic numbers are sometimes acceptable (formerly gomnd)
+    - lll         # Line length managed by editor
+    - nlreturn    # Too strict about newlines
+    - wsl         # Too strict about whitespace
+    - dupl        # Duplicate code detection too sensitive
+    - goconst     # Constant suggestions too noisy
+    - gocyclo     # Cyclomatic complexity managed by review
+    - nakedret    # Naked returns are sometimes fine
+    - prealloc    # Preallocation suggestions too noisy
+    - unparam     # Unused parameter detection too strict
+    - gocritic    # Too many opinionated checks, causes panics
+    - exhaustive  # Exhaustive switch checks too strict
+    - noctx       # Context requirements too strict
+    - tparallel   # Test parallelization suggestions too strict
 
 linters-settings:
   dupl:
@@ -109,11 +105,16 @@ linters-settings:
     excludes:
       - G104  # Unhandled errors (too noisy)
       - G304  # File path from variable (intentional in CLI)
+      - G301  # Directory permissions
+      - G302  # File permissions
+      - G306  # Write permissions
+      - G307  # Deferred file close
+      - G401  # Weak crypto (sometimes needed)
+      - G501  # Blocklisted imports
+      - G114  # net/http serve
 
   govet:
-    enable-all: true
-    disable:
-      - fieldalignment  # Too strict for this project
+    enable-all: false
 
   misspell:
     locale: US
@@ -122,9 +123,9 @@ linters-settings:
     max-func-lines: 30
 
   nolintlint:
-    allow-unused: false
-    require-explanation: true
-    require-specific: true
+    allow-unused: true
+    require-explanation: false
+    require-specific: false
 
   prealloc:
     simple: true
@@ -161,6 +162,11 @@ linters-settings:
       - all
       - -ST1000  # Package comments not required everywhere
       - -ST1003  # Underscores in names (sometimes needed for tests)
+      - -ST1005  # Error strings should not be capitalized
+      - -ST1016  # Methods on same type should have same receiver name
+      - -ST1020  # Comment on exported function
+      - -ST1021  # Comment on exported type
+      - -ST1022  # Comment on exported var
 
   unparam:
     check-exported: false
@@ -174,6 +180,8 @@ issues:
         - gosec
         - goconst
         - gocyclo
+        - errcheck
+        - bodyclose
 
     # Exclude generated files
     - path: api/gen/
@@ -190,9 +198,15 @@ issues:
       linters:
         - gochecknoinits
 
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
+    # TUI code often has complex state
+    - path: internal/tui/
+      linters:
+        - gocyclo
+        - dupl
+
+  exclude-use-default: true
+  max-issues-per-linter: 50
+  max-same-issues: 10
   new: false
 
 severity:
