@@ -24,6 +24,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // DeploymentTarget represents the target environment for bibd deployment
@@ -666,10 +667,301 @@ func setupBibQuick() error {
 
 // setupBibdQuick runs quick daemon setup with minimal prompts
 func setupBibdQuick() error {
-	// TODO: Implement quick daemon setup (Phase 3.5, 4.5, 5.6, 6.7)
-	// For now, fall back to full wizard
-	fmt.Printf("Running quick setup for target: %s\n", setupTarget)
-	return setupBibdWizard()
+	target := DeploymentTarget(setupTarget)
+	if target == "" {
+		target = TargetLocal
+	}
+
+	// Route to appropriate quick setup based on target
+	switch target {
+	case TargetLocal:
+		return setupBibdQuickLocal()
+	case TargetDocker, TargetPodman:
+		// TODO: Implement in Phase 4.5
+		fmt.Printf("Quick setup for %s not yet implemented. Running full wizard...\n", target)
+		return setupBibdWizard()
+	case TargetKubernetes:
+		// TODO: Implement in Phase 5.6
+		fmt.Println("Quick setup for Kubernetes not yet implemented. Running full wizard...")
+		return setupBibdWizard()
+	default:
+		return setupBibdQuickLocal()
+	}
+}
+
+// setupBibdQuickLocal runs quick local daemon setup
+func setupBibdQuickLocal() error {
+	fmt.Println("🚀 Quick Setup - bibd (Local)")
+	fmt.Println()
+
+	// Create setup data with defaults
+	data := tui.DefaultSetupData()
+	data.DeploymentTarget = tui.DeployTargetLocal
+	data.StorageBackend = "sqlite" // Default to SQLite for quick setup
+	data.P2PEnabled = true
+	data.P2PMode = "proxy" // Default to proxy mode
+
+	// Get the huh theme
+	theme := huh.ThemeCatppuccin()
+
+	// Step 1: Prompt for name and email only
+	var name, email string
+	nameEmailForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("👤 Quick Setup - bibd").
+				Description("We just need a few details to get your daemon running.\n\nYour name and email are used for the node's identity."),
+			huh.NewInput().
+				Title("Your Name").
+				Description("Display name for this node's identity").
+				Placeholder("John Doe").
+				Value(&name).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Email").
+				Description("Email address for the node's identity").
+				Placeholder("you@example.com").
+				Value(&email).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("email is required")
+					}
+					if !strings.Contains(s, "@") {
+						return fmt.Errorf("please enter a valid email address")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(theme)
+
+	if err := nameEmailForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	data.Name = name
+	data.Email = email
+
+	// Step 2: Generate identity key
+	fmt.Println("\n🔑 Generating identity key...")
+	identityKey, err := auth.GenerateIdentityKey()
+	if err != nil {
+		return fmt.Errorf("failed to generate identity key: %w", err)
+	}
+
+	keyPath, err := auth.DefaultIdentityKeyPath(config.AppBibd)
+	if err != nil {
+		return fmt.Errorf("failed to get identity key path: %w", err)
+	}
+	if err := identityKey.Save(keyPath); err != nil {
+		return fmt.Errorf("failed to save identity key: %w", err)
+	}
+	data.IdentityKeyPath = keyPath
+	fmt.Printf("   ✓ Key saved to %s\n", keyPath)
+	fmt.Printf("   ✓ Fingerprint: %s\n", identityKey.Fingerprint())
+
+	// Step 3: Ask about public network
+	var usePublicNetwork bool
+	networkForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Connect to public network (bib.dev)?").
+				Description("This makes your node discoverable on the global network").
+				Affirmative("Yes, connect").
+				Negative("No, private only").
+				Value(&usePublicNetwork),
+		),
+	).WithTheme(theme)
+
+	if err := networkForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	data.UsePublicBootstrap = usePublicNetwork
+	data.BibDevConfirmed = usePublicNetwork
+
+	if usePublicNetwork {
+		fmt.Println("\n🌐 Public network enabled")
+	} else {
+		fmt.Println("\n🔒 Private network mode")
+	}
+
+	// Step 4: Set server defaults
+	data.Host = "0.0.0.0"
+	data.Port = 4000
+	data.TLSEnabled = false // Disable TLS for quick setup
+	data.LogLevel = "info"
+	data.LogFormat = "pretty"
+
+	// Step 5: Generate and save config
+	fmt.Println("\n💾 Saving configuration...")
+	cfg := data.ToBibdConfig()
+	configDir, err := config.UserConfigDir(config.AppBibd)
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	// Ensure config directory exists
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	// Marshal config to YAML
+	configData, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	fmt.Printf("   ✓ Config saved to %s\n", configPath)
+
+	// Step 6: Ask about service installation
+	var installService, userService bool
+	serviceType := local.DetectServiceType()
+	var serviceTypeDesc string
+	switch serviceType {
+	case local.ServiceTypeSystemd:
+		serviceTypeDesc = "systemd"
+	case local.ServiceTypeLaunchd:
+		serviceTypeDesc = "launchd"
+	case local.ServiceTypeWindows:
+		serviceTypeDesc = "Windows Service"
+	}
+
+	serviceForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title(fmt.Sprintf("Install as %s service?", serviceTypeDesc)).
+				Description("Run bibd automatically at startup").
+				Affirmative("Yes, install").
+				Negative("No, skip").
+				Value(&installService),
+		),
+	).WithTheme(theme)
+
+	if err := serviceForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	var serviceInstaller *local.ServiceInstaller
+	if installService {
+		// Ask about user vs system service (Linux/macOS only)
+		if serviceType != local.ServiceTypeWindows {
+			userServiceForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("User-level service?").
+						Description("User service doesn't require root/admin").
+						Affirmative("Yes, user service").
+						Negative("No, system service").
+						Value(&userService),
+				),
+			).WithTheme(theme)
+
+			if err := userServiceForm.Run(); err != nil {
+				if err != huh.ErrUserAborted {
+					return err
+				}
+			}
+		}
+
+		// Create service installer
+		serviceConfig := local.DefaultServiceConfig()
+		serviceConfig.ConfigPath = configPath
+		serviceConfig.WorkingDirectory = configDir
+		serviceConfig.UserService = userService
+		serviceInstaller = local.NewServiceInstaller(serviceConfig)
+
+		// Generate and save service file
+		fmt.Println("\n🛠️  Installing service...")
+		serviceContent, err := serviceInstaller.Generate()
+		if err != nil {
+			return fmt.Errorf("failed to generate service file: %w", err)
+		}
+
+		servicePath := serviceInstaller.GetServiceFilePath()
+		if servicePath != "" && serviceType != local.ServiceTypeWindows {
+			// Ensure directory exists
+			serviceDir := filepath.Dir(servicePath)
+			if err := os.MkdirAll(serviceDir, 0755); err != nil {
+				fmt.Printf("   ⚠️  Could not create directory %s: %v\n", serviceDir, err)
+			} else {
+				if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+					fmt.Printf("   ⚠️  Could not write service file: %v\n", err)
+					fmt.Println("   You may need to run with elevated permissions.")
+				} else {
+					fmt.Printf("   ✓ Service file saved to %s\n", servicePath)
+				}
+			}
+		}
+
+		// Show installation instructions
+		fmt.Println("\n" + serviceInstaller.InstallInstructions())
+	}
+
+	// Step 7: Show summary and next steps
+	fmt.Println("\n" + strings.Repeat("─", 50))
+	fmt.Println("✅ Quick setup complete!")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	fmt.Printf("  Identity:  %s <%s>\n", data.Name, data.Email)
+	fmt.Printf("  Key:       %s\n", identityKey.Fingerprint())
+	fmt.Printf("  Listen:    %s:%d\n", data.Host, data.Port)
+	fmt.Printf("  Storage:   SQLite (proxy mode)\n")
+	if usePublicNetwork {
+		fmt.Printf("  Network:   Public (bib.dev)\n")
+	} else {
+		fmt.Printf("  Network:   Private only\n")
+	}
+	fmt.Printf("  Config:    %s\n", configPath)
+	if installService && serviceInstaller != nil {
+		fmt.Printf("  Service:   %s\n", serviceInstaller.GetServiceFilePath())
+	}
+	fmt.Println()
+	fmt.Println("Next steps:")
+	if installService {
+		switch serviceType {
+		case local.ServiceTypeSystemd:
+			if userService {
+				fmt.Printf("  • Start daemon: systemctl --user start bibd\n")
+				fmt.Printf("  • Check status: systemctl --user status bibd\n")
+			} else {
+				fmt.Printf("  • Start daemon: sudo systemctl start bibd\n")
+				fmt.Printf("  • Check status: sudo systemctl status bibd\n")
+			}
+		case local.ServiceTypeLaunchd:
+			fmt.Printf("  • Load service: launchctl load %s\n", serviceInstaller.GetServiceFilePath())
+		case local.ServiceTypeWindows:
+			fmt.Printf("  • Start service: Start-Service bibd\n")
+		}
+	} else {
+		fmt.Printf("  • Start daemon: bibd serve --config %s\n", configPath)
+	}
+	fmt.Println("  • Connect CLI: bib setup")
+	fmt.Println("  • View help: bibd --help")
+	fmt.Println()
+
+	return nil
 }
 
 // GetDeploymentTarget returns the current deployment target

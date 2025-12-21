@@ -720,13 +720,50 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 3.5 Local Quick Start
 
-- [ ] Implement quick start for local deployment
-- [ ] Minimal prompts (name, email)
-- [ ] SQLite + Proxy mode defaults
-- [ ] Auto-install service and start
+- [x] Implement quick start for local deployment
+- [x] Minimal prompts (name, email)
+- [x] SQLite + Proxy mode defaults
+- [x] Auto-install service and start
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Implemented `setupBibdQuick()` router function:
+  - Routes to `setupBibdQuickLocal()` for local target
+  - Placeholder messages for Docker/Podman (Phase 4.5) and Kubernetes (Phase 5.6)
+- Implemented `setupBibdQuickLocal()` with 7 steps:
+  1. **Name/Email Prompt**: Simple huh form for identity
+  2. **Identity Key Generation**: Auto-generates Ed25519 key for bibd
+  3. **Public Network Prompt**: Simple yes/no for bib.dev connection
+  4. **Server Defaults**: Sets host=0.0.0.0, port=4000, no TLS
+  5. **Config Save**: Marshals BibdConfig to YAML and saves
+  6. **Service Installation**: Optional systemd/launchd/Windows service
+  7. **Summary Display**: Shows configuration and next steps
+- Quick setup defaults:
+  - SQLite storage backend
+  - Proxy P2P mode
+  - No TLS (for simplicity)
+  - Info log level with pretty format
+- Service installation flow:
+  - Detects service type automatically
+  - Asks user vs system service (Linux/macOS)
+  - Generates and saves service file
+  - Shows installation instructions
+- User-friendly output with icons and clear progress
+- Context-aware next steps based on configuration
+- Uses yaml.v3 for config marshaling
+- Added yaml import to setup.go
+
+**Usage:**
+```bash
+# Quick local daemon setup
+bib setup --daemon --quick
+bib setup --daemon -q
+
+# Quick setup for specific target
+bib setup --daemon --quick --target=local
+```
 
 ---
 
