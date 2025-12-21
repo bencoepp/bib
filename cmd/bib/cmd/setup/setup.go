@@ -21,6 +21,7 @@ import (
 	"bib/internal/deploy/local"
 	"bib/internal/deploy/podman"
 	"bib/internal/discovery"
+	"bib/internal/postsetup"
 	"bib/internal/tui"
 	"bib/internal/tui/component"
 
@@ -654,6 +655,12 @@ func setupBibQuick() error {
 		fmt.Println("  Nodes:    None configured")
 	}
 	fmt.Println()
+
+	// Run CLI post-setup verification
+	if len(data.SelectedNodes) > 0 {
+		runCLIPostSetup(data.SelectedNodes)
+	}
+
 	fmt.Println("Next steps:")
 	if len(data.SelectedNodes) == 0 {
 		fmt.Println("  • Run 'bib connect <address>' to connect to a node")
@@ -666,6 +673,33 @@ func setupBibQuick() error {
 	fmt.Println()
 
 	return nil
+}
+
+// runCLIPostSetup runs post-setup verification for CLI
+func runCLIPostSetup(selectedNodes []tui.NodeSelection) {
+	fmt.Println("🔍 Verifying connections...")
+	fmt.Println()
+
+	nodes := make([]postsetup.NodeConfig, 0, len(selectedNodes))
+	for _, n := range selectedNodes {
+		nodes = append(nodes, postsetup.NodeConfig{
+			Address: n.Address,
+			Alias:   n.Alias,
+		})
+	}
+
+	verifier := postsetup.NewCLIVerifier(nodes)
+	ctx := context.Background()
+	status := verifier.Verify(ctx)
+
+	fmt.Println(postsetup.FormatCLIStatus(status))
+
+	// Show helpful commands
+	fmt.Println("Helpful Commands:")
+	for _, cmd := range postsetup.GetCLINextSteps() {
+		fmt.Printf("  %s\n", cmd)
+	}
+	fmt.Println()
 }
 
 // setupBibdQuick runs quick daemon setup with minimal prompts
@@ -962,7 +996,38 @@ func setupBibdQuickLocal() error {
 	fmt.Println("  • View help: bibd --help")
 	fmt.Println()
 
+	// Run post-setup verification
+	listenAddress := fmt.Sprintf("localhost:%d", data.Port)
+	runLocalPostSetup(listenAddress)
+
 	return nil
+}
+
+// runLocalPostSetup runs post-setup verification for local installation
+func runLocalPostSetup(address string) {
+	fmt.Println("🔍 Verifying installation...")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	// Verify bibd connectivity
+	verifier := postsetup.NewLocalVerifier(address)
+	status := verifier.Verify(ctx)
+
+	fmt.Println(postsetup.FormatLocalStatus(status))
+
+	// Check service status
+	serviceStatus := postsetup.CheckServiceStatus()
+	if serviceStatus.Installed {
+		fmt.Println(postsetup.FormatServiceStatus(serviceStatus))
+	}
+
+	// Show management commands
+	fmt.Println("Management Commands:")
+	for _, cmd := range postsetup.GetLocalManagementCommands() {
+		fmt.Printf("  %s\n", cmd)
+	}
+	fmt.Println()
 }
 
 // setupBibdQuickDocker runs quick Docker daemon setup
@@ -1163,7 +1228,32 @@ func setupBibdQuickDocker() error {
 	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println()
 
+	// Run post-setup verification if containers started
+	if result.ContainersStarted {
+		runDockerPostSetup(outputDir, "bibd")
+	}
+
 	return nil
+}
+
+// runDockerPostSetup runs post-setup verification for Docker
+func runDockerPostSetup(composeFile, projectName string) {
+	fmt.Println("🔍 Verifying Docker deployment...")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	verifier := postsetup.NewDockerVerifier(projectName, composeFile)
+	status := verifier.Verify(ctx)
+
+	fmt.Println(postsetup.FormatDockerStatus(status))
+
+	// Show management commands
+	fmt.Println("Management Commands:")
+	for _, cmd := range postsetup.GetDockerManagementCommands(composeFile) {
+		fmt.Printf("  %s\n", cmd)
+	}
+	fmt.Println()
 }
 
 // setupBibdQuickPodman runs quick Podman daemon setup
@@ -1429,7 +1519,32 @@ func setupBibdQuickPodman() error {
 	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println()
 
+	// Run post-setup verification if containers started
+	if result.ContainersStarted {
+		runPodmanPostSetup(deployStyle, "bibd", filepath.Join(outputDir, "docker-compose.yaml"))
+	}
+
 	return nil
+}
+
+// runPodmanPostSetup runs post-setup verification for Podman
+func runPodmanPostSetup(deployStyle, podName, composeFile string) {
+	fmt.Println("🔍 Verifying Podman deployment...")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	verifier := postsetup.NewPodmanVerifier(deployStyle, podName, composeFile)
+	status := verifier.Verify(ctx)
+
+	fmt.Println(postsetup.FormatPodmanStatus(status))
+
+	// Show management commands
+	fmt.Println("Management Commands:")
+	for _, cmd := range postsetup.GetPodmanManagementCommands(deployStyle, podName, composeFile) {
+		fmt.Printf("  %s\n", cmd)
+	}
+	fmt.Println()
 }
 
 // setupBibdQuickKubernetes runs quick Kubernetes daemon setup
@@ -1755,7 +1870,32 @@ func setupBibdQuickKubernetes() error {
 	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println()
 
+	// Run post-setup verification if manifests applied
+	if result.ManifestsApplied {
+		runKubernetesPostSetup(namespace)
+	}
+
 	return nil
+}
+
+// runKubernetesPostSetup runs post-setup verification for Kubernetes
+func runKubernetesPostSetup(namespace string) {
+	fmt.Println("🔍 Verifying Kubernetes deployment...")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	verifier := postsetup.NewKubernetesVerifier(namespace)
+	status := verifier.Verify(ctx)
+
+	fmt.Println(postsetup.FormatKubernetesStatus(status))
+
+	// Show management commands
+	fmt.Println("Management Commands:")
+	for _, cmd := range postsetup.GetKubernetesManagementCommands(namespace) {
+		fmt.Printf("  %s\n", cmd)
+	}
+	fmt.Println()
 }
 
 // GetDeploymentTarget returns the current deployment target

@@ -1883,54 +1883,244 @@ NODE ID          ALIAS         FINGERPRINT        METHOD    VERIFIED  LAST SEEN
 
 ### 9.1 Local Post-Setup
 
-- [ ] Verify service is running
-- [ ] Run health check
-- [ ] Display status summary
-- [ ] Show management commands
+- [x] Verify service is running
+- [x] Run health check
+- [x] Display status summary
+- [x] Show management commands
 
-**Files to modify:**
+**Files created:**
+- `internal/postsetup/local.go`
+- `internal/postsetup/postsetup_test.go`
+
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `LocalVerifier` struct:
+  - `NewLocalVerifier(address)` - creates verifier with bibd address
+  - `Verify(ctx)` - verifies connectivity and returns LocalStatus
+- Created `LocalStatus` struct with:
+  - Running, PID, Address, Version, Uptime
+  - Healthy, HealthStatus, Mode
+  - Error message
+- Created `CheckServiceStatus()` function:
+  - Checks systemd on Linux
+  - Checks launchd on macOS
+  - Checks Windows Service on Windows
+- Created `ServiceStatus` struct:
+  - Installed, Running, Enabled, ServiceName
+- Helper functions:
+  - `FormatLocalStatus()` - formats status for display
+  - `FormatServiceStatus()` - formats service status
+  - `GetLocalManagementCommands()` - platform-specific commands
+- Integration in setup.go:
+  - `runLocalPostSetup()` function called after local quick setup
 
 ### 9.2 Docker Post-Setup
 
-- [ ] Wait for containers to be healthy
-- [ ] Display container status
-- [ ] Show docker compose management commands
-- [ ] Test bibd connectivity
+- [x] Wait for containers to be healthy
+- [x] Display container status
+- [x] Show docker compose management commands
+- [x] Test bibd connectivity
 
-**Files to modify:**
-- `internal/deploy/docker/deploy.go`
+**Files created:**
+- `internal/postsetup/docker.go`
+
+**Files modified:**
+- `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `DockerVerifier` struct:
+  - `NewDockerVerifier(projectName, composeFile)` - creates verifier
+  - `Verify(ctx)` - verifies deployment and returns DockerStatus
+  - `WaitForHealthy(ctx, timeout)` - waits for all containers healthy
+- Created `DockerStatus` struct:
+  - Containers list, AllRunning, AllHealthy
+  - BibdReachable, BibdAddress
+- Created `ContainerStatus` struct:
+  - Name, ID, Image, Status, State, Health, Ports
+  - Running, Healthy flags
+- Uses `docker compose ps --format json` for status
+- Falls back to legacy format for older Docker
+- Helper functions:
+  - `FormatDockerStatus()` - formats status for display
+  - `GetDockerManagementCommands()` - docker compose commands
+- Integration in setup.go:
+  - `runDockerPostSetup()` called after Docker quick setup
 
 ### 9.3 Podman Post-Setup
 
-- [ ] Wait for containers/pod to be running
-- [ ] Display status
-- [ ] Show podman management commands
-- [ ] Test bibd connectivity
+- [x] Wait for containers/pod to be running
+- [x] Display status
+- [x] Show podman management commands
+- [x] Test bibd connectivity
 
-**Files to modify:**
-- `internal/deploy/podman/deploy.go`
+**Files created:**
+- `internal/postsetup/podman.go`
+
+**Files modified:**
+- `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `PodmanVerifier` struct:
+  - `NewPodmanVerifier(deployStyle, podName, composeFile)` - creates verifier
+  - `Verify(ctx)` - verifies deployment and returns PodmanStatus
+  - `WaitForRunning(ctx, timeout)` - waits for containers running
+- Supports both "pod" and "compose" deploy styles
+- Created `PodmanStatus` struct:
+  - DeployStyle, PodName, Containers
+  - AllRunning, BibdReachable, BibdAddress
+- Uses `podman pod ps` and `podman ps` for status
+- Helper functions:
+  - `FormatPodmanStatus()` - formats status for display
+  - `GetPodmanManagementCommands()` - pod or compose commands
+- Integration in setup.go:
+  - `runPodmanPostSetup()` called after Podman quick setup
 
 ### 9.4 Kubernetes Post-Setup
 
-- [ ] Wait for pods to be ready (if applied)
-- [ ] Display pod status
-- [ ] Show external access info
-- [ ] Show kubectl management commands
-- [ ] Offer port-forward for testing
+- [x] Wait for pods to be ready (if applied)
+- [x] Display pod status
+- [x] Show external access info
+- [x] Show kubectl management commands
+- [x] Offer port-forward for testing
 
-**Files to modify:**
-- `internal/deploy/kubernetes/deploy.go`
+**Files created:**
+- `internal/postsetup/kubernetes.go`
+
+**Files modified:**
+- `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `KubernetesVerifier` struct:
+  - `NewKubernetesVerifier(namespace)` - creates verifier
+  - `Verify(ctx)` - verifies deployment and returns KubernetesStatus
+  - `WaitForReady(ctx, timeout)` - uses kubectl rollout status
+  - `PortForward(ctx, localPort)` - starts port-forward
+- Created `KubernetesStatus` struct:
+  - Namespace, Pods list, AllReady
+  - ExternalIP, NodePort, IngressHost
+  - BibdReachable, BibdAddress
+- Created `PodStatus` struct:
+  - Name, Phase, Ready, Restarts, Age
+- Uses `kubectl get pods -o json` for pod status
+- Gets service and ingress info for external access
+- Helper functions:
+  - `FormatKubernetesStatus()` - formats status for display
+  - `GetKubernetesManagementCommands()` - kubectl commands
+- Integration in setup.go:
+  - `runKubernetesPostSetup()` called after Kubernetes quick setup
 
 ### 9.5 CLI Post-Setup Verification
 
-- [ ] Test connection to all selected nodes
-- [ ] Verify authentication
-- [ ] Display network health summary
-- [ ] Show next steps and helpful commands
+- [x] Test connection to all selected nodes
+- [x] Verify authentication
+- [x] Display network health summary
+- [x] Show next steps and helpful commands
 
-**Files to modify:**
+**Files created:**
+- `internal/postsetup/cli.go`
+
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Created `CLIVerifier` struct:
+  - `NewCLIVerifier(nodes)` - creates verifier with node list
+  - `Verify(ctx)` - verifies all nodes and returns CLIStatus
+- Created `CLIStatus` struct:
+  - Nodes list, AllConnected, AllAuthenticated
+  - NetworkHealth (good/degraded/poor/offline)
+- Created `NodeStatus` struct:
+  - Address, Alias, Connected, Authenticated
+  - Latency, Version, NodeID
+- Created `NodeConfig` for node configuration
+- Created `NetworkHealth` type with constants
+- Helper functions:
+  - `FormatCLIStatus()` - formats status with icons
+  - `GetCLINextSteps()` - bib commands to try
+  - `GetCLIHelpfulCommands()` - additional commands
+- Integration in setup.go:
+  - `runCLIPostSetup()` called after CLI quick setup
+
+**Example Post-Setup Output - Local:**
+```
+🔍 Verifying installation...
+
+🟢 bibd is running
+   Address: localhost:4000
+   Version: 1.0.0
+   Health:  ✓ ok
+
+📦 Service: bibd
+   Status:  🟢 Running
+   Enabled: ✓ Yes (starts at boot)
+
+Management Commands:
+  sudo systemctl status bibd
+  sudo systemctl start bibd
+  sudo systemctl stop bibd
+  sudo journalctl -u bibd -f
+```
+
+**Example Post-Setup Output - Docker:**
+```
+🔍 Verifying Docker deployment...
+
+🟢 All containers running and healthy
+
+Containers:
+  ✓ bibd: Up 5 minutes (healthy)
+  ✓ postgres: Up 5 minutes (healthy)
+
+🌐 bibd reachable at localhost:4000
+
+Management Commands:
+  docker compose -f docker-compose.yaml ps
+  docker compose -f docker-compose.yaml logs -f
+  docker compose -f docker-compose.yaml up -d
+  docker compose -f docker-compose.yaml down
+```
+
+**Example Post-Setup Output - Kubernetes:**
+```
+🔍 Verifying Kubernetes deployment...
+
+🟢 All pods ready
+   Namespace: bibd
+
+Pods:
+  ✓ bibd-abc123xyz: Running (restarts: 0, age: 5m)
+  ✓ postgres-0: Running (restarts: 0, age: 5m)
+
+🌐 External IP: 34.56.78.90
+🔗 Ingress: bibd.example.com
+✓ bibd reachable at 34.56.78.90:4000
+
+Management Commands:
+  kubectl -n bibd get pods
+  kubectl -n bibd get svc
+  kubectl -n bibd logs -f deployment/bibd
+  kubectl -n bibd port-forward svc/bibd 4000:4000
+```
+
+**Example Post-Setup Output - CLI:**
+```
+🔍 Verifying connections...
+
+🟢 Network Health: Good
+
+Nodes:
+  ✓ local (localhost:4000): connected (5ms)
+  ✓ remote (node1.example.com:4000): connected (45ms)
+
+Helpful Commands:
+  bib status                # Check connection status
+  bib topic list            # List available topics
+  bib dataset list          # List datasets
+  bib query                 # Query data
+  bib config show           # Show current configuration
+```
 
 ---
 
