@@ -144,6 +144,7 @@ func TestBreakpoint_Constants(t *testing.T) {
 		{BreakpointMD, 2},
 		{BreakpointLG, 3},
 		{BreakpointXL, 4},
+		{BreakpointXXL, 5},
 	}
 
 	for _, tt := range tests {
@@ -154,20 +155,23 @@ func TestBreakpoint_Constants(t *testing.T) {
 }
 
 func TestBreakpointThresholds(t *testing.T) {
-	if BreakpointThresholds[BreakpointXS] != 0 {
-		t.Errorf("expected XS threshold 0, got %d", BreakpointThresholds[BreakpointXS])
+	if BreakpointThresholds[BreakpointXS] != 30 {
+		t.Errorf("expected XS threshold 30, got %d", BreakpointThresholds[BreakpointXS])
 	}
-	if BreakpointThresholds[BreakpointSM] != 40 {
-		t.Errorf("expected SM threshold 40, got %d", BreakpointThresholds[BreakpointSM])
+	if BreakpointThresholds[BreakpointSM] != 50 {
+		t.Errorf("expected SM threshold 50, got %d", BreakpointThresholds[BreakpointSM])
 	}
-	if BreakpointThresholds[BreakpointMD] != 60 {
-		t.Errorf("expected MD threshold 60, got %d", BreakpointThresholds[BreakpointMD])
+	if BreakpointThresholds[BreakpointMD] != 80 {
+		t.Errorf("expected MD threshold 80, got %d", BreakpointThresholds[BreakpointMD])
 	}
-	if BreakpointThresholds[BreakpointLG] != 80 {
-		t.Errorf("expected LG threshold 80, got %d", BreakpointThresholds[BreakpointLG])
+	if BreakpointThresholds[BreakpointLG] != 120 {
+		t.Errorf("expected LG threshold 120, got %d", BreakpointThresholds[BreakpointLG])
 	}
-	if BreakpointThresholds[BreakpointXL] != 120 {
-		t.Errorf("expected XL threshold 120, got %d", BreakpointThresholds[BreakpointXL])
+	if BreakpointThresholds[BreakpointXL] != 180 {
+		t.Errorf("expected XL threshold 180, got %d", BreakpointThresholds[BreakpointXL])
+	}
+	if BreakpointThresholds[BreakpointXXL] != 240 {
+		t.Errorf("expected XXL threshold 240, got %d", BreakpointThresholds[BreakpointXXL])
 	}
 }
 
@@ -177,15 +181,19 @@ func TestGetBreakpoint(t *testing.T) {
 		expected Breakpoint
 	}{
 		{10, BreakpointXS},
-		{39, BreakpointXS},
-		{40, BreakpointSM},
-		{59, BreakpointSM},
-		{60, BreakpointMD},
-		{79, BreakpointMD},
-		{80, BreakpointLG},
-		{119, BreakpointLG},
-		{120, BreakpointXL},
-		{200, BreakpointXL},
+		{29, BreakpointXS},
+		{30, BreakpointXS},
+		{49, BreakpointXS},
+		{50, BreakpointSM},
+		{79, BreakpointSM},
+		{80, BreakpointMD},
+		{119, BreakpointMD},
+		{120, BreakpointLG},
+		{179, BreakpointLG},
+		{180, BreakpointXL},
+		{239, BreakpointXL},
+		{240, BreakpointXXL},
+		{300, BreakpointXXL},
 	}
 
 	for _, tt := range tests {
@@ -264,11 +272,12 @@ func TestGetHeightBreakpoint(t *testing.T) {
 
 func TestResponsive_Get(t *testing.T) {
 	r := Responsive[int]{
-		XS: 1,
-		SM: 2,
-		MD: 3,
-		LG: 4,
-		XL: 5,
+		XS:  1,
+		SM:  2,
+		MD:  3,
+		LG:  4,
+		XL:  5,
+		XXL: 6,
 	}
 
 	tests := []struct {
@@ -280,6 +289,7 @@ func TestResponsive_Get(t *testing.T) {
 		{BreakpointMD, 3},
 		{BreakpointLG, 4},
 		{BreakpointXL, 5},
+		{BreakpointXXL, 6},
 	}
 
 	for _, tt := range tests {
@@ -292,11 +302,12 @@ func TestResponsive_Get(t *testing.T) {
 
 func TestResponsive_Get_Default(t *testing.T) {
 	r := Responsive[string]{
-		XS: "xs",
-		SM: "sm",
-		MD: "md",
-		LG: "lg",
-		XL: "xl",
+		XS:  "xs",
+		SM:  "sm",
+		MD:  "md",
+		LG:  "lg",
+		XL:  "xl",
+		XXL: "xxl",
 	}
 
 	// Invalid breakpoint should return MD

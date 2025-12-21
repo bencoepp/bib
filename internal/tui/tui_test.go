@@ -55,9 +55,10 @@ func TestGetBreakpoint_FromTUI(t *testing.T) {
 	}{
 		{30, layout.BreakpointXS},
 		{50, layout.BreakpointSM},
-		{70, layout.BreakpointMD},
-		{100, layout.BreakpointLG},
-		{150, layout.BreakpointXL},
+		{80, layout.BreakpointMD},
+		{120, layout.BreakpointLG},
+		{180, layout.BreakpointXL},
+		{240, layout.BreakpointXXL},
 	}
 
 	for _, tt := range tests {

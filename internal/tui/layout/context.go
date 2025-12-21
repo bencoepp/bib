@@ -58,6 +58,11 @@ func (c *Context) IsLarge() bool {
 	return c.WidthBreakpoint >= BreakpointLG
 }
 
+// IsUltrawide returns true if the terminal is ultrawide (XXL)
+func (c *Context) IsUltrawide() bool {
+	return c.WidthBreakpoint >= BreakpointXXL
+}
+
 // Columns returns recommended number of columns for current width
 func (c *Context) Columns() int {
 	return ResponsiveColumns(c.Width)
@@ -84,6 +89,8 @@ func (c *Context) SidebarWidth() int {
 		return 25
 	case BreakpointXL:
 		return 30
+	case BreakpointXXL:
+		return 35
 	default:
 		return 25
 	}
@@ -111,6 +118,8 @@ func (c *Context) ModalWidth() int {
 		return 60
 	case BreakpointXL:
 		return 70
+	case BreakpointXXL:
+		return 80
 	default:
 		return 60
 	}
