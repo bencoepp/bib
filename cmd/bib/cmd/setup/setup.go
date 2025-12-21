@@ -17,6 +17,7 @@ import (
 	"bib/internal/config"
 	"bib/internal/deploy"
 	"bib/internal/deploy/docker"
+	"bib/internal/deploy/kubernetes"
 	"bib/internal/deploy/local"
 	"bib/internal/deploy/podman"
 	"bib/internal/discovery"
@@ -683,9 +684,7 @@ func setupBibdQuick() error {
 	case TargetPodman:
 		return setupBibdQuickPodman()
 	case TargetKubernetes:
-		// TODO: Implement in Phase 5.6
-		fmt.Println("Quick setup for Kubernetes not yet implemented. Running full wizard...")
-		return setupBibdWizard()
+		return setupBibdQuickKubernetes()
 	default:
 		return setupBibdQuickLocal()
 	}
@@ -1426,6 +1425,332 @@ func setupBibdQuickPodman() error {
 		fmt.Printf("  %s up -d\n", composeCmd)
 		fmt.Printf("  %s down\n", composeCmd)
 	}
+	fmt.Println()
+	fmt.Println("  • Connect CLI: bib setup")
+	fmt.Println()
+
+	return nil
+}
+
+// setupBibdQuickKubernetes runs quick Kubernetes daemon setup
+func setupBibdQuickKubernetes() error {
+	fmt.Println("☸️  Quick Setup - bibd (Kubernetes)")
+	fmt.Println()
+
+	ctx := context.Background()
+
+	// Step 1: Detect Kubernetes
+	fmt.Println("🔍 Detecting Kubernetes...")
+	detector := kubernetes.NewDetector()
+	kubeInfo := detector.Detect(ctx)
+
+	if !kubeInfo.Available {
+		fmt.Println("❌ kubectl is not available.")
+		if kubeInfo.Error != "" {
+			fmt.Printf("   Error: %s\n", kubeInfo.Error)
+		}
+		fmt.Println("\nPlease ensure kubectl is installed and configured, then try again.")
+		return fmt.Errorf("kubectl not available")
+	}
+
+	if !kubeInfo.ClusterReachable {
+		fmt.Println("❌ Kubernetes cluster is not reachable.")
+		if kubeInfo.Error != "" {
+			fmt.Printf("   Error: %s\n", kubeInfo.Error)
+		}
+		fmt.Println("\nPlease check your kubeconfig and cluster connectivity.")
+		return fmt.Errorf("cluster not reachable")
+	}
+
+	fmt.Printf("   ✓ Context: %s\n", kubeInfo.CurrentContext)
+	fmt.Printf("   ✓ Cluster: %s (%s)\n", kubeInfo.ClusterName, kubeInfo.ServerVersion)
+	if kubeInfo.CloudNativePGAvailable {
+		fmt.Printf("   ✓ CloudNativePG: %s\n", kubeInfo.CloudNativePGVersion)
+	}
+	if kubeInfo.IngressControllerAvailable {
+		fmt.Printf("   ✓ Ingress: %s\n", kubeInfo.IngressClassName)
+	}
+	if len(kubeInfo.StorageClasses) > 0 {
+		fmt.Printf("   ✓ Storage: %s\n", strings.Join(kubeInfo.StorageClasses, ", "))
+	}
+	fmt.Println()
+
+	// Get the huh theme
+	theme := huh.ThemeCatppuccin()
+
+	// Step 2: Prompt for name and email
+	var name, email string
+	nameEmailForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("☸️  Quick Setup - bibd (Kubernetes)").
+				Description("We just need a few details to deploy bibd to Kubernetes.\n\nYour name and email are used for the node's identity."),
+			huh.NewInput().
+				Title("Your Name").
+				Description("Display name for this node's identity").
+				Placeholder("John Doe").
+				Value(&name).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Email").
+				Description("Email address for the node's identity").
+				Placeholder("you@example.com").
+				Value(&email).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("email is required")
+					}
+					if !strings.Contains(s, "@") {
+						return fmt.Errorf("please enter a valid email address")
+					}
+					return nil
+				}),
+		),
+	).WithTheme(theme)
+
+	if err := nameEmailForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 3: Ask about namespace
+	namespace := "bibd"
+	namespaceForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Namespace").
+				Description("Kubernetes namespace for bibd").
+				Placeholder("bibd").
+				Value(&namespace),
+		),
+	).WithTheme(theme)
+
+	if err := namespaceForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	if namespace == "" {
+		namespace = "bibd"
+	}
+
+	// Step 4: Ask about public network
+	var usePublicNetwork bool
+	networkForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Connect to public network (bib.dev)?").
+				Description("This makes your node discoverable on the global network").
+				Affirmative("Yes, connect").
+				Negative("No, private only").
+				Value(&usePublicNetwork),
+		),
+	).WithTheme(theme)
+
+	if err := networkForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 5: Ask about external access
+	serviceType := "LoadBalancer"
+	serviceOptions := []huh.Option[string]{
+		huh.NewOption("LoadBalancer (external IP)", "LoadBalancer"),
+		huh.NewOption("NodePort (static port on nodes)", "NodePort"),
+		huh.NewOption("ClusterIP (internal only)", "ClusterIP"),
+	}
+
+	serviceForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("External Access").
+				Description("How to expose bibd outside the cluster").
+				Options(serviceOptions...).
+				Value(&serviceType),
+		),
+	).WithTheme(theme)
+
+	if err := serviceForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 6: Ask about ingress if available
+	var ingressHost string
+	if kubeInfo.IngressControllerAvailable {
+		ingressForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Ingress Hostname (optional)").
+					Description("Leave empty to skip ingress configuration").
+					Placeholder("bibd.example.com").
+					Value(&ingressHost),
+			),
+		).WithTheme(theme)
+
+		if err := ingressForm.Run(); err != nil {
+			if err == huh.ErrUserAborted {
+				fmt.Println("\nSetup cancelled.")
+				return nil
+			}
+			return err
+		}
+	}
+
+	// Step 7: Ask about output directory
+	homeDir, _ := os.UserHomeDir()
+	defaultOutputDir := filepath.Join(homeDir, "bibd-kubernetes")
+	outputDir := defaultOutputDir
+
+	outputDirForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Output Directory").
+				Description("Where to save Kubernetes manifests").
+				Placeholder(defaultOutputDir).
+				Value(&outputDir),
+		),
+	).WithTheme(theme)
+
+	if err := outputDirForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	if outputDir == "" {
+		outputDir = defaultOutputDir
+	}
+
+	// Step 8: Ask about auto-apply
+	var autoApply bool
+	applyForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Apply manifests now?").
+				Description("Automatically deploy to the cluster after generating").
+				Affirmative("Yes, deploy now").
+				Negative("No, I'll deploy later").
+				Value(&autoApply),
+		),
+	).WithTheme(theme)
+
+	if err := applyForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 9: Deploy
+	fmt.Println()
+
+	manifestConfig := kubernetes.DefaultManifestConfig()
+	manifestConfig.Namespace = namespace
+	manifestConfig.Name = name
+	manifestConfig.Email = email
+	manifestConfig.UsePublicBootstrap = usePublicNetwork
+	manifestConfig.StorageBackend = "postgres" // Use PostgreSQL for Kubernetes
+	manifestConfig.PostgresMode = "statefulset"
+	manifestConfig.ServiceType = serviceType
+	manifestConfig.P2PEnabled = true
+	manifestConfig.P2PMode = "proxy"
+
+	// Use CloudNativePG if available
+	if kubeInfo.CloudNativePGAvailable {
+		manifestConfig.PostgresMode = "cloudnativepg"
+	}
+
+	// Set default storage class if available
+	if kubeInfo.DefaultStorageClass != "" {
+		manifestConfig.StorageClass = kubeInfo.DefaultStorageClass
+	}
+
+	// Configure ingress
+	if ingressHost != "" {
+		manifestConfig.IngressHost = ingressHost
+		manifestConfig.IngressClass = kubeInfo.IngressClassName
+	}
+
+	deployConfig := &kubernetes.DeployConfig{
+		ManifestConfig: manifestConfig,
+		OutputDir:      outputDir,
+		AutoApply:      autoApply,
+		WaitForReady:   true,
+		WaitTimeout:    300 * time.Second,
+		Verbose:        true,
+	}
+
+	deployer := kubernetes.NewDeployer(deployConfig)
+	result, err := deployer.Deploy(ctx)
+
+	if err != nil {
+		fmt.Printf("\n❌ Deployment failed: %v\n", err)
+		return err
+	}
+
+	// Step 10: Show summary
+	fmt.Println("\n" + strings.Repeat("─", 50))
+	fmt.Println("✅ Kubernetes Quick Setup Complete!")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	fmt.Printf("  Identity:    %s <%s>\n", name, email)
+	fmt.Printf("  Context:     %s\n", kubeInfo.CurrentContext)
+	fmt.Printf("  Namespace:   %s\n", namespace)
+	fmt.Printf("  Storage:     PostgreSQL (%s)\n", manifestConfig.PostgresMode)
+	fmt.Printf("  Service:     %s\n", serviceType)
+	if ingressHost != "" {
+		fmt.Printf("  Ingress:     %s\n", ingressHost)
+	}
+	if usePublicNetwork {
+		fmt.Printf("  Network:     Public (bib.dev)\n")
+	} else {
+		fmt.Printf("  Network:     Private only\n")
+	}
+	fmt.Printf("  Output:      %s\n", outputDir)
+
+	if result.ManifestsApplied && result.PodsReady {
+		fmt.Printf("  Status:      🟢 Running\n")
+	} else if result.ManifestsApplied {
+		fmt.Printf("  Status:      🟡 Deployed (waiting for ready)\n")
+	} else {
+		fmt.Printf("  Status:      📦 Manifests generated\n")
+	}
+
+	if result.ExternalIP != "" {
+		fmt.Printf("  External IP: %s\n", result.ExternalIP)
+	}
+	if result.IngressURL != "" {
+		fmt.Printf("  Ingress URL: %s\n", result.IngressURL)
+	}
+	fmt.Println()
+
+	fmt.Println("Commands:")
+	fmt.Printf("  cd %s\n", outputDir)
+	fmt.Println("  • Apply:  ./apply.sh  (or: kubectl apply -k .)")
+	fmt.Println("  • Delete: ./delete.sh (or: kubectl delete -k .)")
+	fmt.Printf("  • Status: kubectl -n %s get pods\n", namespace)
+	fmt.Printf("  • Logs:   kubectl -n %s logs -f deployment/bibd\n", namespace)
 	fmt.Println()
 	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println()

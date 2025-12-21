@@ -1238,96 +1238,288 @@ Or manually:
 
 ### 6.1 Kubernetes Detection
 
-- [ ] Check for `kubectl` command availability
-- [ ] Get current context
-- [ ] Verify cluster connectivity
-- [ ] Display cluster info in wizard
+- [x] Check for `kubectl` command availability
+- [x] Get current context
+- [x] Verify cluster connectivity
+- [x] Display cluster info in wizard
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/kubernetes/detect.go`
+- `internal/deploy/kubernetes/detect_test.go`
+
+**Implementation notes:**
+- Created `kubernetes` package under `internal/deploy/` with detection support:
+  - `Detector` struct with configurable timeout, kubeconfig, and context
+  - `KubeInfo` struct containing:
+    - Available, ClusterReachable flags
+    - CurrentContext, ClusterName, ServerURL, ServerVersion
+    - ClientVersion, Namespace
+    - CloudNativePGAvailable, CloudNativePGVersion
+    - IngressControllerAvailable, IngressClassName
+    - StorageClasses, DefaultStorageClass
+    - Error message
+  - `NewDetector()` with 15s default timeout
+  - `WithTimeout()`, `WithKubeconfig()`, `WithContext()` builder methods
+  - `Detect()` method that checks:
+    - kubectl command existence
+    - kubectl version (client and server)
+    - Current context
+    - Cluster connectivity
+    - CloudNativePG operator (CRD detection)
+    - Ingress controller (ingress classes)
+    - Storage classes with default
+- Helper functions:
+  - `FormatKubeInfo()` - formats info with icons (☸️, ✓, ✗, ⚠)
+  - `IsUsable()` - returns true if Kubernetes can be used
+  - `GetContexts()` - returns all available contexts
+  - `GetNamespaces()` - returns all namespaces
+- Comprehensive unit tests (10 tests)
 
 ### 6.2 Kubernetes Configuration
 
-- [ ] Add namespace configuration
-- [ ] Add output directory configuration
-- [ ] Add output options:
-  - [ ] Generate and apply
-  - [ ] Generate only
-  - [ ] Generate Helm values only
-- [ ] Add external access configuration:
-  - [ ] None (internal only)
-  - [ ] LoadBalancer
-  - [ ] NodePort
-  - [ ] Ingress (with hostname)
+- [x] Add namespace configuration
+- [x] Add output directory configuration
+- [x] Add output options:
+  - [x] Generate and apply
+  - [x] Generate only
+  - [x] Generate Helm values only
+- [x] Add external access configuration:
+  - [x] None (internal only)
+  - [x] LoadBalancer
+  - [x] NodePort
+  - [x] Ingress (with hostname)
 
-**Files to modify:**
-- `cmd/bib/cmd/setup/setup.go`
-- `internal/tui/setup.go`
+**Implementation notes (in manifests.go):**
+- `ManifestConfig` struct with comprehensive options:
+  - Namespace, BibdImage, BibdTag, Replicas
+  - P2PEnabled, P2PMode, StorageBackend
+  - PostgresMode: statefulset, cloudnativepg, external
+  - PostgreSQL settings (Image, Tag, Database, User, Password, Host, Port)
+  - StorageClass, PVCSize
+  - ServiceType: ClusterIP, LoadBalancer, NodePort
+  - NodePort for NodePort services
+  - IngressHost, IngressClass, IngressTLS, TLSSecretName
+  - Bootstrap settings, Identity, OutputDir, OutputMode
+  - Labels, Annotations
 
 ### 6.3 Kubernetes PostgreSQL Options
 
-- [ ] Add StatefulSet PostgreSQL option
-- [ ] Add CloudNativePG option (with operator detection)
-- [ ] Add external PostgreSQL option
-- [ ] Configure storage class and PVC size for StatefulSet
+- [x] Add StatefulSet PostgreSQL option
+- [x] Add CloudNativePG option (with operator detection)
+- [x] Add external PostgreSQL option
+- [x] Configure storage class and PVC size for StatefulSet
 
-**Files to modify:**
-- `cmd/bib/cmd/setup/setup.go`
+**Implementation notes:**
+- PostgresMode field supports: "statefulset", "cloudnativepg", "external"
+- StatefulSet mode: Full StatefulSet with PVC template
+- CloudNativePG mode: Creates CNPG Cluster CR with credentials secret
+- External mode: Uses PostgresHost and PostgresPort for connection string
+- Storage class and PVC size configurable for both StatefulSet and CloudNativePG
 
 ### 6.4 Kubernetes Manifest Generation
 
-- [ ] Create `namespace.yaml` template
-- [ ] Create `configmap.yaml` template
-- [ ] Create `secret.yaml` template
-- [ ] Create `bibd-deployment.yaml` template (or statefulset)
-- [ ] Create `bibd-service.yaml` template
-- [ ] Create `bibd-ingress.yaml` template (optional)
-- [ ] Create PostgreSQL StatefulSet templates (if selected):
-  - [ ] `postgres-statefulset.yaml`
-  - [ ] `postgres-service.yaml`
-  - [ ] `postgres-pvc.yaml`
-  - [ ] `postgres-secret.yaml`
-- [ ] Create `kustomization.yaml` template
-- [ ] Create `values.yaml` for future Helm chart
+- [x] Create `namespace.yaml` template
+- [x] Create `configmap.yaml` template
+- [x] Create `secret.yaml` template
+- [x] Create `bibd-deployment.yaml` template (or statefulset)
+- [x] Create `bibd-service.yaml` template
+- [x] Create `bibd-ingress.yaml` template (optional)
+- [x] Create PostgreSQL StatefulSet templates (if selected):
+  - [x] `postgres-statefulset.yaml`
+  - [x] `postgres-service.yaml`
+  - [x] `postgres-pvc.yaml`
+  - [x] `postgres-secret.yaml`
+- [x] Create `kustomization.yaml` template
+- [x] Create `values.yaml` for future Helm chart
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/kubernetes/manifests.go`
-- `internal/deploy/kubernetes/templates/*.yaml.tmpl`
+- `internal/deploy/kubernetes/manifests_test.go`
+
+**Implementation notes:**
+- `ManifestGenerator` with `Generate()` method that creates all manifests
+- Generated files:
+  - `namespace.yaml` - Kubernetes namespace
+  - `configmap.yaml` - bibd configuration as ConfigMap
+  - `secrets.yaml` - PostgreSQL credentials, DATABASE_URL
+  - `bibd-deployment.yaml` - Deployment with probes, resources, volumes
+  - `bibd-service.yaml` - Service (ClusterIP/LoadBalancer/NodePort)
+  - `bibd-ingress.yaml` - Ingress if hostname configured
+  - `postgres-statefulset.yaml` - PostgreSQL StatefulSet with PVC
+  - `postgres-service.yaml` - PostgreSQL headless service
+  - `cloudnativepg-cluster.yaml` - CloudNativePG Cluster CR
+  - `kustomization.yaml` - Kustomize configuration
+  - `apply.sh` - Convenience apply script
+  - `delete.sh` - Convenience delete script
+- Features:
+  - ServiceAccount for bibd
+  - PVC for data persistence
+  - Liveness and readiness probes
+  - Resource requests and limits
+  - Proper labeling for kustomize
+  - Base64 encoding for secrets
+- Comprehensive unit tests (20 tests)
 
 ### 6.5 CloudNativePG Support
 
-- [ ] Detect CloudNativePG operator installation
-- [ ] Create CloudNativePG Cluster CR template
-- [ ] Configure backup settings (optional)
+- [x] Detect CloudNativePG operator installation
+- [x] Create CloudNativePG Cluster CR template
+- [x] Configure backup settings (optional)
 
-**Files to create:**
-- `internal/deploy/kubernetes/cloudnativepg.go`
-- `internal/deploy/kubernetes/templates/cloudnativepg-cluster.yaml.tmpl`
+**Implementation notes:**
+- Detection via CRD: `clusters.postgresql.cnpg.io`
+- Version detection from operator deployment image
+- Cluster CR includes:
+  - 1 instance (configurable)
+  - PostgreSQL parameters (max_connections, shared_buffers)
+  - Bootstrap initdb configuration
+  - Storage size and class
+  - Credentials secret reference
 
 ### 6.6 Kubernetes Deployment
 
-- [ ] Implement `DeployKubernetes()` function
-- [ ] Create output directory structure
-- [ ] Write all generated manifests
-- [ ] Optionally apply with `kubectl apply -k`
-- [ ] Wait for pods to be ready (if applied)
-- [ ] Display deployment status
-- [ ] Show external access info (LoadBalancer IP, etc.)
+- [x] Implement `DeployKubernetes()` function
+- [x] Create output directory structure
+- [x] Write all generated manifests
+- [x] Optionally apply with `kubectl apply -k`
+- [x] Wait for pods to be ready (if applied)
+- [x] Display deployment status
+- [x] Show external access info (LoadBalancer IP, etc.)
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/kubernetes/deploy.go`
+- `internal/deploy/kubernetes/deploy_test.go`
+
+**Implementation notes:**
+- Created `DeployConfig` struct with options:
+  - ManifestConfig, OutputDir
+  - AutoApply, WaitForReady
+  - WaitTimeout (default: 300s)
+  - Verbose mode
+- Created `Deployer` struct with methods:
+  - `Deploy()` - full deployment workflow:
+    1. Detect Kubernetes availability and cluster connectivity
+    2. Check for CloudNativePG if needed
+    3. Generate all manifests
+    4. Create output directory
+    5. Write files with proper permissions
+    6. Apply manifests with kubectl apply -k (optional)
+    7. Wait for rollout status (optional)
+    8. Get external IP for LoadBalancer
+    9. Show pod status
+  - `Delete()` - deletes deployment with kubectl delete -k
+  - `Logs()` - gets deployment logs
+  - `Status()` - gets deployment status
+- Created `DeployResult` struct with:
+  - Success, OutputDir, FilesGenerated
+  - ManifestsApplied, PodsReady
+  - ExternalIP, IngressURL
+  - Error message, Logs array
+- Created `DeploymentStatus` and `PodStatus` structs
+- Added `FormatStatus()` for display with icons
+- Comprehensive unit tests (10 tests)
 
 ### 6.7 Kubernetes Quick Start
 
-- [ ] Implement quick start for Kubernetes deployment
-- [ ] Use current context
-- [ ] Default namespace `bibd`
-- [ ] StatefulSet PostgreSQL
-- [ ] LoadBalancer external access
-- [ ] Auto-apply manifests
+- [x] Implement quick start for Kubernetes deployment
+- [x] Use current context
+- [x] Default namespace `bibd`
+- [x] StatefulSet PostgreSQL
+- [x] LoadBalancer external access
+- [x] Auto-apply manifests
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Added `kubernetes` package import
+- Updated `setupBibdQuick()` to route to `setupBibdQuickKubernetes()`
+- Implemented `setupBibdQuickKubernetes()` with:
+  1. Detect Kubernetes with full cluster info
+  2. Show context, cluster, CloudNativePG, Ingress, Storage info
+  3. Prompt for name/email
+  4. Prompt for namespace (default: bibd)
+  5. Prompt for public network (bib.dev)
+  6. Prompt for service type (LoadBalancer/NodePort/ClusterIP)
+  7. Prompt for ingress hostname if available
+  8. Prompt for output directory (default: ~/bibd-kubernetes)
+  9. Prompt for auto-apply
+  10. Deploy using Kubernetes deployer
+  11. Show comprehensive summary
+- Features:
+  - Auto-detects CloudNativePG and uses if available
+  - Auto-detects default storage class
+  - Auto-detects ingress class
+  - Uses PostgreSQL for Kubernetes deployments
+  - Shows external IP and ingress URL if available
+  - Generates convenience scripts
+
+**Usage:**
+```bash
+# Kubernetes quick setup
+bib setup --daemon --quick --target=kubernetes
+bib setup -d -q -t kubernetes
+```
+
+**Example Output:**
+```
+☸️  Quick Setup - bibd (Kubernetes)
+
+🔍 Detecting Kubernetes...
+   ✓ Context: production
+   ✓ Cluster: prod-cluster (v1.28.0)
+   ✓ CloudNativePG: 1.20.0
+   ✓ Ingress: nginx
+   ✓ Storage: standard, fast
+
+[Name, Email, Namespace, Network, Service Type, Ingress, Output Dir, Auto-apply prompts...]
+
+☸️  Applying manifests...
+⏳ Waiting for pods to be ready...
+🌐 Getting external IP...
+
+──────────────────────────────────────────────────
+✅ Kubernetes Quick Setup Complete!
+──────────────────────────────────────────────────
+
+  Identity:    John Doe <john@example.com>
+  Context:     production
+  Namespace:   bibd
+  Storage:     PostgreSQL (cloudnativepg)
+  Service:     LoadBalancer
+  Ingress:     bibd.example.com
+  Network:     Public (bib.dev)
+  Output:      /home/user/bibd-kubernetes
+  Status:      🟢 Running
+  External IP: 34.56.78.90
+  Ingress URL: https://bibd.example.com
+
+Commands:
+  cd /home/user/bibd-kubernetes
+  • Apply:  ./apply.sh  (or: kubectl apply -k .)
+  • Delete: ./delete.sh (or: kubectl delete -k .)
+  • Status: kubectl -n bibd get pods
+  • Logs:   kubectl -n bibd logs -f deployment/bibd
+
+  • Connect CLI: bib setup
+```
+
+**Generated Kubernetes Manifests:**
+```
+bibd-kubernetes/
+├── namespace.yaml
+├── configmap.yaml
+├── secrets.yaml
+├── bibd-deployment.yaml
+├── bibd-service.yaml
+├── bibd-ingress.yaml           # if hostname configured
+├── postgres-statefulset.yaml   # if statefulset mode
+├── postgres-service.yaml       # if statefulset mode
+├── cloudnativepg-cluster.yaml  # if cloudnativepg mode
+├── kustomization.yaml
+├── apply.sh
+└── delete.sh
+```
 
 ---
 
