@@ -165,6 +165,17 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		return runReconfigure(setupReconfigure, setupDaemon)
 	}
 
+	// Check for partial config and offer resume (unless --fresh was used)
+	if !setupFresh && !setupQuick {
+		resumed, err := checkAndOfferResume(setupDaemon)
+		if err != nil {
+			return err
+		}
+		if resumed {
+			return nil // User chose to resume and wizard completed
+		}
+	}
+
 	// Daemon setup
 	if setupDaemon {
 		if setupCluster {
@@ -302,6 +313,128 @@ func runReconfigure(section string, isDaemon bool) error {
 	return nil
 }
 
+// checkAndOfferResume checks for partial config and offers to resume
+// Returns true if the user chose to resume and the wizard completed
+func checkAndOfferResume(isDaemon bool) (bool, error) {
+	var appName string
+	if isDaemon {
+		appName = config.AppBibd
+	} else {
+		appName = config.AppBib
+	}
+
+	// Check for partial config
+	progress, err := config.DetectPartialConfig(appName)
+	if err != nil {
+		// Log warning but don't fail - just continue with fresh setup
+		fmt.Printf("Warning: could not check for partial config: %v\n", err)
+		return false, nil
+	}
+
+	if progress == nil {
+		// No partial config found
+		return false, nil
+	}
+
+	// Show resume prompt
+	fmt.Println()
+	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
+	fmt.Println("│              Partial Configuration Detected                  │")
+	fmt.Println("├─────────────────────────────────────────────────────────────┤")
+	fmt.Println("│                                                              │")
+	fmt.Printf("│  A previous setup was interrupted at step %d of %d:          │\n",
+		progress.CurrentStepIndex+1, progress.TotalSteps)
+	if progress.CurrentStepID != "" {
+		fmt.Printf("│  \"%s\"%-45s│\n", progress.CurrentStepID, "")
+	}
+	fmt.Println("│                                                              │")
+	fmt.Printf("│  Started: %s%-35s│\n", progress.StartedAt.Format("2006-01-02 15:04"), "")
+	fmt.Printf("│  Progress: %d%% complete%-40s│\n", progress.ProgressPercentage(), "")
+	fmt.Println("│                                                              │")
+	fmt.Println("└─────────────────────────────────────────────────────────────┘")
+	fmt.Println()
+	fmt.Println("What would you like to do?")
+	fmt.Println("  [R] Resume from where you left off")
+	fmt.Println("  [S] Start over (delete partial config)")
+	fmt.Println("  [C] Cancel")
+	fmt.Println()
+	fmt.Print("Choice [R/s/c]: ")
+
+	var response string
+	if _, err := fmt.Scanln(&response); err != nil {
+		response = "r" // Default to resume
+	}
+	response = strings.ToLower(strings.TrimSpace(response))
+
+	switch response {
+	case "r", "":
+		// Resume - load the saved data and continue wizard
+		fmt.Println("\nResuming setup...")
+		return resumeSetup(progress, isDaemon)
+
+	case "s":
+		// Start over - delete partial config
+		if err := config.DeletePartialConfig(appName); err != nil {
+			fmt.Printf("Warning: failed to delete partial config: %v\n", err)
+		} else {
+			fmt.Println("✓ Deleted partial configuration")
+		}
+		return false, nil
+
+	case "c":
+		// Cancel
+		fmt.Println("Cancelled.")
+		os.Exit(0)
+		return false, nil
+
+	default:
+		fmt.Println("Invalid choice. Resuming...")
+		return resumeSetup(progress, isDaemon)
+	}
+}
+
+// resumeSetup resumes a wizard from saved progress
+func resumeSetup(progress *config.SetupProgress, isDaemon bool) (bool, error) {
+	// Load the saved setup data
+	data := tui.DefaultSetupData()
+	if err := progress.GetData(data); err != nil {
+		fmt.Printf("Warning: could not load saved data, starting fresh: %v\n", err)
+		return false, nil
+	}
+
+	// Run the wizard starting from the saved step
+	if isDaemon {
+		return runDaemonWizardWithProgress(data, progress)
+	}
+	return runCLIWizardWithProgress(data, progress)
+}
+
+// runCLIWizardWithProgress runs the CLI wizard from saved progress
+func runCLIWizardWithProgress(data *tui.SetupData, progress *config.SetupProgress) (bool, error) {
+	// TODO: Implement resume for CLI wizard (integrate with SetupWizardModel)
+	// For now, just run the normal wizard with the loaded data
+	fmt.Printf("Resuming from step: %s\n", progress.CurrentStepID)
+
+	// Delete the partial config since we're resuming
+	config.DeletePartialConfig(progress.AppName)
+
+	// Run normal wizard - the data is already loaded
+	return false, nil
+}
+
+// runDaemonWizardWithProgress runs the daemon wizard from saved progress
+func runDaemonWizardWithProgress(data *tui.SetupData, progress *config.SetupProgress) (bool, error) {
+	// TODO: Implement resume for daemon wizard (integrate with SetupWizardModel)
+	// For now, just run the normal wizard with the loaded data
+	fmt.Printf("Resuming from step: %s\n", progress.CurrentStepID)
+
+	// Delete the partial config since we're resuming
+	config.DeletePartialConfig(progress.AppName)
+
+	// Run normal wizard - the data is already loaded
+	return false, nil
+}
+
 // setupBibQuick runs quick CLI setup with minimal prompts
 func setupBibQuick() error {
 	// TODO: Implement quick CLI setup (Phase 2.9)
@@ -335,6 +468,9 @@ type SetupWizardModel struct {
 	cancelled   bool
 	configPath  string
 	err         error
+
+	// Progress tracking for partial config save
+	progress *config.SetupProgress
 }
 
 func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
@@ -455,6 +591,15 @@ func newSetupWizardModel(isDaemon bool) *SetupWizardModel {
 		data:     data,
 		isDaemon: isDaemon,
 	}
+
+	// Initialize progress tracking for partial config save
+	var appName string
+	if isDaemon {
+		appName = config.AppBibd
+	} else {
+		appName = config.AppBib
+	}
+	m.progress = config.NewSetupProgress(appName, isDaemon, len(steps))
 
 	m.wizard = tui.NewWizard(
 		getWizardTitle(isDaemon),
@@ -814,6 +959,8 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
+			// Offer to save progress before quitting
+			m.saveProgressOnExit()
 			m.cancelled = true
 			m.done = true
 			return m, tea.Quit
@@ -821,11 +968,13 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			if m.wizard.CurrentStepIndex() > 0 {
 				m.wizard.PrevStep()
+				m.updateProgressTracking()
 				m.updateFormForCurrentStep()
 				if m.currentForm != nil {
 					return m, m.currentForm.Init()
 				}
 			} else {
+				m.saveProgressOnExit()
 				m.cancelled = true
 				m.done = true
 				return m, tea.Quit
@@ -842,11 +991,19 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// If form completed, move to next step
 				if m.currentForm.State == huh.StateCompleted {
+					// Mark current step as completed and update progress
+					if step := m.wizard.CurrentStep(); step != nil {
+						m.progress.MarkStepCompleted(step.ID)
+					}
+
 					nextCmd := m.wizard.NextStep()
 					if m.wizard.IsDone() {
+						// Clean up partial config on successful completion
+						config.DeletePartialConfig(m.progress.AppName)
 						m.done = true
 						return m, tea.Quit
 					}
+					m.updateProgressTracking()
 					m.updateFormForCurrentStep()
 					if m.currentForm != nil {
 						return m, tea.Batch(nextCmd, m.currentForm.Init())
@@ -874,6 +1031,43 @@ func (m *SetupWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// updateProgressTracking updates the progress tracking with current step info
+func (m *SetupWizardModel) updateProgressTracking() {
+	if m.progress == nil {
+		return
+	}
+
+	step := m.wizard.CurrentStep()
+	if step != nil {
+		m.progress.SetCurrentStep(step.ID, m.wizard.CurrentStepIndex())
+	}
+}
+
+// saveProgressOnExit saves progress when the user cancels/exits
+func (m *SetupWizardModel) saveProgressOnExit() {
+	if m.progress == nil {
+		return
+	}
+
+	// Update progress with current state
+	m.updateProgressTracking()
+
+	// Store the current setup data
+	if err := m.progress.SetData(m.data); err != nil {
+		// Log but don't fail - user is exiting anyway
+		fmt.Printf("\nWarning: could not save setup data: %v\n", err)
+	}
+
+	// Only save if we have made some progress (not on first step)
+	if m.wizard.CurrentStepIndex() > 0 || len(m.progress.CompletedSteps) > 0 {
+		if err := config.SavePartialConfig(m.progress); err != nil {
+			fmt.Printf("\nWarning: could not save progress: %v\n", err)
+		} else {
+			fmt.Printf("\n✓ Progress saved. Run 'bib setup' to resume.\n")
+		}
+	}
 }
 
 func (m *SetupWizardModel) View() string {

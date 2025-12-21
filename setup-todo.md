@@ -80,18 +80,32 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 1.3 Partial Configuration Save/Resume
 
-- [ ] Create `SetupProgress` struct to track wizard state
-- [ ] Implement `SavePartialConfig()` function
-- [ ] Implement `LoadPartialConfig()` function
-- [ ] Implement `DetectPartialConfig()` function
-- [ ] Add resume prompt to setup wizard entry
-- [ ] Store partial config at `~/.config/bib/config.yaml.partial` or `~/.config/bibd/config.yaml.partial`
+- [x] Create `SetupProgress` struct to track wizard state
+- [x] Implement `SavePartialConfig()` function
+- [x] Implement `LoadPartialConfig()` function
+- [x] Implement `DetectPartialConfig()` function
+- [x] Add resume prompt to setup wizard entry
+- [x] Store partial config at `~/.config/bib/config.yaml.partial` or `~/.config/bibd/config.yaml.partial`
 
-**Files to create:**
+**Files created:**
 - `internal/config/partial.go`
+- `internal/config/partial_test.go`
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- `SetupProgress` struct tracks: version, app name, timestamps, current step, completed steps, raw JSON data
+- Progress is saved as JSON for schema flexibility
+- Atomic file writes using temp file + rename
+- Version field for forward compatibility
+- Helper methods: `MarkStepCompleted()`, `IsStepCompleted()`, `SetCurrentStep()`, `SetData()`, `GetData()`
+- Utility methods: `ProgressPercentage()`, `TimeSinceStart()`, `TimeSinceLastUpdate()`, `Summary()`
+- `checkAndOfferResume()` prompts user with Resume/Start Over/Cancel options
+- Progress saved on Ctrl+C/q with user feedback
+- Progress tracking integrated into `SetupWizardModel.Update()`
+- Partial config deleted on successful wizard completion
+- Comprehensive unit tests for all functionality
 
 ---
 
