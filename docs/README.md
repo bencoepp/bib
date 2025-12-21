@@ -49,6 +49,7 @@ Essential guides for new users.
 | Document | Description |
 |----------|-------------|
 | [Quick Start Guide](getting-started/quickstart.md) | Get up and running in 5 minutes |
+| [Setup Flow](getting-started/setup-flow.md) | Complete setup and initialization guide |
 | [Configuration Guide](getting-started/configuration.md) | Complete configuration reference |
 
 ### 🏗️ [Core Concepts](concepts/README.md)

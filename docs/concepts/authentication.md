@@ -227,6 +227,60 @@ func makeAuthenticatedRequest(conn *grpc.ClientConn, token string) {
 
 ## Security Considerations
 
+### Trust-On-First-Use (TOFU)
+
+When connecting to a bibd node for the first time, the client must establish trust with the server's certificate. Bib uses a Trust-On-First-Use model similar to SSH.
+
+**Default Behavior (Manual Confirmation):**
+
+```
+⚠️  First connection to this node
+
+Node ID:      QmXyz123...
+Address:      node1.example.com:4000
+Fingerprint:  SHA256:Ab12Cd34Ef56...
+
+Trust this node? [y/N]
+```
+
+The user must manually confirm the fingerprint matches what was provided out-of-band.
+
+**Automatic Trust Flag:**
+
+For scripting or when trust has been verified separately:
+
+```bash
+bib connect --trust-first-use node1.example.com:4000
+```
+
+This flag:
+- Automatically trusts the server certificate on first connection
+- Saves the certificate to the trust store
+- Subsequent connections verify against the saved certificate
+
+**Trust Management:**
+
+```bash
+# List trusted nodes
+bib trust list
+
+# Manually add a trusted node
+bib trust add <node-id> --fingerprint SHA256:...
+
+# Remove trust for a node
+bib trust remove <node-id>
+
+# Pin a certificate (prevents automatic trust updates)
+bib trust pin <node-id>
+```
+
+**Trust Store Location:**
+
+| Platform | Location |
+|----------|----------|
+| Linux/macOS | `~/.config/bib/trust/` |
+| Windows | `%APPDATA%\bib\trust\` |
+
 ### Challenge Security
 
 - Challenges expire after 30 seconds

@@ -88,17 +88,26 @@ bib setup [flags]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--daemon` | `-d` | bool | `false` | Configure bibd daemon instead of CLI |
+| `--quick` | `-q` | bool | `false` | Quick start with minimal prompts |
 | `--format` | `-f` | string | `yaml` | Config file format: `yaml`, `toml`, `json` |
 | `--cluster` | | bool | `false` | Initialize new HA cluster (requires `--daemon`) |
 | `--cluster-join` | | string | `""` | Join existing cluster with token (requires `--daemon`) |
+| `--reconfigure` | | string | `""` | Reconfigure specific section only |
+| `--fresh` | | bool | `false` | Reset configuration and start fresh |
 
 **Examples:**
 
 ```bash
+# Quick start - minimal prompts, sensible defaults
+bib setup --quick
+
 # Configure bib CLI interactively
 bib setup
 
-# Configure bibd daemon
+# Quick daemon setup (Proxy mode)
+bib setup --daemon --quick
+
+# Full interactive daemon setup
 bib setup --daemon
 
 # Initialize HA cluster on first node
@@ -106,32 +115,56 @@ bib setup --daemon --cluster
 
 # Join existing cluster
 bib setup --daemon --cluster-join "eyJjbHVzdGVy..."
+
+# Reconfigure specific section
+bib setup --reconfigure identity
+bib setup --daemon --reconfigure p2p-mode
+
+# Reset and start fresh
+bib setup --fresh
 ```
 
 **Wizard Navigation:**
-- `Tab` — Move between form fields
+- `Tab` / `↓` — Move to next field
+- `Shift+Tab` / `↑` — Move to previous field
 - `Enter` — Proceed to next step
 - `Esc` — Go back to previous step
-- `Ctrl+C` — Cancel setup
+- `Ctrl+C` — Save progress and exit (can resume later)
+
+**Quick Start Mode:**
+
+Quick start (`--quick`) creates a working configuration with minimal input:
+- Prompts only for name and email
+- Generates Ed25519 identity key automatically
+- Uses sensible defaults (Proxy mode, SQLite, public bootstrap)
+- Starts bibd immediately after daemon setup
 
 **CLI Setup Steps:**
 1. **Welcome** — Introduction and overview
-2. **Identity** — Name and email for attribution
+2. **Identity** — Name and email, generates `~/.config/bib/identity.pem`
 3. **Output** — Default format and color preferences
 4. **Connection** — bibd server address
 5. **Logging** — Log level selection
-6. **Confirm** — Review and save
+6. **Connection Test** — Verify connectivity to daemon
+7. **Auth Test** — Authenticate with generated identity
+8. **Network Health** — Check peer connections
+9. **Confirm** — Review and save
 
 **Daemon Setup Steps:**
 1. **Welcome** — Introduction and overview
 2. **Identity** — Daemon name and contact email
 3. **Server** — Host, port, and data directory
-4. **TLS** — Enable/configure TLS encryption
-5. **Storage** — Database backend selection
-6. **P2P** — Enable P2P and select node mode
-7. **Logging** — Log level and format
-8. **Cluster** — Optional HA cluster configuration
-9. **Confirm** — Review and save
+4. **TLS / Security** — TLS, certificate pinning, hardening
+5. **Storage** — Database backend (SQLite/PostgreSQL)
+6. **P2P Mode** — Proxy, Selective, or Full (with mode-specific config)
+7. **Bootstrap** — Public (bib.dev) + custom peers, connectivity test
+8. **Logging** — Log level and format
+9. **Cluster** — Optional HA cluster configuration
+10. **Break Glass** — Optional emergency access
+11. **Confirm** — Review and save
+12. **Deployment** — Install service, start bibd, verify
+
+> 📘 See [Setup Flow](../getting-started/setup-flow.md) for detailed documentation.
 
 ---
 
@@ -177,6 +210,148 @@ bib config path
 ```
 /Users/you/.config/bib/config.yaml
 ```
+
+#### config reset
+
+Reset configuration to defaults.
+
+```bash
+bib config reset [section] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--all` | bool | Reset entire configuration |
+
+**Examples:**
+```bash
+# Reset specific section
+bib config reset p2p
+
+# Reset everything
+bib config reset --all
+```
+
+---
+
+### connect
+
+Connect to a bibd daemon.
+
+```bash
+bib connect [address] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--save` | bool | `false` | Save as default node in config |
+| `--alias` | string | `""` | Alias for the node (used with `--save`) |
+| `--test` | bool | `false` | Test connection only, don't authenticate |
+| `--timeout` | duration | `10s` | Connection timeout |
+| `--trust-first-use` | bool | `false` | Auto-trust on first connection (skip TOFU prompt) |
+
+**Examples:**
+
+```bash
+# Connect to local daemon
+bib connect localhost:4000
+
+# Connect and save as default
+bib connect --save node1.example.com:4000
+
+# Connect with alias
+bib connect --save --alias mynode node1.example.com:4000
+
+# Test connection only (no auth)
+bib connect --test node1.example.com:4000
+
+# Auto-trust on first connection (for scripting)
+bib connect --trust-first-use --save remote.node.com:4000
+```
+
+**TOFU (Trust-On-First-Use):**
+
+When connecting to a new node for the first time, you'll be prompted to verify the node's certificate fingerprint:
+
+```
+⚠️  First connection to this node
+
+Node ID:      QmXyz123...
+Address:      node1.example.com:4000
+Fingerprint:  SHA256:Ab12Cd34Ef56...
+
+Trust this node? [y/N]
+```
+
+Use `--trust-first-use` to skip this prompt (for scripting or when trust has been verified separately).
+
+---
+
+### trust
+
+Manage trusted nodes (TOFU).
+
+```bash
+bib trust <subcommand>
+```
+
+#### trust list
+
+List all trusted nodes.
+
+```bash
+bib trust list
+```
+
+**Output:**
+```
+NODE ID         ALIAS      ADDRESS                   TRUSTED     PINNED
+QmXyz123...     mynode     node1.example.com:4000    2024-01-15  no
+QmAbc456...     -          192.168.1.50:4000         2024-01-10  yes
+```
+
+#### trust add
+
+Manually add a trusted node.
+
+```bash
+bib trust add <node-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--fingerprint` | string | Certificate fingerprint (required) |
+| `--alias` | string | Friendly name for the node |
+| `--address` | string | Node address |
+
+**Example:**
+```bash
+bib trust add QmXyz123... --fingerprint SHA256:Ab12Cd34Ef56... --alias mynode
+```
+
+#### trust remove
+
+Remove trust for a node.
+
+```bash
+bib trust remove <node-id>
+```
+
+#### trust pin
+
+Pin a node's certificate (prevent automatic trust updates).
+
+```bash
+bib trust pin <node-id>
+```
+
+Pinned certificates provide additional security by preventing certificate changes from being automatically trusted.
 
 ---
 

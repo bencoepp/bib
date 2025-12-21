@@ -120,11 +120,28 @@ server: "localhost:8080"
 
 #### Identity Section
 
+The identity section configures your user information for attribution and authentication.
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | `""` | Your display name (for dataset attribution) |
-| `email` | string | `""` | Your email address |
-| `key` | string | `""` | Path to Ed25519 private key file |
+| `name` | string | `""` | Your display name (required for dataset attribution) |
+| `email` | string | `""` | Your email address (required for registration) |
+| `key` | string | `~/.config/bib/identity.pem` | Path to Ed25519 private key file |
+
+**Key Generation:**
+
+The identity key is generated automatically during `bib setup` and stored separately from SSH keys:
+
+| Key | Location | Purpose |
+|-----|----------|---------|
+| bib identity | `~/.config/bib/identity.pem` | Authentication to bibd |
+| SSH keys | `~/.ssh/id_ed25519` | Unrelated, unchanged |
+
+To regenerate your identity key:
+
+```bash
+bib setup --reconfigure identity
+```
 
 #### Output Section
 
@@ -743,11 +760,58 @@ database:
 
 ---
 
+## Reconfiguration
+
+After initial setup, you can modify individual configuration sections without running the full wizard.
+
+### Reconfigure Commands
+
+```bash
+# Reconfigure specific sections (CLI)
+bib setup --reconfigure identity
+bib setup --reconfigure connection
+bib setup --reconfigure output
+
+# Reconfigure specific sections (daemon)
+bib setup --daemon --reconfigure p2p-mode
+bib setup --daemon --reconfigure storage
+bib setup --daemon --reconfigure cluster
+bib setup --daemon --reconfigure security
+```
+
+### Reset Configuration
+
+```bash
+# Reset to defaults and start fresh
+bib setup --fresh
+bib setup --daemon --fresh
+
+# Reset specific sections
+bib config reset p2p
+bib config reset --all
+```
+
+### Manual Editing
+
+You can also edit configuration files directly:
+
+```bash
+# Edit CLI config
+$EDITOR ~/.config/bib/config.yaml
+
+# Edit daemon config (restart required)
+$EDITOR ~/.config/bibd/config.yaml
+sudo systemctl restart bibd
+```
+
+---
+
 ## Related Documentation
 
 | Document | Topic |
 |----------|-------|
 | [Quick Start](quickstart.md) | Getting started with configuration |
+| [Setup Flow](setup-flow.md) | Complete setup and initialization guide |
 | [Node Modes](../concepts/node-modes.md) | Detailed mode configuration |
 | [Database Security](../storage/database-security.md) | Database security options |
 | [Clustering Guide](../guides/clustering.md) | HA cluster configuration |

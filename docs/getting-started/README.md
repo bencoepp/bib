@@ -7,11 +7,13 @@ This section covers everything you need to get Bib up and running.
 | Document | Description |
 |----------|-------------|
 | [Quick Start](quickstart.md) | Get up and running in 5 minutes |
+| [Setup Flow](setup-flow.md) | Complete setup and initialization guide |
 | [Configuration](configuration.md) | Complete configuration reference for `bib` and `bibd` |
 
 ## Quick Links
 
 - **New to Bib?** Start with the [Quick Start Guide](quickstart.md)
+- **Want the full setup guide?** See the [Setup Flow](setup-flow.md)
 - **Need to configure?** See the [Configuration Guide](configuration.md)
 - **Want to understand the system?** Check out [Concepts](../concepts/README.md)
 

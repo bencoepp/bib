@@ -137,49 +137,80 @@ bib version 1.0.0
 
 ## Configuration
 
-Bib uses interactive setup wizards to guide you through configuration.
+Bib provides two setup modes: **Quick Start** for getting running fast, and **Guided Setup** for full configuration.
 
-### Step 1: Configure the CLI
+> 📘 For comprehensive setup documentation, see [Setup Flow](setup-flow.md).
+
+### First Run Behavior
+
+When you run `bib` for the first time without configuration:
+
+1. **Auto-detection**: bib checks for a running local bibd daemon
+2. **If found**: Offers to connect to the detected daemon
+3. **If not found**: Launches the setup wizard
+
+### Option 1: Quick Start (Recommended for New Users)
+
+Get running in seconds with minimal prompts:
 
 ```bash
-bib setup
+# Quick CLI setup
+bib setup --quick
+
+# Quick daemon setup (Proxy mode)
+bib setup --daemon --quick
 ```
 
-The wizard guides you through:
+Quick Start:
+- Prompts only for name and email
+- Generates Ed25519 identity key automatically
+- Uses sensible defaults (Proxy mode, SQLite, public bootstrap)
+- Starts bibd immediately after daemon setup
 
-| Step | Description |
-|------|-------------|
-| **Identity** | Your name and email (for attribution on datasets you create) |
-| **Output** | Default output format (table/json/yaml) and color preferences |
-| **Connection** | Address of your bibd server (default: `localhost:8080`) |
-| **Logging** | Log verbosity level |
+### Option 2: Guided Setup
 
-**Navigation:**
-- `Tab` — Move between fields
-- `Enter` — Proceed to next step
-- `Esc` — Go back to previous step
-- `Ctrl+C` — Cancel setup
-
-Configuration is saved to `~/.config/bib/config.yaml`.
-
-### Step 2: Configure the Daemon
+Full interactive wizard with all configuration options:
 
 ```bash
+# CLI setup
+bib setup
+
+# Daemon setup
 bib setup --daemon
 ```
 
-The daemon wizard includes additional options:
+**CLI Setup Steps:**
 
 | Step | Description |
 |------|-------------|
-| **Identity** | Daemon name and admin contact email |
-| **Server** | Host, port, and data directory |
-| **TLS** | Optional TLS encryption for gRPC connections |
-| **Storage** | Database backend: SQLite (lightweight) or PostgreSQL (production) |
-| **P2P** | Enable networking and select mode (proxy/selective/full) |
-| **Cluster** | Optional high-availability clustering |
+| **Identity** | Name, email → generates `~/.config/bib/identity.pem` |
+| **Output** | Default format (table/json/yaml), colors |
+| **Connection** | bibd server address (default: `localhost:4000`) |
+| **Logging** | Log verbosity level |
+| **Connection Test** | Verify connectivity to daemon |
+| **Auth Test** | Authenticate with generated identity |
+| **Network Health** | Check peer connections |
 
-Configuration is saved to `~/.config/bibd/config.yaml`.
+**Daemon Setup Steps:**
+
+| Step | Description |
+|------|-------------|
+| **Identity** | Node name, admin email |
+| **Server** | Host, port, data directory |
+| **TLS/Security** | TLS setup, certificate pinning, hardening options |
+| **Storage** | SQLite or PostgreSQL (with setup wizard) |
+| **P2P Mode** | Proxy, Selective, or Full (with mode-specific config) |
+| **Bootstrap** | Public (bib.dev) + custom peers, connectivity test |
+| **Clustering** | Optional HA cluster configuration |
+| **Break Glass** | Optional emergency access |
+| **Deployment** | Install service, start bibd, verify |
+
+**Navigation:**
+- `Tab` / `↓` — Next field
+- `Shift+Tab` / `↑` — Previous field
+- `Enter` — Proceed to next step
+- `Esc` — Go back to previous step
+- `Ctrl+C` — Save progress and exit (can resume later)
 
 ### Configuration File Locations
 
@@ -189,9 +220,20 @@ Configuration is saved to `~/.config/bibd/config.yaml`.
 | **Linux** | `~/.config/bib/config.yaml` | `~/.config/bibd/config.yaml` |
 | **Windows** | `%APPDATA%\bib\config.yaml` | `%APPDATA%\bibd\config.yaml` |
 
+### Identity Keys
+
+Setup generates an Ed25519 keypair for authentication, stored separately from SSH keys:
+
+| Purpose | Location |
+|---------|----------|
+| **bib CLI identity** | `~/.config/bib/identity.pem` |
+| **bibd P2P identity** | `~/.config/bibd/identity.pem` |
+
 ---
 
 ## Starting the Daemon
+
+After `bib setup --daemon`, bibd starts automatically. For manual control:
 
 ### Basic Start
 
@@ -329,7 +371,7 @@ bibd
 sudo systemctl restart bibd
 ```
 
-See [Node Modes](node-modes.md) for detailed information about each mode.
+See [Node Modes](../concepts/node-modes.md) for detailed information about each mode.
 
 ---
 
@@ -379,7 +421,7 @@ bib setup --daemon --cluster
 bib setup --daemon --cluster-join <join-token>
 ```
 
-See [Clustering Guide](clustering.md) for detailed instructions.
+See [Clustering Guide](../guides/clustering.md) for detailed instructions.
 
 ---
 

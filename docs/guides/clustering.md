@@ -248,6 +248,33 @@ bib setup --daemon --cluster-join <token>
 bibd
 ```
 
+### Join Token Structure
+
+The join token is a base64-encoded JSON object containing:
+
+| Field | Description |
+|-------|-------------|
+| `cluster_name` | Name of the cluster to join |
+| `leader_addr` | Address of the current leader |
+| `token` | Unique authentication token |
+| `expires_at` | Token expiration timestamp |
+
+**Example decoded token:**
+```json
+{
+  "cluster_name": "bib-cluster",
+  "leader_addr": "192.168.1.100:4002",
+  "token": "abc123...",
+  "expires_at": 1705324000
+}
+```
+
+**Token Security:**
+- Tokens are single-use by default
+- Tokens expire after 24 hours
+- Tokens contain no secrets (authentication via node handshake)
+- Invalid tokens are rejected with clear error messages
+
 ### Remove Node
 
 ```bash

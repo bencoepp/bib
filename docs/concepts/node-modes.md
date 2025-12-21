@@ -2,6 +2,8 @@
 
 This document explains the three operational modes for bibd nodes: **Proxy**, **Selective**, and **Full**. Each mode offers different trade-offs between resource usage, data availability, and network participation.
 
+> 📘 **Setup Wizard:** Mode selection is part of the `bib setup --daemon` wizard. See [Setup Flow](../getting-started/setup-flow.md) for the complete setup process, including mode-specific configuration steps.
+
 ---
 
 ## Table of Contents
