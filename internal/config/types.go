@@ -164,6 +164,28 @@ type TLSConfig struct {
 	RenewalThresholdDays   int `mapstructure:"renewal_threshold_days"`    // Default: 30
 }
 
+// SSHConfig holds SSH server configuration for TUI access.
+type SSHConfig struct {
+	// Enabled controls whether the SSH server is active (default: true)
+	Enabled bool `mapstructure:"enabled"`
+
+	// Host is the address to bind to (default: "0.0.0.0")
+	Host string `mapstructure:"host"`
+
+	// Port is the SSH server port (default: 2222)
+	Port int `mapstructure:"port"`
+
+	// HostKeyPath is the path to the host key file.
+	// If empty, a key will be generated at <config_dir>/ssh_host_key
+	HostKeyPath string `mapstructure:"host_key_path"`
+
+	// IdleTimeout is how long to wait before closing idle connections (default: 30m)
+	IdleTimeout time.Duration `mapstructure:"idle_timeout"`
+
+	// MaxConnections is the maximum number of concurrent SSH connections (default: 100)
+	MaxConnections int `mapstructure:"max_connections"`
+}
+
 // P2PConfig holds P2P networking configuration for the daemon
 type P2PConfig struct {
 	// Enabled controls whether P2P networking is active
@@ -531,6 +553,7 @@ type BibdConfig struct {
 	Log      LogConfig      `mapstructure:"log"`
 	Identity IdentityConfig `mapstructure:"identity"`
 	Server   ServerConfig   `mapstructure:"server"`
+	SSH      SSHConfig      `mapstructure:"ssh"`
 	Auth     AuthConfig     `mapstructure:"auth"`
 	P2P      P2PConfig      `mapstructure:"p2p"`
 	Cluster  ClusterConfig  `mapstructure:"cluster"`
@@ -871,6 +894,14 @@ func DefaultBibdConfig() BibdConfig {
 				},
 				ShutdownGracePeriod: 30 * time.Second,
 			},
+		},
+		SSH: SSHConfig{
+			Enabled:        true,
+			Host:           "0.0.0.0",
+			Port:           2222,
+			HostKeyPath:    "", // Auto-generated at <config_dir>/ssh_host_key
+			IdleTimeout:    30 * time.Minute,
+			MaxConnections: 100,
 		},
 		P2P: P2PConfig{
 			Enabled:  true,

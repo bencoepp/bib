@@ -4,9 +4,8 @@ package tui
 import (
 	"bib/internal/cli/i18n"
 	"bib/internal/config"
-	"bib/internal/tui/app"
 	tuii18n "bib/internal/tui/i18n"
-	"bib/internal/tui/pages"
+	"bib/internal/tui/shared"
 	"bib/internal/tui/themes"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -48,8 +47,6 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		themes.Global().SetActive(themes.PresetDark)
 	}
 
-	// i18n is already initialized globally in root.go with the resolved locale
-
 	// Load config
 	cfg, err := config.LoadBib("")
 	if err != nil {
@@ -57,40 +54,16 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		cfg = config.DefaultBibConfig()
 	}
 
-	// Create app
-	application := app.New(
-		app.WithConfig(cfg),
-		app.WithTheme(themes.Global().Active()),
-		app.WithI18n(tuii18n.Global()),
+	// Create shared TUI
+	tui := shared.New(
+		shared.WithMode(shared.ModeCLI),
+		shared.WithConfig(cfg),
+		shared.WithTheme(themes.Global().Active()),
+		shared.WithI18n(tuii18n.Global()),
 	)
 
-	// Register pages
-	application.State().Config = cfg
-	registerPages(application)
-
 	// Run program
-	program := tea.NewProgram(application, tea.WithAltScreen())
+	program := tea.NewProgram(tui, tea.WithAltScreen())
 	_, err = program.Run()
 	return err
-}
-
-func registerPages(application *app.App) {
-	router := application
-	_ = router
-
-	// Get the router from the app and register pages
-	// For now, we'll create pages that will be registered during Init
-
-	// Note: The actual page registration happens in the app.Router
-	// We need to access the router after the app is created
-	// This is a simplified version; in practice you'd have a factory
-
-	// Create pages
-	dashboardPage := pages.NewDashboardPage(application)
-	jobsPage := pages.NewJobsPage(application)
-
-	// Register with router
-	// The app.Router handles this internally
-	_ = dashboardPage
-	_ = jobsPage
 }

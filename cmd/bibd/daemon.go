@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bib/internal/auth"
 	"bib/internal/certs"
 	"context"
 	"crypto/tls"
@@ -20,6 +21,7 @@ import (
 	"bib/internal/grpc/middleware"
 	"bib/internal/logger"
 	"bib/internal/p2p"
+	sshserver "bib/internal/ssh"
 	"bib/internal/storage"
 	pglifecycle "bib/internal/storage/postgres/lifecycle"
 
@@ -42,8 +44,10 @@ type Daemon struct {
 	p2pDisc     *p2p.Discovery
 	p2pMode     *p2p.ModeManager
 	cluster     *cluster.Cluster
-	certMgr     *certs.Manager  // TLS certificate manager
-	grpcServer  *grpcpkg.Server // gRPC server
+	certMgr     *certs.Manager    // TLS certificate manager
+	grpcServer  *grpcpkg.Server   // gRPC server
+	authService *auth.Service     // Authentication service
+	sshServer   *sshserver.Server // SSH server for TUI access
 
 	mu        sync.Mutex
 	running   bool
@@ -140,6 +144,21 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}
 
+	// 9. Initialize auth service (after storage is ready)
+	d.authService = auth.NewService(d.store, d.cfg.Auth, d.cfg.Cluster.NodeID)
+
+	// 10. Initialize SSH server for TUI access
+	if d.cfg.SSH.Enabled {
+		if err := d.startSSHServer(ctx); err != nil {
+			d.stopGRPCServer(ctx)
+			d.stopCluster()
+			d.stopP2P()
+			d.stopStorage()
+			d.stopCertificates()
+			return fmt.Errorf("failed to start SSH server: %w", err)
+		}
+	}
+
 	d.running = true
 	d.startedAt = time.Now()
 	d.log.Info("daemon started successfully")
@@ -148,7 +167,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 }
 
 // Stop gracefully shuts down all daemon components in reverse order.
-// Order: gRPC -> Cluster -> P2P -> Storage -> Certificates
+// Order: SSH -> gRPC -> Cluster -> P2P -> Storage -> Certificates
 func (d *Daemon) Stop(ctx context.Context) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -161,7 +180,12 @@ func (d *Daemon) Stop(ctx context.Context) error {
 
 	var errs []error
 
-	// 1. Stop gRPC server first (drain connections)
+	// 1. Stop SSH server first
+	if err := d.stopSSHServer(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("ssh: %w", err))
+	}
+
+	// 2. Stop gRPC server (drain connections)
 	if err := d.stopGRPCServer(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("grpc: %w", err))
 	}
@@ -1169,4 +1193,72 @@ func (d *Daemon) HealthConfig() interfaces.HealthProviderConfig {
 		ClusterEnabled:    d.cfg.Cluster.Enabled,
 		BandwidthMetering: d.cfg.P2P.Metrics.BandwidthMetering,
 	}
+}
+
+// startSSHServer initializes and starts the SSH server for TUI access.
+func (d *Daemon) startSSHServer(ctx context.Context) error {
+	d.log.Debug("initializing SSH server",
+		"host", d.cfg.SSH.Host,
+		"port", d.cfg.SSH.Port,
+	)
+
+	// Determine host key path
+	hostKeyPath := d.cfg.SSH.HostKeyPath
+	if hostKeyPath == "" {
+		hostKeyPath = filepath.Join(d.configDir, "ssh_host_key")
+	}
+
+	// Create SSH config with host key path
+	sshCfg := &config.SSHConfig{
+		Enabled:        d.cfg.SSH.Enabled,
+		Host:           d.cfg.SSH.Host,
+		Port:           d.cfg.SSH.Port,
+		HostKeyPath:    hostKeyPath,
+		IdleTimeout:    d.cfg.SSH.IdleTimeout,
+		MaxConnections: d.cfg.SSH.MaxConnections,
+	}
+
+	// Create SSH server
+	server, err := sshserver.NewServer(
+		sshCfg,
+		sshserver.WithLogger(d.log),
+		sshserver.WithStore(d.store),
+		sshserver.WithAuthService(d.authService),
+	)
+	if err != nil {
+		d.log.Error("failed to create SSH server", "error", err)
+		return fmt.Errorf("failed to create SSH server: %w", err)
+	}
+
+	// Start the server
+	if err := server.Start(ctx); err != nil {
+		d.log.Error("failed to start SSH server", "error", err)
+		return fmt.Errorf("failed to start SSH server: %w", err)
+	}
+
+	d.sshServer = server
+
+	d.log.Info("SSH server started",
+		"address", fmt.Sprintf("%s:%d", d.cfg.SSH.Host, d.cfg.SSH.Port),
+	)
+
+	return nil
+}
+
+// stopSSHServer shuts down the SSH server gracefully.
+func (d *Daemon) stopSSHServer(ctx context.Context) error {
+	if d.sshServer == nil {
+		return nil
+	}
+
+	d.log.Debug("stopping SSH server")
+
+	if err := d.sshServer.Stop(ctx); err != nil {
+		d.log.Error("error stopping SSH server", "error", err)
+		return err
+	}
+
+	d.sshServer = nil
+	d.log.Debug("SSH server shut down")
+	return nil
 }
