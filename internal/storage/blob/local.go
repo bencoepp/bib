@@ -28,6 +28,8 @@ type LocalStore struct {
 
 	mu    sync.RWMutex
 	stats Stats
+
+	wg sync.WaitGroup // tracks pending async operations
 }
 
 // NewLocalStore creates a new local filesystem blob store.
@@ -214,7 +216,11 @@ func (s *LocalStore) Get(ctx context.Context, hash string) (io.ReadCloser, error
 	}
 
 	// Update access time asynchronously
-	go s.Touch(context.Background(), hash)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.Touch(context.Background(), hash)
+	}()
 
 	processedData := fileData
 
@@ -438,8 +444,9 @@ func (s *LocalStore) Stats(ctx context.Context) (*Stats, error) {
 	return &statsCopy, nil
 }
 
-// Close closes the store.
+// Close closes the store and waits for pending async operations.
 func (s *LocalStore) Close() error {
+	s.wg.Wait()
 	return nil
 }
 
