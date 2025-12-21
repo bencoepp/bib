@@ -993,67 +993,244 @@ bib setup --daemon --quick --target=podman
 
 ### 5.1 Podman Detection
 
-- [ ] Check for `podman` command availability
-- [ ] Detect rootful vs rootless mode
-- [ ] Check for `podman-compose` availability
-- [ ] Display Podman info in wizard
+- [x] Check for `podman` command availability
+- [x] Detect rootful vs rootless mode
+- [x] Check for `podman-compose` availability
+- [x] Display Podman info in wizard
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/podman/detect.go`
+- `internal/deploy/podman/detect_test.go`
+
+**Implementation notes:**
+- Created `podman` package under `internal/deploy/` with detection support:
+  - `Detector` struct with configurable timeout
+  - `PodmanInfo` struct containing:
+    - Available, Version, APIVersion
+    - Rootless flag and RootlessUID
+    - SocketPath for API access
+    - MachineRunning, MachineName (for macOS/Windows)
+    - ComposeAvailable, ComposeVersion, ComposeCommand
+    - PodmanComposeAvailable (plugin detection)
+    - KubePlayAvailable (podman kube play support)
+    - Error message
+  - `NewDetector()` with 10s default timeout
+  - `Detect()` method that checks:
+    - podman command existence
+    - Podman version and API version
+    - Rootless mode detection via euid and XDG_RUNTIME_DIR
+    - Socket path detection
+    - Machine status (macOS/Windows)
+    - podman-compose standalone availability
+    - podman compose plugin availability
+    - podman kube play availability
+- Helper functions:
+  - `FormatPodmanInfo()` - formats info with icons (🦭, ✓, ✗)
+  - `IsUsable()` - returns true if Podman can be used
+  - `GetComposeCommand()` - returns command parts for compose
+  - `PreferredDeployMethod()` - returns "kube", "compose", or "none"
+- Comprehensive unit tests (12 tests)
 
 ### 5.2 Podman Mode Selection
 
-- [ ] Add rootful/rootless mode selection
-- [ ] Add pod vs compose style selection
-- [ ] Validate selections based on detected capabilities
+- [x] Add rootful/rootless mode selection
+- [x] Add pod vs compose style selection
+- [x] Validate selections based on detected capabilities
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Updated `setupBibdQuickPodman()` with mode selection:
+  - Auto-detects rootless/rootful mode from PodmanInfo
+  - If both compose and kube play available, prompts user to choose
+  - Otherwise uses preferred deploy method automatically
+- Deploy style options:
+  - "pod" - Kubernetes-style YAML via podman kube play
+  - "compose" - Docker Compose compatible via podman-compose/podman compose
 
 ### 5.3 Podman Pod Generation
 
-- [ ] Create Kubernetes-style pod YAML template
-- [ ] Include bibd container configuration
-- [ ] Include PostgreSQL container (if Full mode)
-- [ ] Configure shared volumes
-- [ ] Generate convenience `start.sh` script
+- [x] Create Kubernetes-style pod YAML template
+- [x] Include bibd container configuration
+- [x] Include PostgreSQL container (if Full mode)
+- [x] Configure shared volumes
+- [x] Generate convenience `start.sh` script
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/podman/pod.go`
-- `internal/deploy/podman/templates/pod.yaml.tmpl`
-- `internal/deploy/podman/templates/start.sh.tmpl`
+- `internal/deploy/podman/pod_test.go`
+
+**Implementation notes:**
+- Created `PodConfig` struct with all configuration options:
+  - PodName, BibdImage, BibdTag
+  - P2PEnabled, P2PMode
+  - StorageBackend (sqlite/postgres)
+  - PostgreSQL settings
+  - Rootless flag and PortOffset
+  - DeployStyle ("pod" or "compose")
+  - Bootstrap settings, Identity, OutputDir, ExtraEnv
+- `DefaultPodConfig()` with sensible defaults:
+  - bibd image: ghcr.io/bib-project/bibd:latest
+  - postgres image: docker.io/library/postgres:16-alpine
+  - Ports: 4000 (API), 4001 (P2P), 9090 (metrics)
+  - Rootless: true by default
+  - DeployStyle: "pod" by default
+- `PodGenerator` with methods:
+  - `Generate()` - generates all files
+  - `generatePodYaml()` - Kubernetes-style pod YAML for podman kube play
+  - `generateCompose()` - podman-compose.yaml with rootless options
+  - `generateEnvFile()` - .env with all config
+  - `generateConfigYaml()` - bibd config.yaml
+  - `generateStartScript()` - start.sh convenience script
+  - `generateStopScript()` - stop.sh convenience script
+  - `generateStatusScript()` - status.sh convenience script
+- Features:
+  - Auto-generates postgres password if not set
+  - Rootless port offset handling (ports < 1024)
+  - SELinux labels (:Z) in compose volumes
+  - userns_mode: keep-id for rootless
+  - Comprehensive pod YAML with resource limits
+- Comprehensive unit tests (17 tests)
 
 ### 5.4 Podman Compose Generation
 
-- [ ] Create `podman-compose.yaml` template
-- [ ] Similar structure to Docker compose
-- [ ] Handle rootless-specific port considerations
+- [x] Create `podman-compose.yaml` template
+- [x] Similar structure to Docker compose
+- [x] Handle rootless-specific port considerations
 
-**Files to create:**
-- `internal/deploy/podman/compose.go`
-- `internal/deploy/podman/templates/podman-compose.yaml.tmpl`
+**Implementation notes (in pod.go):**
+- `generateCompose()` method creates podman-compose.yaml with:
+  - Same structure as Docker compose
+  - SELinux volume labels (:Z) for Podman compatibility
+  - userns_mode: keep-id for rootless containers
+  - Port offset support for rootless mode
+  - Depends_on for PostgreSQL if needed
 
 ### 5.5 Podman Deployment
 
-- [ ] Implement `DeployPodman()` function
-- [ ] Create output directory structure
-- [ ] Write all generated files
-- [ ] Run appropriate start command (pod or compose)
-- [ ] Wait for containers to be running
-- [ ] Display container/pod status
+- [x] Implement `DeployPodman()` function
+- [x] Create output directory structure
+- [x] Write all generated files
+- [x] Run appropriate start command (pod or compose)
+- [x] Wait for containers to be running
+- [x] Display container/pod status
 
-**Files to create:**
+**Files created:**
 - `internal/deploy/podman/deploy.go`
+- `internal/deploy/podman/deploy_test.go`
+
+**Implementation notes:**
+- Created `DeployConfig` struct with options:
+  - PodConfig, OutputDir
+  - AutoStart, PullImages, WaitForRunning
+  - WaitTimeout (default: 120s)
+  - Verbose mode
+- Created `Deployer` struct with methods:
+  - `Deploy()` - full deployment workflow:
+    1. Detect Podman availability and capabilities
+    2. Auto-detect rootless mode
+    3. Select deploy style based on capabilities
+    4. Generate all files
+    5. Create output directory
+    6. Write files with proper permissions (scripts executable)
+    7. Generate identity key placeholder
+    8. Pull images (optional)
+    9. Start containers using pod or compose method
+    10. Wait for running (optional)
+    11. Show status
+  - `Stop()` - stops containers
+  - `Logs()` - gets container logs
+  - `Status()` - gets deployment status
+- Created `DeployResult` struct with:
+  - Success, OutputDir, FilesGenerated
+  - ContainersStarted, ContainersRunning
+  - DeployStyle, Error message, Logs array
+- Created `DeploymentStatus` and `ContainerStatus` structs
+- Added `FormatStatus()` for display with icons
+- Helper methods:
+  - `pullImages()` - runs podman pull
+  - `startPod()` - runs podman kube play
+  - `startCompose()` - runs podman-compose/podman compose up
+  - `waitForRunning()` - polls until containers running
+  - `checkRunning()` - checks container status
+  - `getContainerStatus()` - gets podman ps output
+- Comprehensive unit tests (10 tests)
 
 ### 5.6 Podman Quick Start
 
-- [ ] Implement quick start for Podman deployment
-- [ ] Auto-detect rootful/rootless
-- [ ] Default to pod style
-- [ ] Minimal prompts, auto-start
+- [x] Implement quick start for Podman deployment
+- [x] Auto-detect rootful/rootless
+- [x] Default to pod style
+- [x] Minimal prompts, auto-start
 
-**Files to modify:**
+**Files modified:**
 - `cmd/bib/cmd/setup/setup.go`
+
+**Implementation notes:**
+- Added `podman` package import
+- Completely rewrote `setupBibdQuickPodman()` to use native Podman deployer:
+  1. Detect Podman with full capability info
+  2. Show rootless/rootful mode and available features
+  3. Prompt for name/email
+  4. Prompt for public network (bib.dev)
+  5. If both compose and kube available, prompt for style
+  6. Prompt for output directory (default: ~/bibd-podman)
+  7. Prompt for auto-start
+  8. Deploy using Podman deployer
+  9. Show comprehensive summary with commands
+- Features:
+  - Full rootless/rootful detection
+  - Deploy style selection when both available
+  - Generates convenience scripts (start.sh, stop.sh, status.sh)
+  - Auto-start containers if requested
+  - Clear status indicators and command examples
+
+**Usage:**
+```bash
+# Podman quick setup
+bib setup --daemon --quick --target=podman
+bib setup -d -q -t podman
+```
+
+**Example Output:**
+```
+🦭 Quick Setup - bibd (Podman)
+
+🔍 Detecting Podman...
+   ✓ Podman 4.7.0
+   ✓ Rootless mode (UID 1000)
+   ✓ Compose: podman compose
+   ✓ Kube Play available
+
+[Deployment Style]
+  • Pod (Kubernetes-style YAML)
+  • Compose (Docker Compose compatible)
+
+[Name, Email, Network, Output Dir, Auto-start prompts...]
+
+✅ Podman Quick Setup Complete!
+──────────────────────────────────────────────────
+  Identity:    John Doe <john@example.com>
+  Output:      /home/user/bibd-podman
+  Storage:     SQLite (proxy mode)
+  Deploy:      pod
+  Mode:        Rootless
+  Network:     Public (bib.dev)
+  Status:      🟢 Running
+
+Commands:
+  cd /home/user/bibd-podman
+  • Start:  ./start.sh
+  • Stop:   ./stop.sh
+  • Status: ./status.sh
+
+Or manually:
+  podman kube play pod.yaml
+  podman kube down pod.yaml
+
+  • Connect CLI: bib setup
+```
 
 ---
 

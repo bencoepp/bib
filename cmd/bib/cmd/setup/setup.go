@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +18,7 @@ import (
 	"bib/internal/deploy"
 	"bib/internal/deploy/docker"
 	"bib/internal/deploy/local"
+	"bib/internal/deploy/podman"
 	"bib/internal/discovery"
 	"bib/internal/tui"
 	"bib/internal/tui/component"
@@ -1174,35 +1174,40 @@ func setupBibdQuickPodman() error {
 
 	ctx := context.Background()
 
-	// For now, Podman uses the same Docker compose format via podman-compose
-	// or podman compose. We'll reuse the Docker deployer with some adjustments.
+	// Step 1: Detect Podman
+	fmt.Println("🔍 Detecting Podman...")
+	detector := podman.NewDetector()
+	podmanInfo := detector.Detect(ctx)
 
-	// Step 1: Check if podman is available
-	detector := docker.NewDetector()
-	// Try docker first (podman often symlinks to docker)
-	dockerInfo := detector.Detect(ctx)
-
-	// Also check for podman specifically
-	podmanAvailable := false
-	if _, err := exec.LookPath("podman"); err == nil {
-		podmanAvailable = true
-	}
-
-	if !dockerInfo.IsUsable() && !podmanAvailable {
-		fmt.Println("❌ Podman is not available or not properly configured.")
+	if !podmanInfo.Available {
+		fmt.Println("❌ Podman is not available.")
+		if podmanInfo.Error != "" {
+			fmt.Printf("   Error: %s\n", podmanInfo.Error)
+		}
 		fmt.Println("\nPlease ensure Podman is installed and running, then try again.")
 		fmt.Println("You can also try: podman machine start")
 		return fmt.Errorf("podman not available")
 	}
 
-	if podmanAvailable && !dockerInfo.IsUsable() {
-		fmt.Println("   ✓ Podman detected")
-		fmt.Println("   ⚠️ Note: podman-compose or podman compose required")
-		fmt.Println()
-	} else {
-		fmt.Printf("   ✓ Using Docker compatibility mode\n")
-		fmt.Println()
+	if !podmanInfo.IsUsable() {
+		fmt.Println("❌ Podman is available but no deployment method found.")
+		fmt.Println("   Please install podman-compose or enable podman compose.")
+		return fmt.Errorf("podman not usable")
 	}
+
+	fmt.Printf("   ✓ Podman %s\n", podmanInfo.Version)
+	if podmanInfo.Rootless {
+		fmt.Printf("   ✓ Rootless mode (UID %d)\n", podmanInfo.RootlessUID)
+	} else {
+		fmt.Println("   ✓ Rootful mode")
+	}
+	if podmanInfo.ComposeAvailable {
+		fmt.Printf("   ✓ Compose: %s\n", podmanInfo.ComposeCommand)
+	}
+	if podmanInfo.KubePlayAvailable {
+		fmt.Println("   ✓ Kube Play available")
+	}
+	fmt.Println()
 
 	// Get the huh theme
 	theme := huh.ThemeCatppuccin()
@@ -1271,7 +1276,33 @@ func setupBibdQuickPodman() error {
 		return err
 	}
 
-	// Step 4: Ask about output directory
+	// Step 4: Ask about deploy style
+	deployStyle := podmanInfo.PreferredDeployMethod()
+	if podmanInfo.ComposeAvailable && podmanInfo.KubePlayAvailable {
+		// Let user choose
+		styleForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Deployment Style").
+					Description("How to deploy the containers").
+					Options(
+						huh.NewOption("Pod (Kubernetes-style YAML)", "pod"),
+						huh.NewOption("Compose (Docker Compose compatible)", "compose"),
+					).
+					Value(&deployStyle),
+			),
+		).WithTheme(theme)
+
+		if err := styleForm.Run(); err != nil {
+			if err == huh.ErrUserAborted {
+				fmt.Println("\nSetup cancelled.")
+				return nil
+			}
+			return err
+		}
+	}
+
+	// Step 5: Ask about output directory
 	homeDir, _ := os.UserHomeDir()
 	defaultOutputDir := filepath.Join(homeDir, "bibd-podman")
 	outputDir := defaultOutputDir
@@ -1298,79 +1329,103 @@ func setupBibdQuickPodman() error {
 		outputDir = defaultOutputDir
 	}
 
-	// Step 5: Deploy using Docker deployer (compatible with Podman)
+	// Step 6: Ask about auto-start
+	var autoStart bool
+	startForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Start containers now?").
+				Description("Automatically start bibd after generating files").
+				Affirmative("Yes, start now").
+				Negative("No, I'll start later").
+				Value(&autoStart),
+		),
+	).WithTheme(theme)
+
+	if err := startForm.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			fmt.Println("\nSetup cancelled.")
+			return nil
+		}
+		return err
+	}
+
+	// Step 7: Deploy
 	fmt.Println()
 
-	composeConfig := docker.DefaultComposeConfig()
-	composeConfig.ProjectName = "bibd"
-	composeConfig.Name = name
-	composeConfig.Email = email
-	composeConfig.UsePublicBootstrap = usePublicNetwork
-	composeConfig.StorageBackend = "sqlite"
-	composeConfig.P2PEnabled = true
-	composeConfig.P2PMode = "proxy"
+	podConfig := podman.DefaultPodConfig()
+	podConfig.Name = name
+	podConfig.Email = email
+	podConfig.UsePublicBootstrap = usePublicNetwork
+	podConfig.StorageBackend = "sqlite"
+	podConfig.P2PEnabled = true
+	podConfig.P2PMode = "proxy"
+	podConfig.DeployStyle = deployStyle
+	podConfig.Rootless = podmanInfo.Rootless
 
-	deployConfig := &docker.DeployConfig{
-		ComposeConfig:  composeConfig,
+	deployConfig := &podman.DeployConfig{
+		PodConfig:      podConfig,
 		OutputDir:      outputDir,
-		AutoStart:      false, // Don't auto-start with Podman (may need different commands)
-		PullImages:     false,
-		WaitForHealthy: false,
+		AutoStart:      autoStart,
+		PullImages:     true,
+		WaitForRunning: true,
+		WaitTimeout:    120 * time.Second,
 		Verbose:        true,
 	}
 
-	deployer := docker.NewDeployer(deployConfig)
+	deployer := podman.NewDeployer(deployConfig)
 	result, err := deployer.Deploy(ctx)
 
-	if err != nil && !strings.Contains(err.Error(), "Docker") {
+	if err != nil {
 		fmt.Printf("\n❌ Deployment failed: %v\n", err)
 		return err
 	}
 
-	// For Podman, we just generate the files
-	if result == nil || len(result.FilesGenerated) == 0 {
-		// Manual file generation if docker deployer failed
-		files, err := docker.NewComposeGenerator(composeConfig).Generate()
-		if err != nil {
-			return fmt.Errorf("failed to generate files: %w", err)
-		}
-
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return fmt.Errorf("failed to create output directory: %w", err)
-		}
-
-		if err := files.WriteToDir(outputDir); err != nil {
-			return fmt.Errorf("failed to write files: %w", err)
-		}
-	}
-
-	// Step 6: Show summary
+	// Step 8: Show summary
 	fmt.Println("\n" + strings.Repeat("─", 50))
 	fmt.Println("✅ Podman Quick Setup Complete!")
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
-	fmt.Printf("  Identity:  %s <%s>\n", name, email)
-	fmt.Printf("  Output:    %s\n", outputDir)
-	fmt.Printf("  Storage:   SQLite (proxy mode)\n")
-	if usePublicNetwork {
-		fmt.Printf("  Network:   Public (bib.dev)\n")
+	fmt.Printf("  Identity:    %s <%s>\n", name, email)
+	fmt.Printf("  Output:      %s\n", outputDir)
+	fmt.Printf("  Storage:     SQLite (proxy mode)\n")
+	fmt.Printf("  Deploy:      %s\n", deployStyle)
+	if podmanInfo.Rootless {
+		fmt.Printf("  Mode:        Rootless\n")
 	} else {
-		fmt.Printf("  Network:   Private only\n")
+		fmt.Printf("  Mode:        Rootful\n")
 	}
-	fmt.Printf("  Status:    📦 Files generated\n")
+	if usePublicNetwork {
+		fmt.Printf("  Network:     Public (bib.dev)\n")
+	} else {
+		fmt.Printf("  Network:     Private only\n")
+	}
+	if result.ContainersStarted && result.ContainersRunning {
+		fmt.Printf("  Status:      🟢 Running\n")
+	} else if result.ContainersStarted {
+		fmt.Printf("  Status:      🟡 Started\n")
+	} else {
+		fmt.Printf("  Status:      📦 Files generated\n")
+	}
 	fmt.Println()
 
-	fmt.Println("To start with Podman:")
+	fmt.Println("Commands:")
 	fmt.Printf("  cd %s\n", outputDir)
+	fmt.Println("  • Start:  ./start.sh")
+	fmt.Println("  • Stop:   ./stop.sh")
+	fmt.Println("  • Status: ./status.sh")
 	fmt.Println()
-	fmt.Println("  # Using podman-compose:")
-	fmt.Println("  podman-compose up -d")
-	fmt.Println()
-	fmt.Println("  # Or using podman compose (if available):")
-	fmt.Println("  podman compose up -d")
-	fmt.Println()
-	fmt.Println("  # Or create a pod manually:")
-	fmt.Println("  podman play kube docker-compose.yaml")
+
+	if deployStyle == "pod" {
+		fmt.Println("Or manually:")
+		fmt.Println("  podman kube play pod.yaml")
+		fmt.Println("  podman kube down pod.yaml")
+	} else if podmanInfo.ComposeCommand != "" {
+		composeCmd := strings.Join(podmanInfo.GetComposeCommand(), " ")
+		fmt.Println("Or manually:")
+		fmt.Printf("  %s up -d\n", composeCmd)
+		fmt.Printf("  %s down\n", composeCmd)
+	}
 	fmt.Println()
 	fmt.Println("  • Connect CLI: bib setup")
 	fmt.Println()
