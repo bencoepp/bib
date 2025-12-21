@@ -151,19 +151,42 @@ This document tracks the implementation tasks for the bib/bibd setup flow as def
 
 ### 2.2 Node Discovery
 
-- [ ] Implement `DiscoverNodes()` function that combines all discovery methods
-- [ ] Implement localhost port scanning (4000, 8080)
-- [ ] Implement Unix socket detection
-- [ ] Integrate mDNS discovery for `_bib._tcp.local`
-- [ ] Integrate P2P/DHT nearby peer discovery
-- [ ] Return discovered nodes with latency measurements
-- [ ] Create discovery progress UI component
+- [x] Implement `DiscoverNodes()` function that combines all discovery methods
+- [x] Implement localhost port scanning (4000, 8080)
+- [x] Implement Unix socket detection
+- [x] Integrate mDNS discovery for `_bib._tcp.local`
+- [x] Integrate P2P/DHT nearby peer discovery
+- [x] Return discovered nodes with latency measurements
+- [x] Create discovery progress UI component
 
-**Files to create:**
+**Files created:**
 - `internal/discovery/discovery.go`
 - `internal/discovery/localhost.go`
 - `internal/discovery/mdns.go`
 - `internal/discovery/p2p.go`
+- `internal/discovery/progress.go`
+- `internal/discovery/discovery_test.go`
+
+**Implementation notes:**
+- Created `discovery` package with multiple discovery methods:
+  - **Localhost**: Scans ports 4000, 8080 and checks Unix sockets
+  - **mDNS**: Uses hashicorp/mdns to discover `_bib._tcp.local` services
+  - **P2P**: Placeholder for DHT-based discovery (requires P2P infrastructure)
+- `DiscoveredNode` struct with Address, Method, Latency, NodeInfo, DiscoveredAt
+- `DiscoveryMethod` type: local, mdns, p2p, manual, public
+- `DiscoveryOptions` for configuring timeouts and enabled methods
+- `Discoverer` struct with methods:
+  - `Discover()` - runs all enabled methods in parallel
+  - `DiscoverWithProgress()` - with progress callbacks
+  - `DiscoverLocalhost()`, `DiscoverMDNS()` - individual methods
+  - `CheckAddress()` - manual address verification
+  - `MeasureLatency()` - TCP latency measurement
+- Progress and formatting utilities:
+  - `FormatDiscoveryResult()` - formatted output for display
+  - `DiscoverySummary()` - brief summary string
+- mDNS TXT record parsing for node info (name, version, mode, peer_id)
+- `RegisterMDNSService()` for bibd to register itself
+- Comprehensive unit tests (16 tests)
 
 ### 2.3 Node Selection UI
 
